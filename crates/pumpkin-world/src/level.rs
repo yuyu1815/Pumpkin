@@ -1527,11 +1527,13 @@ mod tests {
         else {
             panic!("old chunk missing after stale cleanup");
         };
-        assert!(old_chunk
-            .data
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .is_empty());
+        assert!(
+            old_chunk
+                .data
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .is_empty()
+        );
         let EntityChunkLoad::Loaded(new_chunk) = reopened
             .load_entity_chunk_for_save(new_pos)
             .await
