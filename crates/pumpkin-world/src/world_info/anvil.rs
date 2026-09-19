@@ -358,6 +358,18 @@ fn existing_level_dat_root(path: &Path) -> Result<NbtCompound, WorldInfoError> {
     }
 }
 
+fn replace_level_dat(path_new: &Path, path: &Path) -> Result<(), std::io::Error> {
+    match std::fs::rename(path_new, path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == ErrorKind::AlreadyExists => {
+            // Windows does not replace an existing destination with rename.
+            std::fs::remove_file(path)?;
+            std::fs::rename(path_new, path)
+        }
+        Err(error) => Err(error),
+    }
+}
+
 impl WorldInfoReader for AnvilLevelInfo {
     fn read_world_info(&self, level_folder: &Path) -> Result<LevelData, WorldInfoError> {
         let path = level_folder.join(LEVEL_DAT_FILE_NAME);
@@ -419,6 +431,8 @@ impl WorldInfoWriter for AnvilLevelInfo {
         info: &LevelData,
         level_folder: &Path,
     ) -> Result<(), WorldInfoError> {
+        std::fs::create_dir_all(level_folder)?;
+
         let start = SystemTime::now();
         let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap_or_default();
         let mut level_data = info.clone();
@@ -444,7 +458,7 @@ impl WorldInfoWriter for AnvilLevelInfo {
         if path.exists() {
             let _ = std::fs::copy(&path, &path_old);
         }
-        let _ = std::fs::rename(&path_new, &path);
+        replace_level_dat(&path_new, &path)?;
 
         let data_version = level_data.data_version;
 
@@ -749,6 +763,21 @@ mod test {
                 .get_int("DataVersion"),
             Some(MAXIMUM_SUPPORTED_WORLD_DATA_VERSION)
         );
+    }
+
+    #[test]
+    fn rewrite_level_dat_replaces_existing_destination() {
+        let temp_dir = TempDir::new().unwrap();
+        write_level_dat(temp_dir.path(), converted_level_dat(Some(42)));
+
+        let imported = AnvilLevelInfo.read_world_info(temp_dir.path()).unwrap();
+        AnvilLevelInfo
+            .write_world_info(&imported, temp_dir.path())
+            .unwrap();
+
+        assert!(!temp_dir.path().join("level.dat_new").exists());
+        let reloaded = AnvilLevelInfo.read_world_info(temp_dir.path()).unwrap();
+        assert_eq!(reloaded.data_version, MAXIMUM_SUPPORTED_WORLD_DATA_VERSION);
     }
 
     #[test]

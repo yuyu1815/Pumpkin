@@ -277,11 +277,32 @@ where
                 let chunk_serializer = match self.get_serializer(&path).await {
                     Ok(s) => s,
                     Err(ChunkReadingError::ChunkNotExist) => {
+                        // Every requested coordinate needs a terminal result. An absent
+                        // region is normal for a new world and means Missing, not a
+                        // closed channel that the caller could mistake for Missing.
+                        for pos in chunks {
+                            if task_stream.send(LoadedData::Missing(pos)).await.is_err() {
+                                return;
+                            }
+                        }
                         return;
                     }
                     Err(err) => {
-                        // Best-effort: report the error for the first coord in the batch.
-                        let _ = task_stream.send(LoadedData::Error((chunks[0], err))).await;
+                        // Report the region-open failure for every requested coordinate.
+                        // The caller may use a batch; one error for only chunks[0] would
+                        // leave the remaining waiters without a terminal outcome.
+                        let message = err.to_string();
+                        for pos in chunks {
+                            let error =
+                                ChunkReadingError::IoError(std::io::Error::other(message.clone()));
+                            if task_stream
+                                .send(LoadedData::Error((pos, error)))
+                                .await
+                                .is_err()
+                            {
+                                return;
+                            }
+                        }
                         return;
                     }
                 };

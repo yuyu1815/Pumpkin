@@ -34,6 +34,11 @@ impl TaskHeapNode {
     pub(crate) const fn node_key(&self) -> NodeKey {
         self.1
     }
+
+    #[cfg(test)]
+    pub(crate) const fn new_for_test(priority: i8, node: NodeKey) -> Self {
+        Self(priority, node)
+    }
 }
 impl Eq for TaskHeapNode {}
 impl PartialOrd for TaskHeapNode {
@@ -1009,9 +1014,138 @@ impl GenerationSchedule {
         }
     }
 
+    /// Terminally remove graph nodes affected by a failed load.
+    ///
+    /// `drop_node` is deliberately not used here: it is the normal-success path
+    /// and releases outgoing edges by decrementing `in_degree` and queueing the
+    /// successor. A load failure is different: every non-running descendant of
+    /// an affected task is also invalid, even if that descendant has read radius
+    /// zero and does not directly mention the failed chunk.
+    pub(super) fn terminal_cancel_nodes(
+        graph: &mut DAG,
+        queue: &mut BinaryHeap<TaskHeapNode>,
+        roots: impl IntoIterator<Item = NodeKey>,
+    ) -> HashSetType<NodeKey> {
+        let roots: HashSetType<NodeKey> = roots.into_iter().collect();
+        let mut pending: Vec<NodeKey> = roots.iter().copied().collect();
+        let mut cancelled = HashSetType::default();
+
+        while let Some(key) = pending.pop() {
+            let Some(node) = graph.nodes.get(key) else {
+                continue;
+            };
+            // A root is the task whose result has just arrived, so its stale
+            // in_flight bit is not a reason to retain it. Do not force-stop a
+            // descendant that is genuinely still running.
+            if !roots.contains(&key) && node.in_flight {
+                continue;
+            }
+            if !cancelled.insert(key) {
+                continue;
+            }
+
+            let mut edge = node.edge;
+            while !edge.is_null() {
+                let Some(cur) = graph.edges.get(edge) else {
+                    break;
+                };
+                if graph
+                    .nodes
+                    .get(cur.to)
+                    .is_some_and(|target| !target.in_flight)
+                {
+                    pending.push(cur.to);
+                }
+                edge = cur.next;
+            }
+        }
+
+        // A terminal cancellation must not leave stale ready entries that can
+        // be popped and accidentally treated as newly unblocked work.
+        let old_queue = std::mem::take(queue);
+        *queue = old_queue
+            .into_iter()
+            .filter(|task| !cancelled.contains(&task.1))
+            .collect();
+
+        // `fast_drop_node` removes the node and its outgoing edges without
+        // decrementing successors. That is the required terminal semantics.
+        for key in &cancelled {
+            graph.fast_drop_node(*key);
+        }
+        cancelled
+    }
+
+    /// Cancel graph work whose read area includes a chunk that failed to load.
+    ///
+    /// A failed disk read must not be replaced by a synthetic chunk, but leaving
+    /// neighboring generation nodes in the graph would strand them waiting for
+    /// data that can never arrive. This is a terminal cancellation; a later
+    /// explicit level transition may request the chunk again.
+    fn cancel_tasks_affected_by_load_failure(
+        &mut self,
+        failed_pos: ChunkPos,
+        mut roots: Vec<NodeKey>,
+    ) {
+        roots.extend(self.graph.nodes.iter().filter_map(|(key, node)| {
+            if node.in_flight {
+                return None;
+            }
+            let radius = node.stage.get_read_radius();
+            let in_area = (-radius..=radius)
+                .any(|dx| (-radius..=radius).any(|dz| node.pos.add_raw(dx, dz) == failed_pos));
+            in_area.then_some(key)
+        }));
+
+        let cancelled = Self::terminal_cancel_nodes(&mut self.graph, &mut self.queue, roots);
+        self.waiting_for_chunks
+            .retain(|key| !cancelled.contains(key));
+        for holder in self.chunk_map.values_mut() {
+            for task in &mut holder.tasks {
+                if cancelled.contains(task) {
+                    *task = NodeKey::null();
+                }
+            }
+            if cancelled.contains(&holder.occupied) {
+                holder.occupied = NodeKey::null();
+            }
+        }
+    }
+
     #[expect(clippy::too_many_lines)]
     fn receive_chunk(&mut self, pos: ChunkPos, data: RecvChunk) {
         match data {
+            RecvChunk::LoadFailure {
+                pos: failed_pos,
+                error,
+            } => {
+                error!(
+                    "Chunk load failed at {failed_pos:?}; preserving the on-disk payload and stopping this request: {error}"
+                );
+
+                let mut failure_roots = Vec::new();
+                if let Some(mut holder) = self.chunk_map.remove(&failed_pos) {
+                    if holder.public {
+                        self.unpublish_chunk(failed_pos);
+                        holder.public = false;
+                    }
+                    if !holder.occupied.is_null() {
+                        failure_roots.push(holder.occupied);
+                    }
+                    failure_roots.extend(holder.tasks.iter().copied().filter(|key| !key.is_null()));
+                    holder.current_stage = StagedChunkEnum::None;
+                    holder.dependency_stage = StagedChunkEnum::None;
+                    holder.chunk = None;
+                    // Keep target_stage so the next external unload/update has
+                    // the same old-stage contract as the LevelChannel.
+                    self.graph.drop_edge_chain(holder.occupied_by);
+                    holder.occupied_by = EdgeKey::null();
+                    self.chunk_map.insert(failed_pos, holder);
+                }
+
+                self.cancel_tasks_affected_by_load_failure(failed_pos, failure_roots);
+                self.check_waiting_tasks();
+            }
             RecvChunk::IO(chunk) => {
                 let mut holder = self.chunk_map.remove(&pos).expect("holder exists");
                 if holder.chunk.is_some() {
@@ -1739,5 +1873,318 @@ impl GenerationSchedule {
             }
         }
         true
+    }
+}
+
+#[cfg(test)]
+mod anvil_load_integration_tests {
+    use super::*;
+    use crate::chunk::ChunkData;
+    use crate::chunk::format::anvil::AnvilChunkFile;
+    use crate::chunk::io::{Dirtiable, FileIO};
+    use crate::level::Level;
+    use pumpkin_config::chunk::AnvilChunkConfig;
+    use pumpkin_config::world::LevelConfig;
+    use pumpkin_data::dimension::Dimension;
+    use sha2::{Digest, Sha256};
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use std::time::Duration;
+    use tempfile::TempDir;
+
+    #[derive(Clone, Copy)]
+    enum Fixture {
+        Normal,
+        MissingSlot,
+        MalformedCompression,
+        MalformedNbt,
+        BadRegionHeader,
+    }
+
+    async fn create_fixture(fixture: Fixture) -> (TempDir, Arc<Level>, PathBuf, [u8; 32]) {
+        let temp_dir = TempDir::new().expect("fixture tempdir");
+        let config = LevelConfig {
+            autosave_ticks: 0,
+            ..LevelConfig::default()
+        };
+        let level = Level::from_root_folder(
+            &config,
+            temp_dir.path().to_path_buf(),
+            26_2,
+            Dimension::OVERWORLD,
+        );
+        let pos = ChunkPos::new(0, 0);
+        let region_path = level.level_folder.region_folder.join("r.0.0.mca");
+
+        match fixture {
+            Fixture::MissingSlot => {
+                tokio::fs::write(&region_path, vec![0; 8192])
+                    .await
+                    .expect("write empty Anvil header");
+            }
+            Fixture::BadRegionHeader => {
+                tokio::fs::write(&region_path, vec![0; 8191])
+                    .await
+                    .expect("write malformed Anvil header");
+            }
+            Fixture::Normal | Fixture::MalformedCompression | Fixture::MalformedNbt => {
+                let writer = crate::chunk::io::file_manager::ChunkFileManager::<
+                    AnvilChunkFile<ChunkData>,
+                >::new(AnvilChunkConfig::default());
+                let chunk = Arc::new(ChunkData::empty(pos.x, pos.y));
+                chunk.mark_dirty(true);
+                writer
+                    .save_chunks(&level.level_folder, vec![(pos, chunk)])
+                    .await
+                    .expect("write valid Anvil fixture");
+
+                if !matches!(fixture, Fixture::Normal) {
+                    let mut bytes = tokio::fs::read(&region_path)
+                        .await
+                        .expect("read valid Anvil fixture");
+                    if matches!(fixture, Fixture::MalformedCompression) {
+                        // Sector 2: valid length, unsupported compression id.
+                        bytes[8192 + 4] = 0x7f;
+                    } else {
+                        // Sector 2: uncompressed payload with an invalid NBT root.
+                        bytes[8192 + 4] = 3;
+                        bytes[8192 + 5] = 0;
+                    }
+                    tokio::fs::write(&region_path, bytes)
+                        .await
+                        .expect("corrupt Anvil payload");
+                }
+            }
+        }
+
+        let original = tokio::fs::read(&region_path)
+            .await
+            .expect("read fixture bytes");
+        let digest: [u8; 32] = Sha256::digest(&original).into();
+        (temp_dir, level, region_path, digest)
+    }
+
+    fn test_schedule(
+        level: &Arc<Level>,
+        recv_chunk: crossbeam::channel::Receiver<(ChunkPos, RecvChunk)>,
+        send_chunk: crossbeam::channel::Sender<(ChunkPos, RecvChunk)>,
+        pos: ChunkPos,
+    ) -> (
+        GenerationSchedule,
+        tokio::sync::mpsc::Receiver<Vec<(ChunkPos, Chunk)>>,
+    ) {
+        let mut graph = DAG::default();
+        let occupied = graph.nodes.insert(Node::new(pos, StagedChunkEnum::Empty));
+        let mut chunk_map = HashMap::default();
+        chunk_map.insert(
+            pos,
+            ChunkHolder {
+                target_stage: StagedChunkEnum::Empty,
+                occupied,
+                ..ChunkHolder::default()
+            },
+        );
+        let (io_read, _read_rx) = tokio::sync::mpsc::channel::<Vec<ChunkPos>>(1);
+        let (io_write, write_rx) = tokio::sync::mpsc::channel::<Vec<(ChunkPos, Chunk)>>(1);
+        let generation_pool = Arc::new(
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(1)
+                .build()
+                .expect("test generation pool"),
+        );
+
+        (
+            GenerationSchedule {
+                queue: BinaryHeap::new(),
+                graph,
+                last_level: ChunkLevel::default(),
+                last_high_priority: Vec::new(),
+                send_level: level.level_channel.clone(),
+                public_chunk_map: level.loaded_chunks.clone(),
+                loaded_chunk_changes: level.loaded_chunk_changes.clone(),
+                chunk_map,
+                unload_chunks: HashSetType::default(),
+                waiting_for_chunks: HashSetType::default(),
+                io_lock: Arc::new((
+                    std::sync::Mutex::new(HashMapType::default()),
+                    tokio::sync::Notify::new(),
+                )),
+                running_task_count: 1,
+                max_in_flight: 1,
+                queue_dirty: false,
+                recv_chunk,
+                io_read,
+                io_write,
+                send_chunk,
+                listener: level.chunk_listener.clone(),
+                lighting_config: level.lighting_config,
+                last_unload: std::time::Instant::now(),
+                generation_pool,
+            },
+            write_rx,
+        )
+    }
+
+    async fn run_fixture(fixture: Fixture) {
+        let (temp_dir, level, region_path, original_hash) = create_fixture(fixture).await;
+        let pos = ChunkPos::new(0, 0);
+        let (request_tx, request_rx) = tokio::sync::mpsc::channel(1);
+        let (send_chunk, recv_chunk) = crossbeam::channel::unbounded();
+        let worker = tokio::spawn(crate::chunk_system::worker_logic::io_read_work(
+            Arc::new(tokio::sync::Mutex::new(request_rx)),
+            send_chunk.clone(),
+            level.clone(),
+            Arc::new((
+                std::sync::Mutex::new(HashMapType::default()),
+                tokio::sync::Notify::new(),
+            )),
+        ));
+        let wait_recv = recv_chunk.clone();
+        let (mut scheduler, mut save_rx) = test_schedule(&level, recv_chunk, send_chunk, pos);
+
+        request_tx.send(vec![pos]).await.expect("submit IO request");
+        let (result_pos, result) = tokio::task::spawn_blocking(move || {
+            wait_recv
+                .recv_timeout(Duration::from_secs(5))
+                .expect("IO worker terminal result")
+        })
+        .await
+        .expect("wait for IO worker");
+        drop(request_tx);
+        worker.await.expect("IO worker join");
+        assert_eq!(result_pos, pos, "terminal outcome coordinate");
+
+        let was_failure = matches!(
+            fixture,
+            Fixture::MalformedCompression | Fixture::MalformedNbt | Fixture::BadRegionHeader
+        );
+        match (fixture, &result) {
+            (Fixture::Normal, RecvChunk::IO(Chunk::Proto(chunk))) => {
+                assert_eq!(chunk.stage, StagedChunkEnum::Features);
+            }
+            (Fixture::MissingSlot, RecvChunk::IO(Chunk::Proto(chunk))) => {
+                assert_eq!(chunk.stage, StagedChunkEnum::Empty);
+            }
+            (
+                Fixture::MalformedCompression | Fixture::MalformedNbt | Fixture::BadRegionHeader,
+                RecvChunk::LoadFailure { pos: failed, error },
+            ) => {
+                assert_eq!(*failed, pos);
+                assert!(!error.is_empty(), "load failure must carry an error");
+            }
+            _ => panic!(
+                "unexpected terminal outcome for {}",
+                match fixture {
+                    Fixture::Normal => "normal",
+                    Fixture::MissingSlot => "missing-slot",
+                    Fixture::MalformedCompression => "malformed-compression",
+                    Fixture::MalformedNbt => "malformed-nbt",
+                    Fixture::BadRegionHeader => "bad-region-header",
+                }
+            ),
+        }
+
+        scheduler.receive_chunk(pos, result);
+        assert_eq!(
+            scheduler.running_task_count, 0,
+            "worker result terminates task"
+        );
+        let holder = scheduler.chunk_map.get(&pos).expect("holder retained");
+        if was_failure {
+            assert!(
+                holder.chunk.is_none(),
+                "failure holder must not own a chunk"
+            );
+            assert_eq!(holder.current_stage, StagedChunkEnum::None);
+            assert!(scheduler.public_chunk_map.get(&pos).is_none());
+            assert!(
+                scheduler.graph.nodes.is_empty(),
+                "failure leaves no DAG task"
+            );
+            assert!(scheduler.queue.is_empty(), "failure does not requeue work");
+            assert!(scheduler.waiting_for_chunks.is_empty());
+        } else {
+            assert!(holder.chunk.is_some(), "normal result reaches scheduler");
+        }
+        if was_failure {
+            scheduler.save_all_chunk(true);
+            assert!(scheduler.io_lock.0.lock().unwrap().is_empty());
+            // A failure holder has no chunk to enqueue, so save_all_chunk has no
+            // write-side effect to observe beyond the empty lock set and hash below.
+            assert!(
+                save_rx.try_recv().is_err(),
+                "failure must not reach save worker"
+            );
+        }
+        let bytes = tokio::fs::read(&region_path)
+            .await
+            .expect("read final region");
+        let final_hash: [u8; 32] = Sha256::digest(&bytes).into();
+        assert_eq!(
+            final_hash, original_hash,
+            "fixture region bytes/hash changed"
+        );
+
+        drop(scheduler);
+        level.shutdown().await;
+        drop(temp_dir);
+    }
+
+    #[tokio::test]
+    async fn real_anvil_load_failure_reaches_worker_and_scheduler_terminally() {
+        run_fixture(Fixture::Normal).await;
+        run_fixture(Fixture::MissingSlot).await;
+        run_fixture(Fixture::MalformedCompression).await;
+        run_fixture(Fixture::MalformedNbt).await;
+        run_fixture(Fixture::BadRegionHeader).await;
+    }
+
+    #[tokio::test]
+    async fn bad_region_header_returns_one_terminal_error_per_requested_coordinate() {
+        let (temp_dir, level, _region_path, _original_hash) =
+            create_fixture(Fixture::BadRegionHeader).await;
+        let positions = vec![
+            ChunkPos::new(0, 0),
+            ChunkPos::new(1, 0),
+            ChunkPos::new(0, 1),
+            ChunkPos::new(1, 1),
+        ];
+        let (request_tx, request_rx) = tokio::sync::mpsc::channel(1);
+        let (send_chunk, recv_chunk) = crossbeam::channel::unbounded();
+        let worker = tokio::spawn(crate::chunk_system::worker_logic::io_read_work(
+            Arc::new(tokio::sync::Mutex::new(request_rx)),
+            send_chunk,
+            level.clone(),
+            Arc::new((
+                std::sync::Mutex::new(HashMapType::default()),
+                tokio::sync::Notify::new(),
+            )),
+        ));
+        request_tx
+            .send(positions.clone())
+            .await
+            .expect("submit batch IO request");
+        drop(request_tx);
+
+        let received = tokio::task::spawn_blocking(move || {
+            positions
+                .iter()
+                .map(|_| {
+                    recv_chunk
+                        .recv_timeout(Duration::from_secs(5))
+                        .expect("batch coordinate terminal outcome")
+                })
+                .collect::<Vec<_>>()
+        })
+        .await
+        .expect("wait for batch worker");
+        worker.await.expect("batch worker join");
+        assert_eq!(received.len(), 4);
+        for (pos, outcome) in received {
+            assert!(matches!(outcome, RecvChunk::LoadFailure { pos: failed, .. } if failed == pos));
+        }
+
+        level.shutdown().await;
+        drop(temp_dir);
     }
 }

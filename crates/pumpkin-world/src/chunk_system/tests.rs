@@ -1,6 +1,7 @@
 use super::*;
 use crate::chunk_system::dag::Node;
 use crate::chunk_system::dag::NodeKey;
+use crate::chunk_system::schedule::TaskHeapNode;
 use slotmap::Key;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
@@ -415,6 +416,66 @@ fn dag_prune_edge_chain_removes_dead_target_edges() {
     assert!(!has_valid_task);
     assert!(head.is_null());
     assert_eq!(graph.edges.len(), 0);
+}
+
+#[test]
+fn load_failure_terminal_cancellation_reaches_zero_radius_descendants() {
+    let mut graph = DAG::default();
+    let mut queue = BinaryHeap::new();
+    let failed_surface = graph
+        .nodes
+        .insert(Node::new(ChunkPos::new(0, 0), StagedChunkEnum::Surface));
+    let dependent_carvers = graph
+        .nodes
+        .insert(Node::new(ChunkPos::new(1, 0), StagedChunkEnum::Carvers));
+    let dependent_features = graph
+        .nodes
+        .insert(Node::new(ChunkPos::new(1, 0), StagedChunkEnum::Features));
+    let unrelated = graph
+        .nodes
+        .insert(Node::new(ChunkPos::new(20, 20), StagedChunkEnum::Carvers));
+
+    graph.add_edge(failed_surface, dependent_carvers);
+    graph.add_edge(dependent_carvers, dependent_features);
+    graph.nodes.get_mut(dependent_carvers).unwrap().in_queue = true;
+    queue.push(TaskHeapNode::new_for_test(0, dependent_carvers));
+
+    let cancelled =
+        GenerationSchedule::terminal_cancel_nodes(&mut graph, &mut queue, [failed_surface]);
+
+    assert_eq!(cancelled.len(), 3);
+    assert!(cancelled.contains(&failed_surface));
+    assert!(cancelled.contains(&dependent_carvers));
+    assert!(cancelled.contains(&dependent_features));
+    assert!(graph.nodes.get(failed_surface).is_none());
+    assert!(graph.nodes.get(dependent_carvers).is_none());
+    assert!(graph.nodes.get(dependent_features).is_none());
+    assert!(graph.nodes.get(unrelated).is_some());
+    assert!(
+        queue.is_empty(),
+        "cancelled descendants must not remain queued"
+    );
+}
+
+#[test]
+fn load_failure_terminal_cancellation_does_not_stop_in_flight_descendant() {
+    let mut graph = DAG::default();
+    let mut queue = BinaryHeap::new();
+    let root = graph
+        .nodes
+        .insert(Node::new(ChunkPos::new(0, 0), StagedChunkEnum::Surface));
+    let in_flight = graph
+        .nodes
+        .insert(Node::new(ChunkPos::new(1, 0), StagedChunkEnum::Carvers));
+    graph.nodes.get_mut(in_flight).unwrap().in_flight = true;
+    graph.add_edge(root, in_flight);
+
+    let cancelled = GenerationSchedule::terminal_cancel_nodes(&mut graph, &mut queue, [root]);
+
+    assert!(cancelled.contains(&root));
+    assert!(!cancelled.contains(&in_flight));
+    assert!(graph.nodes.get(root).is_none());
+    assert!(graph.nodes.get(in_flight).is_some());
 }
 
 #[test]

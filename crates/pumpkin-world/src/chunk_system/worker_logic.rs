@@ -3,7 +3,6 @@ use super::generation_cache::Cache;
 use super::{ChunkPos, IOLock};
 use crate::ProtoChunk;
 use crate::chunk::format::LightContainer;
-use crate::chunk::io::LoadedData::Loaded;
 use crate::chunk::io::{FileIO, LoadedData, run_blocking};
 use crate::level::Level;
 use pumpkin_config::lighting::LightingEngineConfig;
@@ -15,12 +14,37 @@ use tracing::{debug, error, warn};
 
 pub enum RecvChunk {
     IO(Chunk),
+    /// A disk read/parse/decompression failure is terminal for this request.
+    /// It must not be converted into a generated or dirty chunk.
+    LoadFailure {
+        pos: ChunkPos,
+        error: String,
+    },
     Generation(Cache),
     GenerationFailure {
         pos: ChunkPos,
         stage: StagedChunkEnum,
         error: String,
     },
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum LoadedChunkOutcome {
+    Missing(ChunkPos),
+    Error { pos: ChunkPos, error: String },
+}
+
+fn classify_loaded_data(
+    data: LoadedData<Arc<crate::chunk::ChunkData>, crate::chunk::ChunkReadingError>,
+) -> Result<Arc<crate::chunk::ChunkData>, LoadedChunkOutcome> {
+    match data {
+        LoadedData::Loaded(chunk) => Ok(chunk),
+        LoadedData::Missing(pos) => Err(LoadedChunkOutcome::Missing(pos)),
+        LoadedData::Error((pos, error)) => Err(LoadedChunkOutcome::Error {
+            pos,
+            error: error.to_string(),
+        }),
+    }
 }
 
 /// Checks if a chunk needs relighting based on the current lighting configuration
@@ -121,58 +145,79 @@ pub async fn io_read_work(
             }
         }
 
-        let (t_send, mut t_recv) = tokio::sync::mpsc::channel(1000);
-
-        let batch_len = batch.len();
-        let level_clone = level.clone();
-
-        let fetch_task = tokio::spawn(async move {
-            level_clone
+        // Keep the scheduler/worker contract one-result-per-coordinate even when
+        // a FileIO implementation is batch-oriented. This also bounds the waiter
+        // channel and prevents a missing terminal response from stranding the
+        // scheduler indefinitely.
+        for pos in batch {
+            let requested = [pos];
+            let (t_send, mut t_recv) = tokio::sync::mpsc::channel(1);
+            level
                 .chunk_saver
-                .fetch_chunks(&level_clone.level_folder, &batch, t_send)
+                .fetch_chunks(&level.level_folder, &requested, t_send)
                 .await;
-        });
 
-        for _ in 0..batch_len {
-            let Some(data) = t_recv.recv().await else {
-                break;
+            let data = t_recv.recv().await.unwrap_or_else(|| {
+                LoadedData::Error((
+                    pos,
+                    crate::chunk::ChunkReadingError::IoError(std::io::Error::other(
+                        "chunk loader closed without a terminal outcome",
+                    )),
+                ))
+            });
+
+            let (result_pos, received) = match classify_loaded_data(data) {
+                Ok(chunk) => {
+                    let result_pos = ChunkPos::new(chunk.x, chunk.z);
+                    if result_pos != pos {
+                        (
+                            pos,
+                            RecvChunk::LoadFailure {
+                                pos,
+                                error: format!(
+                                    "Loaded chunk coordinates {result_pos:?} do not match requested {pos:?}"
+                                ),
+                            },
+                        )
+                    } else {
+                        let level = level.clone();
+                        let result =
+                            run_blocking(move || process_loaded_chunk(chunk, &level)).await;
+                        let received = match result {
+                            Ok(processed) => RecvChunk::IO(processed),
+                            Err(err) => RecvChunk::GenerationFailure {
+                                pos: result_pos,
+                                stage: StagedChunkEnum::Empty,
+                                error: err.to_string(),
+                            },
+                        };
+                        (result_pos, received)
+                    }
+                }
+                Err(LoadedChunkOutcome::Missing(result_pos)) => (
+                    result_pos,
+                    RecvChunk::IO(Chunk::Proto(Box::new(ProtoChunk::new(
+                        result_pos.x,
+                        result_pos.y,
+                        &level.world_gen.load(),
+                    )))),
+                ),
+                Err(LoadedChunkOutcome::Error {
+                    pos: result_pos,
+                    error,
+                }) => (
+                    result_pos,
+                    RecvChunk::LoadFailure {
+                        pos: result_pos,
+                        error,
+                    },
+                ),
             };
 
-            match data {
-                Loaded(chunk) => {
-                    let pos = ChunkPos::new(chunk.x, chunk.z);
-                    let level = level.clone();
-                    let result = run_blocking(move || process_loaded_chunk(chunk, &level)).await;
-                    let received = match result {
-                        Ok(processed) => RecvChunk::IO(processed),
-                        Err(err) => RecvChunk::GenerationFailure {
-                            pos,
-                            stage: StagedChunkEnum::Empty,
-                            error: err.to_string(),
-                        },
-                    };
-                    if send.send((pos, received)).is_err() {
-                        break;
-                    }
-                }
-                LoadedData::Missing(pos) | LoadedData::Error((pos, _)) => {
-                    if send
-                        .send((
-                            pos,
-                            RecvChunk::IO(Chunk::Proto(Box::new(ProtoChunk::new(
-                                pos.x,
-                                pos.y,
-                                &level.world_gen.load(),
-                            )))),
-                        ))
-                        .is_err()
-                    {
-                        break;
-                    }
-                }
+            if send.send((result_pos, received)).is_err() {
+                break;
             }
         }
-        let _ = fetch_task.await;
     }
     debug!("io read thread stop");
 }
@@ -301,5 +346,36 @@ pub fn run_generation(
                 error: msg.to_string(),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LoadedChunkOutcome, classify_loaded_data};
+    use crate::chunk::{ChunkReadingError, io::LoadedData};
+    use crate::chunk_system::ChunkPos;
+
+    #[test]
+    fn missing_load_is_classified_for_generation() {
+        let pos = ChunkPos::new(-3, 7);
+        let outcome = classify_loaded_data(LoadedData::Missing(pos));
+
+        assert!(matches!(
+            outcome,
+            Err(LoadedChunkOutcome::Missing(found)) if found == pos
+        ));
+    }
+
+    #[test]
+    fn corrupt_load_is_classified_as_terminal_error() {
+        let pos = ChunkPos::new(4, -9);
+        let outcome =
+            classify_loaded_data(LoadedData::Error((pos, ChunkReadingError::InvalidHeader)));
+
+        assert!(matches!(
+            outcome,
+            Err(LoadedChunkOutcome::Error { pos: found, error })
+                if found == pos && error == "Invalid header"
+        ));
     }
 }
