@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "record_kind": "compatibility_observation",
+  "required": [
+    "scenario_id",
+    "observed",
+    "source",
+    "target",
+    "state",
+    "direction",
+    "initial_state",
+    "expected",
+    "classification"
+  ],
+  "source_required": ["minecraft_version", "protocol", "role"],
+  "target_required": ["minecraft_version", "protocol"],
+  "state_values": ["handshake", "status", "login", "configuration", "play"],
+  "direction_values": ["serverbound", "clientbound"],
+  "classification_values": ["exact", "allowed_version_delta", "known_implementation_gap", "unknown", "error"],
+  "allow_rule": "allow is computed by compat_data.py; a fixture must not self-authorize allow=true.",
+  "provenance_rule": "expected.source and initial_state must identify whether the value came from an audit contract, pinned data, or an observed trace.",
+  "observation_rule": "observed=false means synthetic contract only; it is never counted as a real client/server trace."
+}

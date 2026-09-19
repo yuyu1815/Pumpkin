@@ -1,0 +1,27 @@
+{
+  "namespace": "26.1",
+  "minecraft_version": "26.1",
+  "protocol": 775,
+  "source_id": "prismarine-minecraft-data-26.1-protocol",
+  "source_artifact_sha256": "88bad867681214bfea6c59c9a705da4cc269f8131e9d3495bd03916275e7fa08",
+  "source_was_fetched": true,
+  "format": "PrismarineJS protocol.json summary",
+  "state_direction_counts": {
+    "handshaking/serverbound": {"packet_count": 2, "id_min": 0, "id_max": 254},
+    "status/serverbound": {"packet_count": 2, "id_min": 0, "id_max": 1},
+    "status/clientbound": {"packet_count": 2, "id_min": 0, "id_max": 1},
+    "login/serverbound": {"packet_count": 5, "id_min": 0, "id_max": 4},
+    "login/clientbound": {"packet_count": 6, "id_min": 0, "id_max": 5},
+    "configuration/serverbound": {"packet_count": 10, "id_min": 0, "id_max": 9},
+    "configuration/clientbound": {"packet_count": 20, "id_min": 0, "id_max": 19},
+    "play/serverbound": {"packet_count": 69, "id_min": 0, "id_max": 68},
+    "play/clientbound": {"packet_count": 141, "id_min": 0, "id_max": 140}
+  },
+  "total_packet_entries": 257,
+  "selected_schema_facts": {
+    "configuration/clientbound/registry_data": ["id:string", "entries:varint-array", "entries.key:string", "entries.value:optional-anonymous-nbt"],
+    "configuration/clientbound/tags": ["tags:varint-array", "tagType:string", "tags:tags"],
+    "play/serverbound/configuration_acknowledged": "empty packet"
+  },
+  "comparison_warning": "The handshaking id 254 legacy entry and name changes are version-data differences, not proof that 26.2 payloads are accepted by a 26.1 codec."
+}

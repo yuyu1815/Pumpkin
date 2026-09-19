@@ -1,0 +1,8 @@
+# Reproducible fetches and local experiment output stay outside the repository.
+.cache/
+artifacts/
+__pycache__/
+*.py[cod]
+*.log
+*.pcap
+*.jar

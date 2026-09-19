@@ -1,0 +1,11 @@
+{
+  "namespace": "26.1",
+  "minecraft_version": "26.1",
+  "protocol": 775,
+  "release_type": "release",
+  "source_id": "prismarine-minecraft-data-26.1-version",
+  "source_artifact_sha256": "cced5b9e15eaa84c15b229fe7d861894dc29ec21210a03ff3a1ba4da606dee10",
+  "source_was_fetched": true,
+  "role": "comparison_only",
+  "final_compatibility_target": false
+}

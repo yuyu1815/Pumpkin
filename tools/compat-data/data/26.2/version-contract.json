@@ -1,0 +1,12 @@
+{
+  "namespace": "26.2",
+  "minecraft_version": "26.2",
+  "protocol": 776,
+  "world_data_version": 4903,
+  "release_type": "release",
+  "source_id": "mojang-version-metadata-26.2",
+  "source_artifact_sha256": "b4ada8134759853edd432cf7d06c7ff536c1427af0467700a75d089145aaad5c",
+  "packet_mapping_source_id": "pumpkin-local-packets-26.2",
+  "final_compatibility_target": true,
+  "server_downgrade": false
+}

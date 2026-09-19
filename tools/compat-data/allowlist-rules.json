@@ -1,0 +1,146 @@
+{
+  "schema_version": 1,
+  "purpose": "Machine-readable projection of docs/compatibility/26.1-baseline-allowlist.md. Only verified rules can allow; proposed and blocked rules are explicit review records.",
+  "final_target": {
+    "minecraft_version": "26.2",
+    "protocol": 776,
+    "world_data_version": 4903
+  },
+  "rules": [
+    {
+      "rule_id": "ALW-2601-REPLAY-PACKET-LABEL-62",
+      "status": "proposed",
+      "enabled": false,
+      "from": {"minecraft_version": "26.1", "protocol": 775},
+      "to": {"minecraft_version": "26.2", "protocol": 776},
+      "state": "play",
+      "direction": "serverbound",
+      "context": "replay-normalizer",
+      "subject": {
+        "kind": "packet_symbolic_name",
+        "packet_id": 62,
+        "field": "packet_name",
+        "from_value": "spectate_entity",
+        "to_value": "spectator_action"
+      },
+      "comparison_scope": "comparison_metadata",
+      "required_preservation": ["packet_id", "payload", "packet_order", "field_count", "quantity", "packet_presence"],
+      "source": "docs/compatibility/26.1-baseline-allowlist.md#ALW-2601-REPLAY-PACKET-LABEL-62"
+    },
+    {
+      "rule_id": "ALW-2601-REPLAY-HANDSHAKE-LEGACY-254",
+      "status": "proposed",
+      "enabled": false,
+      "from": {"minecraft_version": "26.1", "protocol": 775},
+      "to": {"minecraft_version": "26.2", "protocol": 776},
+      "state": "handshaking",
+      "direction": "serverbound",
+      "context": "replay-normalizer",
+      "subject": {
+        "kind": "packet_fixture_isolation",
+        "packet_id": 254,
+        "field": "packet_name",
+        "from_value": "legacy_server_list_ping",
+        "to_value": "isolated_legacy_fixture"
+      },
+      "comparison_scope": "comparison_metadata",
+      "required_preservation": ["packet_id", "payload", "packet_order", "packet_presence"],
+      "source": "docs/compatibility/26.1-baseline-allowlist.md#ALW-2601-REPLAY-HANDSHAKE-LEGACY-254"
+    },
+    {
+      "rule_id": "ALW-2601-WORLD-PATH-MIGRATION",
+      "status": "proposed",
+      "enabled": false,
+      "from": {"minecraft_version": "26.1", "protocol": 775},
+      "to": {"minecraft_version": "26.2", "protocol": 776},
+      "state": "world",
+      "direction": "storage",
+      "context": "world-migration",
+      "subject": {
+        "kind": "path_alias",
+        "field": "path",
+        "from_value": "26.1_layout",
+        "to_value": "26.2_canonical_layout"
+      },
+      "comparison_scope": "storage_metadata",
+      "required_preservation": ["seed", "scheduled_ticks", "block_entities", "registry_references", "components"],
+      "source": "docs/compatibility/26.1-baseline-allowlist.md#ALW-2601-WORLD-PATH-MIGRATION"
+    },
+    {
+      "rule_id": "ALW-2601-DATA-ID-REMAP",
+      "status": "blocked",
+      "enabled": false,
+      "from": {"minecraft_version": "26.1", "protocol": 775},
+      "to": {"minecraft_version": "26.2", "protocol": 776},
+      "state": "data",
+      "direction": "replay-normalizer",
+      "context": "registry-id-translation",
+      "subject": {
+        "kind": "numeric_id_remap",
+        "field": "registry_id",
+        "from_value": "26.1_numeric_id",
+        "to_value": "26.2_numeric_id"
+      },
+      "comparison_scope": "payload_schema",
+      "required_preservation": ["registry_references", "tag_values", "recipe_results", "component_payload", "quantity", "order"],
+      "source": "docs/compatibility/26.1-baseline-allowlist.md#ALW-2601-DATA-ID-REMAP"
+    },
+    {
+      "rule_id": "ALW-2601-REGISTRY-SCHEMA-DELTA",
+      "status": "blocked",
+      "enabled": false,
+      "from": {"minecraft_version": "26.1", "protocol": 775},
+      "to": {"minecraft_version": "26.2", "protocol": 776},
+      "state": "configuration",
+      "direction": "clientbound",
+      "context": "registry-data",
+      "subject": {
+        "kind": "registry_schema",
+        "field": "registry_payload",
+        "from_value": "data_pack_101.1",
+        "to_value": "data_pack_107.1"
+      },
+      "comparison_scope": "payload_schema",
+      "required_preservation": ["registry_key", "entry_key", "nbt_value", "tag_values", "order"],
+      "source": "docs/compatibility/26.1-baseline-allowlist.md#ALW-2601-REGISTRY-SCHEMA-DELTA"
+    },
+    {
+      "rule_id": "ALW-2601-ITEM-COMPONENT-RECIPE",
+      "status": "blocked",
+      "enabled": false,
+      "from": {"minecraft_version": "26.1", "protocol": 775},
+      "to": {"minecraft_version": "26.2", "protocol": 776},
+      "state": "play",
+      "direction": "serverbound",
+      "context": "recipe-and-item-stack",
+      "subject": {
+        "kind": "item_component_recipe",
+        "field": "component_payload",
+        "from_value": "26.1_item_recipe",
+        "to_value": "26.2_component_recipe"
+      },
+      "comparison_scope": "payload_schema",
+      "required_preservation": ["component_map", "ingredient_consumption", "result_count", "remainder", "quantity"],
+      "source": "docs/compatibility/26.1-baseline-allowlist.md#ALW-2601-ITEM-COMPONENT-RECIPE"
+    },
+    {
+      "rule_id": "ALW-2601-STATEFUL-SEMANTICS",
+      "status": "blocked",
+      "enabled": false,
+      "from": {"minecraft_version": "26.1", "protocol": 775},
+      "to": {"minecraft_version": "26.2", "protocol": 776},
+      "state": "play",
+      "direction": "serverbound",
+      "context": "semantic-validation",
+      "subject": {
+        "kind": "stateful_semantics",
+        "field": "server_decision",
+        "from_value": "26.1_trace",
+        "to_value": "26.2_runtime_state"
+      },
+      "comparison_scope": "gameplay_result",
+      "required_preservation": ["quantity", "permission", "save_load", "signature", "sequence", "tick", "state_transition"],
+      "source": "docs/compatibility/26.1-baseline-allowlist.md#ALW-2601-STATEFUL-SEMANTICS"
+    }
+  ]
+}

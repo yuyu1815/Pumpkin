@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "synthetic_fixture",
+  "observed": false,
+  "source_note": "Contract derived from docs/compatibility/audits/26.2-validation-strategy.md; no real client/server trace was captured by this foundation.",
+  "scenarios": [
+    {
+      "scenario_id": "INV-01",
+      "source": {"minecraft_version": "26.2", "protocol": 776, "role": "final_target_contract"},
+      "target": {"minecraft_version": "26.2", "protocol": 776},
+      "state": "play",
+      "direction": "serverbound",
+      "packet_sequence": ["click_slot"],
+      "initial_state": {
+        "recipe_result_count": 4,
+        "same_item_inventory_free_capacity": 2,
+        "other_slots": "filled",
+        "cursor": "empty",
+        "world": "fixed synthetic inventory"
+      },
+      "expected": {
+        "invariant": "ingredient consumption and output totals are conserved across inventory, drop, result, and cursor",
+        "source": "26.2-validation-strategy.md INV-01",
+        "oracle_required": true
+      },
+      "classification": "exact"
+    },
+    {
+      "scenario_id": "BLK-01",
+      "source": {"minecraft_version": "26.2", "protocol": 776, "role": "final_target_contract"},
+      "target": {"minecraft_version": "26.2", "protocol": 776},
+      "state": "play",
+      "direction": "serverbound",
+      "packet_sequence": ["player_action:started_digging", "player_action:finished_digging"],
+      "initial_state": {
+        "block": "fixed solid block",
+        "player_position": "fixed",
+        "tool": "fixed",
+        "gamemode": "survival",
+        "may_build": true,
+        "world": "fixed synthetic block"
+      },
+      "expected": {
+        "invariant": "break/drop/event occurs only after valid start, elapsed progress, reach, and permission",
+        "source": "26.2-validation-strategy.md BLK-01",
+        "oracle_required": true
+      },
+      "classification": "exact"
+    },
+    {
+      "scenario_id": "PLY-ATTACK-INTERACT",
+      "source": {"minecraft_version": "26.2", "protocol": 776, "role": "final_target_contract"},
+      "target": {"minecraft_version": "26.2", "protocol": 776},
+      "state": "play",
+      "direction": "serverbound",
+      "packet_sequence": ["attack", "interact"],
+      "initial_state": {
+        "target_cases": ["same_world_in_reach", "reach_outside", "wall_between", "dead_or_removed", "different_world"],
+        "permission": "fixed",
+        "world": "two fixed synthetic worlds"
+      },
+      "expected": {
+        "invariant": "only valid same-world reachable line-of-sight targets produce damage/event side effects",
+        "source": "26.2-validation-strategy.md PLY-ATTACK/INTERACT",
+        "oracle_required": true
+      },
+      "classification": "exact"
+    }
+  ]
+}

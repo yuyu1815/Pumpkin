@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "purpose": "Use Java 26.1 data as a pinned comparison source while the compatibility target remains Java 26.2.",
+  "comparison_namespace": "26.1",
+  "final_target": {
+    "minecraft_version": "26.2",
+    "protocol": 776,
+    "world_data_version": 4903,
+    "downgrade_server": false
+  },
+  "sources": [
+    {
+      "id": "prismarine-minecraft-data-26.1-version",
+      "namespace": "26.1",
+      "logical_namespace": "26.1",
+      "physical_source_version": "26.1",
+      "data_path": "data/pc/26.1/version.json",
+      "kind": "upstream_json",
+      "repository": "https://github.com/PrismarineJS/minecraft-data",
+      "upstream_commit": "20a0b0142d99d9a069aa8fec98512ec082b4f0a3",
+      "url": "https://raw.githubusercontent.com/PrismarineJS/minecraft-data/20a0b0142d99d9a069aa8fec98512ec082b4f0a3/data/pc/26.1/version.json",
+      "artifact": "data/pc/26.1/version.json",
+      "cache_path": ".cache/prismarine-minecraft-data-26.1-version.json",
+      "distribution": "ignored_cache_only",
+      "sha256": "cced5b9e15eaa84c15b229fe7d861894dc29ec21210a03ff3a1ba4da606dee10",
+      "bytes": 104,
+      "license": "Upstream README declares repository MIT; per-file data provenance/license is not asserted; see tools/compat-data/THIRD_PARTY_NOTICES.md",
+      "acquisition": "GET the raw URL pinned to the commit; verify SHA-256; write only to ignored .cache/; do not redistribute the raw JSON from this repository.",
+      "verified_investigation": true
+    },
+    {
+      "id": "prismarine-minecraft-data-26.1-protocol",
+      "namespace": "26.1",
+      "logical_namespace": "26.1",
+      "physical_source_version": "26.1",
+      "data_path": "data/pc/26.1/protocol.json",
+      "kind": "upstream_json",
+      "repository": "https://github.com/PrismarineJS/minecraft-data",
+      "upstream_commit": "20a0b0142d99d9a069aa8fec98512ec082b4f0a3",
+      "url": "https://raw.githubusercontent.com/PrismarineJS/minecraft-data/20a0b0142d99d9a069aa8fec98512ec082b4f0a3/data/pc/26.1/protocol.json",
+      "artifact": "data/pc/26.1/protocol.json",
+      "cache_path": ".cache/prismarine-minecraft-data-26.1-protocol.json",
+      "distribution": "ignored_cache_only",
+      "sha256": "88bad867681214bfea6c59c9a705da4cc269f8131e9d3495bd03916275e7fa08",
+      "bytes": 336715,
+      "license": "Upstream README declares repository MIT; per-file data provenance/license is not asserted; see tools/compat-data/THIRD_PARTY_NOTICES.md",
+      "acquisition": "GET the raw URL pinned to the commit; verify SHA-256; write only to ignored .cache/; do not redistribute the raw JSON from this repository.",
+      "verified_investigation": true
+    },
+    {
+      "id": "prismarine-minecraft-data-26.1-items",
+      "namespace": "26.1",
+      "logical_namespace": "26.1",
+      "physical_source_version": "26.1",
+      "data_path": "data/pc/26.1/items.json",
+      "kind": "upstream_json",
+      "repository": "https://github.com/PrismarineJS/minecraft-data",
+      "upstream_commit": "20a0b0142d99d9a069aa8fec98512ec082b4f0a3",
+      "url": "https://raw.githubusercontent.com/PrismarineJS/minecraft-data/20a0b0142d99d9a069aa8fec98512ec082b4f0a3/data/pc/26.1/items.json",
+      "artifact": "data/pc/26.1/items.json",
+      "cache_path": ".cache/prismarine-minecraft-data-26.1-items.json",
+      "distribution": "ignored_cache_only",
+      "sha256": "0d085dbf8a6fa129b94f696b77286d65ce7b04476eab398492558ab03cc1c45e",
+      "bytes": 189396,
+      "license": "Upstream README declares repository MIT; per-file data provenance/license is not asserted; see tools/compat-data/THIRD_PARTY_NOTICES.md",
+      "acquisition": "GET the raw URL pinned to the commit; verify SHA-256; write only to ignored .cache/; do not redistribute the raw JSON from this repository.",
+      "verified_investigation": true
+    },
+    {
+      "id": "prismarine-minecraft-data-26.1-blocks",
+      "namespace": "26.1",
+      "logical_namespace": "26.1",
+      "physical_source_version": "26.1",
+      "data_path": "data/pc/26.1/blocks.json",
+      "kind": "upstream_json",
+      "repository": "https://github.com/PrismarineJS/minecraft-data",
+      "upstream_commit": "20a0b0142d99d9a069aa8fec98512ec082b4f0a3",
+      "url": "https://raw.githubusercontent.com/PrismarineJS/minecraft-data/20a0b0142d99d9a069aa8fec98512ec082b4f0a3/data/pc/26.1/blocks.json",
+      "artifact": "data/pc/26.1/blocks.json",
+      "cache_path": ".cache/prismarine-minecraft-data-26.1-blocks.json",
+      "distribution": "ignored_cache_only",
+      "sha256": "573e172619f3c1ca64e15d07799ab646e1fd9ad19d759d9ceca65ac4fc7440a9",
+      "bytes": 860277,
+      "license": "Upstream README declares repository MIT; per-file data provenance/license is not asserted; see tools/compat-data/THIRD_PARTY_NOTICES.md",
+      "acquisition": "GET the raw URL pinned to the commit; verify SHA-256; write only to ignored .cache/; do not redistribute the raw JSON from this repository.",
+      "verified_investigation": true
+    },
+    {
+      "id": "prismarine-minecraft-data-26.1-recipes",
+      "namespace": "26.1",
+      "logical_namespace": "26.1",
+      "physical_source_version": "26.1",
+      "data_path": "data/pc/26.1/recipes.json",
+      "kind": "upstream_json",
+      "repository": "https://github.com/PrismarineJS/minecraft-data",
+      "upstream_commit": "20a0b0142d99d9a069aa8fec98512ec082b4f0a3",
+      "url": "https://raw.githubusercontent.com/PrismarineJS/minecraft-data/20a0b0142d99d9a069aa8fec98512ec082b4f0a3/data/pc/26.1/recipes.json",
+      "artifact": "data/pc/26.1/recipes.json",
+      "cache_path": ".cache/prismarine-minecraft-data-26.1-recipes.json",
+      "distribution": "ignored_cache_only",
+      "sha256": "3af5e2bf3f5a6cfe5d9fed34b33332f45bdfadd3af859cc71edfe7b72742dd54",
+      "bytes": 404729,
+      "license": "Upstream README declares repository MIT; per-file data provenance/license is not asserted; see tools/compat-data/THIRD_PARTY_NOTICES.md",
+      "acquisition": "GET the raw URL pinned to the commit; verify SHA-256; write only to ignored .cache/; do not redistribute the raw JSON from this repository.",
+      "verified_investigation": true
+    },
+    {
+      "id": "prismarine-minecraft-data-common-versions",
+      "namespace": "26.1",
+      "logical_namespace": "26.1",
+      "physical_source_version": "26.1",
+      "data_path": "data/pc/common/versions.json",
+      "kind": "upstream_index",
+      "repository": "https://github.com/PrismarineJS/minecraft-data",
+      "upstream_commit": "20a0b0142d99d9a069aa8fec98512ec082b4f0a3",
+      "url": "https://raw.githubusercontent.com/PrismarineJS/minecraft-data/20a0b0142d99d9a069aa8fec98512ec082b4f0a3/data/pc/common/versions.json",
+      "artifact": "data/pc/common/versions.json",
+      "sha256": "bbba8ed7f02bf4d5440008de89945f765fb8b340b73f353baa5b570f3f3c35c3",
+      "bytes": 852,
+      "license": "MIT (upstream repository; data-origin caveat documented by upstream README)",
+      "acquisition": "GET the raw URL pinned to the commit; verify SHA-256; use only to prove that 26.1 is listed.",
+      "verified_investigation": true
+    },
+    {
+      "id": "pumpkin-local-packets-26.2",
+      "namespace": "26.2",
+      "kind": "repository_input",
+      "path": "assets/packet/26_2_packets.json",
+      "sha256": "430b59553e9dbf6a54aecf389436db94dc1617af98e295b97d2dd2edbe5c1d4d",
+      "bytes": 19531,
+      "license": "Repository license; see LICENSE and assets/NOTICE.md",
+      "acquisition": "Read the existing repository asset; never replace it with a 26.1 mapping.",
+      "verified_investigation": true
+    },
+    {
+      "id": "mojang-version-metadata-26.2",
+      "namespace": "26.2",
+      "kind": "official_metadata",
+      "repository": "https://piston-meta.mojang.com",
+      "url": "https://piston-meta.mojang.com/v1/packages/987b91a95ae93b3bb78cc14d6e0bbd31bad08d59/26.2.json",
+      "upstream_commit": null,
+      "sha256": "b4ada8134759853edd432cf7d06c7ff536c1427af0467700a75d089145aaad5c",
+      "bytes": 51781,
+      "license": "Mojang metadata; use subject to Mojang terms",
+      "acquisition": "GET the immutable package URL for metadata verification only; no JAR or assets are stored in this repository.",
+      "verified_investigation": true
+    }
+  ],
+  "data_files": {
+    "26.1": [
+      "data/26.1/version-contract.json",
+      "data/26.1/protocol-summary.json"
+    ],
+    "26.2": [
+      "data/26.2/version-contract.json",
+      "data/26.2/protocol-summary.json"
+    ]
+  },
+  "schema_files": {
+    "26.1": [
+      ".cache/prismarine-minecraft-data-26.1-version.json",
+      ".cache/prismarine-minecraft-data-26.1-protocol.json",
+      ".cache/prismarine-minecraft-data-26.1-items.json",
+      ".cache/prismarine-minecraft-data-26.1-blocks.json",
+      ".cache/prismarine-minecraft-data-26.1-recipes.json"
+    ],
+    "26.2": []
+  },
+  "allowlist_path": "allowlist-rules.json",
+  "fail_closed": {
+    "missing_version_or_protocol": true,
+    "version_or_protocol_mismatch": true,
+    "unknown_category": true,
+    "unknown_delta": true,
+    "known_implementation_gap": true,
+    "unobserved_fixture": true
+  }
+}

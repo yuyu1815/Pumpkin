@@ -1,0 +1,15 @@
+# All runtime artifacts belong to this directory and must never enter git.
+artifacts/
+__pycache__/
+*.py[cod]
+*.log
+*.jar
+*.zip
+world/
+logs/
+
+# Keep this directory's source/tests visible while allowing future captures.
+!protocol776_harness.py
+!test_protocol776_harness.py
+!README.md
+!.gitignore

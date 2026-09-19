@@ -1,0 +1,23 @@
+{
+  "namespace": "26.2",
+  "minecraft_version": "26.2",
+  "protocol": 776,
+  "world_data_version": 4903,
+  "source_id": "pumpkin-local-packets-26.2",
+  "source_artifact_sha256": "430b59553e9dbf6a54aecf389436db94dc1617af98e295b97d2dd2edbe5c1d4d",
+  "source_was_fetched": false,
+  "format": "Pumpkin packet asset summary",
+  "state_direction_counts": {
+    "handshake/serverbound": {"packet_count": 1, "id_min": 0, "id_max": 0},
+    "status/serverbound": {"packet_count": 2, "id_min": 0, "id_max": 1},
+    "status/clientbound": {"packet_count": 2, "id_min": 0, "id_max": 1},
+    "login/serverbound": {"packet_count": 5, "id_min": 0, "id_max": 4},
+    "login/clientbound": {"packet_count": 6, "id_min": 0, "id_max": 5},
+    "configuration/serverbound": {"packet_count": 10, "id_min": 0, "id_max": 9},
+    "configuration/clientbound": {"packet_count": 20, "id_min": 0, "id_max": 19},
+    "play/serverbound": {"packet_count": 69, "id_min": 0, "id_max": 68},
+    "play/clientbound": {"packet_count": 141, "id_min": 0, "id_max": 140}
+  },
+  "total_packet_entries": 256,
+  "comparison_warning": "This is a 26.2 mapping/data anchor, not evidence of a vanilla client run or payload semantic equality."
+}

@@ -1,0 +1,19 @@
+Upstream license record for the cache-only PrismarineJS minecraft-data source
+
+Source repository:
+  https://github.com/PrismarineJS/minecraft-data
+Pinned commit:
+  20a0b0142d99d9a069aa8fec98512ec082b4f0a3
+Pinned README:
+  https://raw.githubusercontent.com/PrismarineJS/minecraft-data/20a0b0142d99d9a069aa8fec98512ec082b4f0a3/README.md
+
+The pinned README states, verbatim:
+
+## License
+
+MIT
+
+Some of the data was extracted manually or automatically from wiki.vg and minecraft.gamepedia.com.
+If required by one of the sources the license might change to something more appropriate.
+
+The pinned commit has no separate root LICENSE or NOTICE document (both pinned raw URLs return HTTP 404). The README does not name a copyright holder or grant a uniform per-file license for generated data. This file therefore records the upstream statement; it is not a relicense, a copyright assertion, or permission to redistribute the raw JSON. See THIRD_PARTY_NOTICES.md. Raw JSON remains ignored cache-only data and must be fetched and hash-checked before use.
