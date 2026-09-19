@@ -2,8 +2,8 @@
 """Small, dependency-free protocol 776 status/login/reconfiguration harness.
 
 This is deliberately not a Minecraft client. It validates framing and the
-small set of packet structures it actually consumes; all other known packets
-are retained as opaque payloads and are never treated as evidence of client
+small set of packet structures it actually consumes; unsupported mapped packets
+are surfaced as needs_review and are never treated as evidence of client
 compatibility. Reconfiguration mode is opt-in and waits for a server-owned
 Rust trigger; it never exposes or sends a public server command.
 """
@@ -22,6 +22,26 @@ from pathlib import Path
 from typing import Any
 
 PROTOCOL = 776
+_DIAGNOSTIC_FILE: Path | None = None
+_DIAGNOSTIC_SEQUENCE = 0
+
+
+def _write_diagnostic(event: str, **fields: Any) -> None:
+    global _DIAGNOSTIC_SEQUENCE
+    if _DIAGNOSTIC_FILE is None:
+        return
+    _DIAGNOSTIC_SEQUENCE += 1
+    payload = {"sequence": _DIAGNOSTIC_SEQUENCE, "event": event, **fields}
+    try:
+        _DIAGNOSTIC_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with _DIAGNOSTIC_FILE.open("a", encoding="utf-8") as trace:
+            trace.write(json.dumps(payload, sort_keys=True) + "\n")
+    except OSError:
+        # Diagnostics must not alter protocol behavior; stderr/exit still carry
+        # the primary failure when the trace file cannot be written.
+        pass
+
+
 MAX_PACKET_SIZE = 2_097_152
 MAX_PACKET_DATA_SIZE = 8_388_608
 MAX_VARINT_BYTES = 5
@@ -322,6 +342,154 @@ def encode_known_packs(packs: list[dict[str, str]]) -> bytes:
     return bytes(payload)
 
 
+# These are safety bounds for this observer, not claims about the maximum
+# cardinality accepted by the official client.  The packet schema supplies the
+# field order/types; the harness only decodes enough to prove frame boundaries,
+# counted-list bounds, and ordering.
+MAX_REGISTRY_ENTRIES = 65_536
+MAX_TAG_CATEGORIES = 64
+MAX_TAGS_PER_CATEGORY = 8_192
+MAX_TAG_ENTRIES = 65_536
+MAX_ENABLED_FEATURES = 1_024
+
+
+def _read_unnamed_nbt(data: bytes, offset: int, context: str) -> int:
+    """Skip one 26.2 Java NBT value and return its end offset.
+
+    Current registry fixtures contain both the protocol's unnamed root form and
+    repository-generated compounds with an empty two-byte root name. Accept
+    either wire envelope, preferring the bounded empty-name-root parse when
+    both forms are structurally possible. NBT meaning remains intentionally
+    uninspected.
+    """
+    if offset >= len(data):
+        raise HarnessError(f"truncated {context} NBT root tag")
+    tag_id = data[offset]
+    if tag_id == 0:
+        raise HarnessError(f"{context} NBT root cannot be TAG_End")
+
+    candidates: list[int] = []
+    try:
+        candidates.append(_skip_nbt_payload(data, offset + 1, tag_id))
+    except HarnessError:
+        pass
+
+    if tag_id != 0 and data[offset + 1 : offset + 3] == b"\x00\x00":
+        try:
+            root_name_length, payload_offset = _read_u16(data, offset + 1, f"{context} NBT root name length")
+            payload_offset += root_name_length
+            if payload_offset > len(data):
+                raise HarnessError(f"truncated {context} NBT root name")
+            candidates.append(_skip_nbt_payload(data, payload_offset, tag_id))
+        except HarnessError:
+            pass
+
+    if candidates:
+        # A named-root candidate consumes strictly more bytes for the
+        # repository-generated form; an ordinary unnamed value has no valid
+        # named-root parse and therefore keeps its sole candidate.
+        return max(candidates)
+    raise HarnessError(f"invalid {context} NBT envelope")
+
+
+def parse_update_enabled_features(payload: bytes) -> dict[str, Any]:
+    count, offset = _read_nonnegative_varint(
+        payload, 0, "enabled feature count", MAX_ENABLED_FEATURES
+    )
+    features: list[str] = []
+    seen: set[str] = set()
+    for _ in range(count):
+        feature, offset = get_string(payload, offset, 32767)
+        if feature in seen:
+            raise HarnessError(f"duplicate enabled feature: {feature}")
+        seen.add(feature)
+        features.append(feature)
+    require_end(payload, offset, "Update Enabled Features")
+    return {"feature_count": count, "features": features}
+
+
+def parse_registry_data(payload: bytes) -> dict[str, Any]:
+    """Decode the Registry Data minimum envelope, never registry semantics."""
+    registry_id, offset = get_string(payload, 0, 32767)
+    count, offset = _read_nonnegative_varint(
+        payload, offset, "Registry Data entry count", MAX_REGISTRY_ENTRIES
+    )
+    entry_ids: list[str] = []
+    seen: set[str] = set()
+    entries_with_data = 0
+    nbt_bytes = 0
+    for _ in range(count):
+        entry_id, offset = get_string(payload, offset, 32767)
+        if entry_id in seen:
+            raise HarnessError(f"duplicate Registry Data entry: {entry_id}")
+        seen.add(entry_id)
+        has_data, offset = _read_bool(payload, offset, "Registry Data entry data flag")
+        if has_data:
+            start = offset
+            offset = _read_unnamed_nbt(payload, offset, "Registry Data entry")
+            nbt_bytes += offset - start
+            if nbt_bytes > MAX_PACKET_DATA_SIZE:
+                raise HarnessError("Registry Data NBT exceeds 8 MiB")
+            entries_with_data += 1
+        entry_ids.append(entry_id)
+    require_end(payload, offset, "Registry Data")
+    return {
+        "registry_id": registry_id,
+        "entry_count": count,
+        "entries_with_data": entries_with_data,
+        "nbt_bytes": nbt_bytes,
+        "entry_ids": entry_ids,
+    }
+
+
+def parse_update_tags(payload: bytes) -> dict[str, Any]:
+    """Decode Update Tags counts/strings/IDs without assigning tag meaning."""
+    category_count, offset = _read_nonnegative_varint(
+        payload, 0, "Update Tags category count", MAX_TAG_CATEGORIES
+    )
+    categories: list[dict[str, Any]] = []
+    category_names: set[str] = set()
+    total_tags = 0
+    total_ids = 0
+    for _ in range(category_count):
+        category, offset = get_string(payload, offset, 32767)
+        if category in category_names:
+            raise HarnessError(f"duplicate Update Tags category: {category}")
+        category_names.add(category)
+        tag_count, offset = _read_nonnegative_varint(
+            payload, offset, f"Update Tags {category} tag count", MAX_TAGS_PER_CATEGORY
+        )
+        tags: list[dict[str, Any]] = []
+        tag_names: set[str] = set()
+        for _ in range(tag_count):
+            tag_name, offset = get_string(payload, offset, 65_535)
+            if tag_name in tag_names:
+                raise HarnessError(f"duplicate Update Tags tag: {tag_name}")
+            tag_names.add(tag_name)
+            entry_count, offset = _read_nonnegative_varint(
+                payload, offset, f"Update Tags {tag_name} entry count", MAX_TAG_ENTRIES
+            )
+            ids: list[int] = []
+            for _ in range(entry_count):
+                value, offset = decode_varint(payload, offset)
+                if value < 0:
+                    raise HarnessError(f"negative Update Tags entry id: {value}")
+                ids.append(value)
+            tags.append({"name": tag_name, "entry_count": entry_count, "ids": ids})
+            total_ids += entry_count
+            if total_ids > MAX_PACKET_DATA_SIZE:
+                raise HarnessError("Update Tags entries exceed bounded total")
+        categories.append({"name": category, "tag_count": tag_count, "tags": tags})
+        total_tags += tag_count
+    require_end(payload, offset, "Update Tags")
+    return {
+        "category_count": category_count,
+        "tag_count": total_tags,
+        "entry_id_count": total_ids,
+        "categories": categories,
+    }
+
+
 def make_known_packs_response(requested: list[dict[str, str]], case: str) -> list[dict[str, str]]:
     """Build only wire-valid selection fixtures; server semantics remain observed."""
     if case == "empty":
@@ -460,7 +628,11 @@ def _read_f32(data: bytes, offset: int, context: str) -> tuple[float, int]:
 
 def _read_bool(data: bytes, offset: int, context: str) -> tuple[bool, int]:
     if offset >= len(data) or data[offset] not in (0, 1):
-        raise HarnessError(f"invalid {context} boolean")
+        value = None if offset >= len(data) else data[offset]
+        nearby = data[max(0, offset - 16): min(len(data), offset + 16)].hex()
+        raise HarnessError(
+            f"invalid {context} boolean at offset {offset}: {value!r}; nearby={nearby}"
+        )
     return bool(data[offset]), offset + 1
 
 
@@ -720,7 +892,14 @@ def parse_first_chunk(payload: bytes) -> dict[str, Any]:
     empty_block_mask, offset = _read_bitset(payload, offset, "empty block light mask")
     sky_arrays, offset = _read_light_arrays(payload, offset, "sky light")
     block_arrays, offset = _read_light_arrays(payload, offset, "block light")
-    require_end(payload, offset, "first chunk")
+    if offset != len(payload):
+        raise HarnessError(
+            f"first chunk has {len(payload) - offset} trailing bytes "
+            f"(offset={offset}, total={len(payload)}, chunk=({chunk_x},{chunk_z}), "
+            f"section_data_length={section_data_length}, block_entities={block_entity_count}, "
+            f"sky_masks={len(sky_mask)}, block_masks={len(block_mask)}, "
+            f"sky_arrays={sky_arrays}, block_arrays={block_arrays})"
+        )
     return {
         "chunk_x": chunk_x,
         "chunk_z": chunk_z,
@@ -829,7 +1008,8 @@ def run_login(
     if not 1 <= len(username) <= 16 or not username.isascii() or not username.replace("_", "").isalnum():
         raise HarnessError("username must be 1..16 ASCII alphanumeric/underscore characters")
     clientbound = {name: packet_id(mapping, "configuration", "clientbound", name) for name in (
-        "disconnect", "keep_alive", "ping", "select_known_packs", "finish_configuration"
+        "disconnect", "keep_alive", "ping", "select_known_packs", "finish_configuration",
+        "update_enabled_features", "registry_data", "update_tags",
     )}
     serverbound_config = {name: packet_id(mapping, "configuration", "serverbound", name) for name in (
         "client_information", "select_known_packs", "finish_configuration", "keep_alive", "pong"
@@ -876,32 +1056,33 @@ def run_login(
         known_pack_reply = False
         config_finished = False
         known_config_clientbound = set(mapping["configuration"]["clientbound"].values())
+        config_wire = ConfigurationCriticalTracker(clientbound, known_config_clientbound)
         while True:
             frame = read_frame(stream, compression)
             config_packets += 1
-            if frame.packet_id not in known_config_clientbound:
-                raise HarnessError(f"unknown 26.2 configuration clientbound packet id {frame.packet_id}")
-            if frame.packet_id == clientbound["disconnect"]:
-                reason, offset = get_string(frame.payload)
-                require_end(frame.payload, offset, "configuration disconnect")
-                protocol_disconnect = reason
+            action = config_wire.observe(frame)
+            if action == "disconnect":
+                protocol_disconnect = str(config_wire.last_details["reason"])
                 break
-            if frame.packet_id == clientbound["select_known_packs"]:
+            if action == "select_known_packs":
                 # We intentionally send no guessed pack identifiers. Pumpkin accepts an empty list.
-                write_packet(stream, serverbound_config["select_known_packs"], encode_varint(0), compression)
+                payload = encode_varint(0)
+                write_packet(stream, serverbound_config["select_known_packs"], payload, compression)
+                config_wire.record_known_packs_reply(payload)
                 known_pack_reply = True
-            elif frame.packet_id == clientbound["finish_configuration"]:
-                write_packet(stream, serverbound_config["finish_configuration"], b"", compression)
+            elif action == "finish_configuration":
+                payload = b""
+                write_packet(stream, serverbound_config["finish_configuration"], payload, compression)
+                config_wire.record_finish_ack(payload)
+                config_wire.require_complete()
                 config_finished = True
                 break
-            elif frame.packet_id == clientbound["keep_alive"]:
+            elif action == "keep_alive":
                 keepalive = parse_i64(frame.payload, "configuration keep-alive")
                 write_packet(stream, serverbound_config["keep_alive"], struct.pack(">q", keepalive), compression)
-            elif frame.packet_id == clientbound["ping"]:
+            elif action == "ping":
                 ping = parse_i32(frame.payload, "configuration ping")
                 write_packet(stream, serverbound_config["pong"], struct.pack(">i", ping), compression)
-            # Other 26.2 configuration packets are deliberately opaque: framing is checked,
-            # but their payload is not used as a compatibility claim.
 
         if protocol_disconnect is not None:
             return {
@@ -968,12 +1149,152 @@ def parse_disconnect_reason(payload: bytes, context: str) -> str:
 
 
 @dataclass
+class ConfigurationCriticalTracker:
+    """Admission observer for the small, critical Configuration wire subset.
+
+    Known packet IDs outside this subset are surfaced as ``needs_review``; an
+    ID absent from the official 26.2 mapping is a hard failure.  Gameplay
+    payloads are deliberately outside this class and are never called decoded.
+    """
+
+    ids: dict[str, int]
+    all_ids: set[int]
+    events: list[dict[str, Any]] | None = None
+    # 26.2 omits Update Enabled Features in Pumpkin's configuration path;
+    # when present on another mapped version it must precede Known Packs, but
+    # it is not a required protocol-776 packet.
+    phase: str = "awaiting_known_packs"
+    enabled_features_seen: int = 0
+    known_packs_seen: int = 0
+    known_packs_replies: int = 0
+    registry_ids: set[str] | None = None
+    update_tags_seen: int = 0
+    finish_seen: int = 0
+    needs_review_count: int = 0
+    last_details: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        if self.events is None:
+            self.events = []
+        if self.registry_ids is None:
+            self.registry_ids = set()
+
+    def _critical_order_error(self, message: str) -> HarnessError:
+        return HarnessError(f"Configuration state mismatch: {message}")
+
+    def observe(self, frame: Frame) -> str:
+        assert self.registry_ids is not None
+        self.last_details = {
+            "validation": "decoded",
+            "payload_bytes": len(frame.payload),
+            "framed_length": frame.framed_length,
+            "compressed": frame.compressed,
+        }
+        if frame.packet_id not in self.all_ids:
+            raise HarnessError(
+                f"unknown 26.2 configuration clientbound packet id {frame.packet_id}"
+            )
+        if frame.packet_id == self.ids["disconnect"]:
+            reason = parse_disconnect_reason(frame.payload, "configuration disconnect")
+            self.last_details.update({"event": "disconnect", "reason": reason})
+            return "disconnect"
+        if frame.packet_id == self.ids["update_enabled_features"]:
+            if self.enabled_features_seen or self.phase != "awaiting_known_packs":
+                raise self._critical_order_error("duplicate or late Update Enabled Features")
+            self.last_details.update(parse_update_enabled_features(frame.payload))
+            self.last_details["event"] = "update_enabled_features"
+            self.enabled_features_seen = 1
+            return "update_enabled_features"
+        if frame.packet_id == self.ids["select_known_packs"]:
+            if self.known_packs_seen or self.phase != "awaiting_known_packs":
+                raise self._critical_order_error("duplicate or late Known Packs request")
+            packs = parse_known_packs(frame.payload)
+            self.known_packs_seen = 1
+            self.phase = "awaiting_known_packs_reply"
+            self.last_details.update({"event": "select_known_packs", "packs": packs})
+            return "select_known_packs"
+        if frame.packet_id == self.ids["registry_data"]:
+            if self.known_packs_replies != 1:
+                raise self._critical_order_error("Registry Data before Known Packs reply")
+            details = parse_registry_data(frame.payload)
+            registry_id = str(details["registry_id"])
+            if registry_id in self.registry_ids:
+                raise self._critical_order_error(f"duplicate Registry Data: {registry_id}")
+            self.registry_ids.add(registry_id)
+            self.phase = "registry_data"
+            self.last_details.update({"event": "registry_data", **details})
+            return "registry_data"
+        if frame.packet_id == self.ids["update_tags"]:
+            if self.known_packs_replies != 1 or not self.registry_ids:
+                raise self._critical_order_error("Update Tags before Registry Data")
+            if self.update_tags_seen:
+                raise self._critical_order_error("duplicate Update Tags")
+            details = parse_update_tags(frame.payload)
+            self.update_tags_seen = 1
+            self.phase = "update_tags"
+            self.last_details.update({"event": "update_tags", **details})
+            return "update_tags"
+        if frame.packet_id == self.ids["finish_configuration"]:
+            if self.finish_seen:
+                raise self._critical_order_error("duplicate Finish Configuration")
+            if self.known_packs_replies != 1 or not self.registry_ids or not self.update_tags_seen:
+                raise self._critical_order_error(
+                    "Finish Configuration before Known Packs, Registry Data, and Update Tags"
+                )
+            require_end(frame.payload, 0, "Finish Configuration")
+            self.finish_seen = 1
+            self.phase = "awaiting_finish_ack"
+            self.last_details["event"] = "finish_configuration"
+            return "finish_configuration"
+        if frame.packet_id == self.ids["keep_alive"]:
+            parse_i64(frame.payload, "configuration keep-alive")
+            self.last_details["event"] = "keep_alive"
+            return "keep_alive"
+        if frame.packet_id == self.ids["ping"]:
+            parse_i32(frame.payload, "configuration ping")
+            self.last_details["event"] = "ping"
+            return "ping"
+        self.needs_review_count += 1
+        self.last_details.update({
+            "validation": "needs_review",
+            "event": "needs_review_configuration",
+            "packet_id": frame.packet_id,
+        })
+        return "needs_review_configuration"
+
+    def record_known_packs_reply(self, payload: bytes) -> None:
+        if self.known_packs_replies:
+            raise self._critical_order_error("duplicate Known Packs reply")
+        parse_known_packs(payload)
+        if self.phase != "awaiting_known_packs_reply":
+            raise self._critical_order_error("Known Packs reply without a request")
+        self.known_packs_replies = 1
+        self.phase = "awaiting_registry_data"
+
+    def record_finish_ack(self, payload: bytes) -> None:
+        require_end(payload, 0, "Finish Configuration acknowledgment")
+        if self.finish_seen != 1 or self.phase != "awaiting_finish_ack":
+            raise self._critical_order_error("Finish acknowledgment without Finish Configuration")
+        self.phase = "finished"
+
+    def require_complete(self) -> None:
+        if self.known_packs_seen != 1 or self.known_packs_replies != 1:
+            raise HarnessError("critical Configuration packet missing: Known Packs")
+        if not self.registry_ids:
+            raise HarnessError("critical Configuration packet missing: Registry Data")
+        if self.update_tags_seen != 1:
+            raise HarnessError("critical Configuration packet missing: Update Tags")
+        if self.finish_seen != 1 or self.phase != "finished":
+            raise HarnessError("critical Configuration packet missing or unacknowledged: Finish")
+
+
+@dataclass
 class ConfigurationRegressionTracker:
     """Stateful observer for deterministic configuration-order probes.
 
-    Only fields needed for the admission decision are decoded: packet id,
-    payload length, and the disconnect reason string. Registry/known-pack
-    contents remain opaque; this is not a semantic payload validator.
+    This legacy negative-probe observer records packet id/payload bounds and
+    disconnect reason. Unsupported but mapped packets are marked
+    ``needs_review``; it is not a semantic payload validator.
     """
 
     ids: dict[str, int]
@@ -1003,9 +1324,20 @@ class ConfigurationRegressionTracker:
             self.events.append(event)
             return "disconnect"
         if frame.packet_id == self.ids["select_known_packs"]:
+            event["packs"] = parse_known_packs(frame.payload)
             self.known_packs_seen += 1
             event["event"] = "select_known_packs"
+        elif self.ids.get("update_enabled_features") == frame.packet_id:
+            event.update(parse_update_enabled_features(frame.payload))
+            event["event"] = "update_enabled_features"
+        elif self.ids.get("registry_data") == frame.packet_id:
+            event.update(parse_registry_data(frame.payload))
+            event["event"] = "registry_data"
+        elif self.ids.get("update_tags") == frame.packet_id:
+            event.update(parse_update_tags(frame.payload))
+            event["event"] = "update_tags"
         elif frame.packet_id == self.ids["finish_configuration"]:
+            require_end(frame.payload, 0, "Finish Configuration")
             self.finish_seen += 1
             self.server_phase = "awaiting_finish_ack"
             event["event"] = "finish_configuration"
@@ -1016,7 +1348,8 @@ class ConfigurationRegressionTracker:
             parse_i32(frame.payload, "configuration ping")
             event["event"] = "ping"
         else:
-            event["event"] = "opaque_configuration"
+            event["event"] = "needs_review_configuration"
+            event["validation"] = "needs_review"
         self.events.append(event)
         return str(event["event"])
 
@@ -1041,7 +1374,16 @@ def _configuration_ids(
 ) -> tuple[dict[str, int], dict[str, int], set[int]]:
     clientbound = {
         name: packet_id(mapping, "configuration", "clientbound", name)
-        for name in ("disconnect", "keep_alive", "ping", "select_known_packs", "finish_configuration")
+        for name in (
+            "disconnect",
+            "keep_alive",
+            "ping",
+            "select_known_packs",
+            "finish_configuration",
+            "update_enabled_features",
+            "registry_data",
+            "update_tags",
+        )
     }
     serverbound = {
         name: packet_id(mapping, "configuration", "serverbound", name)
@@ -1235,7 +1577,10 @@ def run_strict_play(
         raise HarnessError("username must be 1..16 ASCII alphanumeric/underscore characters")
     clientbound = {
         name: packet_id(mapping, "configuration", "clientbound", name)
-        for name in ("disconnect", "keep_alive", "ping", "select_known_packs", "finish_configuration")
+        for name in (
+            "disconnect", "keep_alive", "ping", "select_known_packs", "finish_configuration",
+            "update_enabled_features", "registry_data", "update_tags",
+        )
     }
     serverbound_config = {
         name: packet_id(mapping, "configuration", "serverbound", name)
@@ -1282,33 +1627,32 @@ def run_strict_play(
         known_packs_response: list[dict[str, str]] | None = None
         config_finished = False
         known_config_clientbound = set(mapping["configuration"]["clientbound"].values())
+        config_wire = ConfigurationCriticalTracker(clientbound, known_config_clientbound)
         while True:
             frame = read_frame(stream, compression)
             config_packets += 1
-            if frame.packet_id not in known_config_clientbound:
-                raise HarnessError(f"unknown 26.2 configuration clientbound packet id {frame.packet_id}")
-            if frame.packet_id == clientbound["disconnect"]:
-                reason, offset = get_string(frame.payload)
-                require_end(frame.payload, offset, "configuration disconnect")
+            action = config_wire.observe(frame)
+            if action == "disconnect":
+                reason = str(config_wire.last_details["reason"])
                 raise HarnessError(f"server configuration disconnect: {reason}")
-            if frame.packet_id == clientbound["select_known_packs"]:
-                known_packs_request = parse_known_packs(frame.payload)
+            if action == "select_known_packs":
+                known_packs_request = config_wire.last_details["packs"]
                 known_packs_response = make_known_packs_response(known_packs_request, known_packs_case)
-                write_packet(
-                    stream,
-                    serverbound_config["select_known_packs"],
-                    encode_known_packs(known_packs_response),
-                    compression,
-                )
+                payload = encode_known_packs(known_packs_response)
+                write_packet(stream, serverbound_config["select_known_packs"], payload, compression)
+                config_wire.record_known_packs_reply(payload)
                 known_pack_reply = True
-            elif frame.packet_id == clientbound["finish_configuration"]:
-                write_packet(stream, serverbound_config["finish_configuration"], b"", compression)
+            elif action == "finish_configuration":
+                payload = b""
+                write_packet(stream, serverbound_config["finish_configuration"], payload, compression)
+                config_wire.record_finish_ack(payload)
+                config_wire.require_complete()
                 config_finished = True
                 break
-            elif frame.packet_id == clientbound["keep_alive"]:
+            elif action == "keep_alive":
                 keepalive = parse_i64(frame.payload, "configuration keep-alive")
                 write_packet(stream, serverbound_config["keep_alive"], struct.pack(">q", keepalive), compression)
-            elif frame.packet_id == clientbound["ping"]:
+            elif action == "ping":
                 ping = parse_i32(frame.payload, "configuration ping")
                 write_packet(stream, serverbound_config["pong"], struct.pack(">i", ping), compression)
         if not config_finished:
@@ -1449,26 +1793,30 @@ def run_reconfiguration(
 
         # Initial Login -> Configuration -> Play has its own codecs and IDs. Do not reuse
         # reconfiguration packet IDs as evidence for this first transition.
+        initial_config = ConfigurationCriticalTracker(clientbound, known_config_clientbound)
         while True:
             frame = read_frame(stream, compression)
-            if frame.packet_id not in known_config_clientbound:
-                raise HarnessError(f"unknown initial configuration packet id {frame.packet_id}")
-            if frame.packet_id == clientbound["disconnect"]:
-                raise HarnessError(f"server initial configuration disconnect: {parse_disconnect_reason(frame.payload, 'initial configuration disconnect')}")
-            if frame.packet_id == clientbound["select_known_packs"]:
-                request = parse_known_packs(frame.payload)
+            action = initial_config.observe(frame)
+            if action == "disconnect":
+                reason = str(initial_config.last_details["reason"])
+                raise HarnessError(f"server initial configuration disconnect: {reason}")
+            if action == "select_known_packs":
+                request = initial_config.last_details["packs"]
                 response = make_known_packs_response(request, known_packs_case)
                 payload = encode_known_packs(response)
                 write_packet(stream, config_serverbound["select_known_packs"], payload, compression)
-            elif frame.packet_id == clientbound["finish_configuration"]:
+                initial_config.record_known_packs_reply(payload)
+            elif action == "finish_configuration":
                 payload = b""
                 write_packet(stream, config_serverbound["finish_configuration"], payload, compression)
+                initial_config.record_finish_ack(payload)
+                initial_config.require_complete()
                 break
-            elif frame.packet_id == clientbound["keep_alive"]:
+            elif action == "keep_alive":
                 value = parse_i64(frame.payload, "initial configuration keep-alive")
                 payload = struct.pack(">q", value)
                 write_packet(stream, config_serverbound["keep_alive"], payload, compression)
-            elif frame.packet_id == clientbound["ping"]:
+            elif action == "ping":
                 value = parse_i32(frame.payload, "initial configuration ping")
                 payload = struct.pack(">i", value)
                 write_packet(stream, config_serverbound["pong"], payload, compression)
@@ -1519,6 +1867,13 @@ def run_reconfiguration(
                     break
         baseline_entity_id = tracker.join_game["entity_id"] if tracker.join_game else None
         baseline_position = tracker.position
+        _write_diagnostic(
+            "play_baseline_ready",
+            entity_id=baseline_entity_id,
+            position=baseline_position,
+            keepalives_replied=tracker.keepalives_replied,
+            opaque_play_packets=tracker.opaque_packets,
+        )
 
         def wait_for_play_disconnect() -> str:
             for _ in range(512):
@@ -1555,8 +1910,28 @@ def run_reconfiguration(
                     write_packet(stream, config_serverbound["pong"], payload, compression)
                     record("clientbound", "configuration", frame, "ping")
                     record_send("configuration", "pong", config_serverbound["pong"], payload)
+                elif frame.packet_id == clientbound["update_enabled_features"]:
+                    details = parse_update_enabled_features(frame.payload)
+                    record("clientbound", "configuration", frame, "update_enabled_features")
+                    events[-1].update(details)
+                elif frame.packet_id == clientbound["registry_data"]:
+                    details = parse_registry_data(frame.payload)
+                    record("clientbound", "configuration", frame, "registry_data")
+                    events[-1].update(details)
+                elif frame.packet_id == clientbound["update_tags"]:
+                    details = parse_update_tags(frame.payload)
+                    record("clientbound", "configuration", frame, "update_tags")
+                    events[-1].update(details)
+                elif frame.packet_id == clientbound["select_known_packs"]:
+                    details = parse_known_packs(frame.payload)
+                    record("clientbound", "configuration", frame, "select_known_packs")
+                    events[-1]["packs"] = details
+                elif frame.packet_id == clientbound["finish_configuration"]:
+                    require_end(frame.payload, 0, "Finish Configuration")
+                    record("clientbound", "configuration", frame, "finish_configuration")
                 else:
-                    record("clientbound", "configuration", frame, "opaque_configuration")
+                    record("clientbound", "configuration", frame, "needs_review_configuration")
+                    events[-1]["validation"] = "needs_review"
             raise HarnessError("negative Configuration probe exceeded 512 packets without disconnect")
 
         def wait_for_start_configuration() -> None:
@@ -1564,6 +1939,7 @@ def run_reconfiguration(
                 frame = read_frame(stream, compression)
                 action = consume_play(frame)
                 if action == "start_configuration":
+                    _write_diagnostic("start_configuration_observed", play_packets=play_packets)
                     return
             raise HarnessError("server-owned reconfiguration trigger was not observed within 2048 Play packets")
 
@@ -1621,19 +1997,22 @@ def run_reconfiguration(
                     "real_client_compatibility": "not_claimed",
                 }
 
-            finish_seen = False
+            config_wire = ConfigurationCriticalTracker(clientbound, known_config_clientbound)
             while True:
                 frame = read_frame(stream, compression)
-                if frame.packet_id not in known_config_clientbound:
-                    raise HarnessError(f"unknown reconfiguration packet id {frame.packet_id}")
-                if frame.packet_id == clientbound["disconnect"]:
-                    raise HarnessError(f"server reconfiguration disconnect: {parse_disconnect_reason(frame.payload, 'reconfiguration disconnect')}")
-                if frame.packet_id == clientbound["select_known_packs"]:
-                    request = parse_known_packs(frame.payload)
+                action = config_wire.observe(frame)
+                details = dict(config_wire.last_details or {})
+                record("clientbound", "configuration", frame, action)
+                events[-1].update(details)
+                if action == "disconnect":
+                    reason = str(details["reason"])
+                    raise HarnessError(f"server reconfiguration disconnect: {reason}")
+                if action == "select_known_packs":
+                    request = details["packs"]
                     response = make_known_packs_response(request, known_packs_case)
                     payload = encode_known_packs(response)
                     write_packet(stream, config_serverbound["select_known_packs"], payload, compression)
-                    record("clientbound", "configuration", frame, "select_known_packs")
+                    config_wire.record_known_packs_reply(payload)
                     record_send("configuration", "select_known_packs", config_serverbound["select_known_packs"], payload)
                     if case == "early_finish":
                         payload = b""
@@ -1647,32 +2026,32 @@ def run_reconfiguration(
                             "disconnect_reason": reason, "result": "expected_early_finish_disconnect",
                             "real_client_compatibility": "not_claimed",
                         }
-                elif frame.packet_id == clientbound["finish_configuration"]:
-                    record("clientbound", "configuration", frame, "finish_configuration")
+                elif action == "finish_configuration":
                     payload = b""
                     write_packet(stream, config_serverbound["finish_configuration"], payload, compression)
+                    config_wire.record_finish_ack(payload)
+                    config_wire.require_complete()
+                    _write_diagnostic(
+                        "configuration_finished",
+                        registry_count=len(config_wire.registry_ids or ()),
+                        update_tags=config_wire.update_tags_seen,
+                        needs_review=config_wire.needs_review_count,
+                    )
                     record_send("configuration", "finish_configuration", config_serverbound["finish_configuration"], payload)
-                    finish_seen = True
                     if case == "duplicate_finish":
                         write_packet(stream, config_serverbound["finish_configuration"], payload, compression)
                         record_send("play", "duplicate_finish_configuration", config_serverbound["finish_configuration"], payload)
                     break
-                elif frame.packet_id == clientbound["keep_alive"]:
+                elif action == "keep_alive":
                     value = parse_i64(frame.payload, "reconfiguration keep-alive")
                     payload = struct.pack(">q", value)
                     write_packet(stream, config_serverbound["keep_alive"], payload, compression)
-                    record("clientbound", "configuration", frame, "keep_alive")
                     record_send("configuration", "keep_alive", config_serverbound["keep_alive"], payload)
-                elif frame.packet_id == clientbound["ping"]:
+                elif action == "ping":
                     value = parse_i32(frame.payload, "reconfiguration ping")
                     payload = struct.pack(">i", value)
                     write_packet(stream, config_serverbound["pong"], payload, compression)
-                    record("clientbound", "configuration", frame, "ping")
                     record_send("configuration", "pong", config_serverbound["pong"], payload)
-                else:
-                    record("clientbound", "configuration", frame, "opaque_configuration")
-            if not finish_seen:
-                raise HarnessError("reconfiguration ended without Finish Configuration")
 
             # The Finish ack must return to the same Play connection. A Join Game is
             # forbidden here; any later position packet must equal the baseline exactly.
@@ -1684,6 +2063,11 @@ def run_reconfiguration(
                 if action == "keep_alive":
                     post_reconfiguration_keepalives += 1
                     completed += 1
+                    _write_diagnostic(
+                        "returned_play_keepalive",
+                        cycle=completed,
+                        post_reconfiguration_keepalives=post_reconfiguration_keepalives,
+                    )
                     break
             else:
                 raise HarnessError("no Play keep-alive observed after reconfiguration Finish ack")
@@ -1700,6 +2084,17 @@ def run_reconfiguration(
             "same_entity": True, "same_position": True,
             "post_reconfiguration_play_keepalives": post_reconfiguration_keepalives,
             "events": events, "known_packs_case": known_packs_case,
+            "critical_wire": {
+                "registry_data_packets": sum(
+                    event["event"] == "registry_data" for event in events
+                ),
+                "update_tags_packets": sum(
+                    event["event"] == "update_tags" for event in events
+                ),
+                "needs_review_packets": sum(
+                    event.get("validation") == "needs_review" for event in events
+                ),
+            },
             "result": (
                 "duplicate_finish_no_second_transition"
                 if case == "duplicate_finish"
@@ -1716,6 +2111,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--port", type=int, default=25565)
     parser.add_argument("--timeout", type=float, default=10.0, help="per socket read/connect timeout")
     parser.add_argument("--username", default="compat_26_2")
+    parser.add_argument(
+        "--diagnostic-file",
+        type=Path,
+        help="optional JSON-lines phase trace for integration-test diagnostics",
+    )
     parser.add_argument("--wait-for-keepalive", action="store_true")
     parser.add_argument(
         "--case",
@@ -1747,6 +2147,10 @@ def main(argv: list[str] | None = None) -> int:
         help="wire-valid Known Packs response fixture used by --strict-play or --mode reconfiguration",
     )
     args = parser.parse_args(argv)
+    global _DIAGNOSTIC_FILE, _DIAGNOSTIC_SEQUENCE
+    _DIAGNOSTIC_FILE = args.diagnostic_file
+    _DIAGNOSTIC_SEQUENCE = 0
+    _write_diagnostic("harness_started", mode=args.mode, username=args.username)
     try:
         mapping = _asset_packet_ids()
         verify_critical_mapping(mapping)
@@ -1787,8 +2191,10 @@ def main(argv: list[str] | None = None) -> int:
                 mapping,
             )
     except (HarnessError, OSError, ValueError) as exc:
+        _write_diagnostic("harness_failed", error=str(exc))
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1
+    _write_diagnostic("harness_result", result=result.get("result"), cycles_completed=result.get("cycles_completed"))
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
     return 0
 

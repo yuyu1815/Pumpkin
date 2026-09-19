@@ -246,12 +246,133 @@ class StructureTests(unittest.TestCase):
                 h.synthetic_resource_pack_ack_fixture(pack_uuid, 0) + b"x"
             )
 
+    def test_critical_configuration_envelopes_decode_and_bound(self):
+        registry = (
+            h.put_string("minecraft:dimension_type")
+            + h.encode_varint(1)
+            + h.put_string("minecraft:overworld")
+            + b"\x01\x0a\x00"
+        )
+        parsed_registry = h.parse_registry_data(registry)
+        self.assertEqual(parsed_registry["registry_id"], "minecraft:dimension_type")
+        self.assertEqual(parsed_registry["entry_count"], 1)
+        self.assertEqual(parsed_registry["entries_with_data"], 1)
+        # The minimum envelope validates String framing, not resource-location
+        # semantics; an empty wire String must not be rejected here.
+        empty_entry = h.put_string("") + h.encode_varint(1) + h.put_string("") + b"\x00"
+        self.assertEqual(h.parse_registry_data(empty_entry)["entry_count"], 1)
+        named_root = (
+            h.put_string("minecraft:test")
+            + h.encode_varint(1)
+            + h.put_string("minecraft:entry")
+            + b"\x01\x0a\x00\x00\x03\x00\x07padding\x00\x00\x00\x00\x00"
+        )
+        self.assertEqual(h.parse_registry_data(named_root)["entries_with_data"], 1)
+
+        tags = (
+            h.encode_varint(1)
+            + h.put_string("minecraft:item")
+            + h.encode_varint(1)
+            + h.put_string("minecraft:mineable/pickaxe")
+            + h.encode_varint(2)
+            + h.encode_varint(0)
+            + h.encode_varint(3)
+        )
+        parsed_tags = h.parse_update_tags(tags)
+        self.assertEqual((parsed_tags["category_count"], parsed_tags["entry_id_count"]), (1, 2))
+        features = h.parse_update_enabled_features(
+            h.encode_varint(2) + h.put_string("minecraft:vanilla") + h.put_string("minecraft:test")
+        )
+        self.assertEqual(features["feature_count"], 2)
+
+    def test_critical_configuration_envelopes_reject_duplicates_and_trailing(self):
+        registry = (
+            h.put_string("minecraft:test") + h.encode_varint(0)
+        )
+        with self.assertRaisesRegex(h.HarnessError, "duplicate Update Tags category"):
+            h.parse_update_tags(h.encode_varint(2) + h.put_string("minecraft:item") + h.encode_varint(0) + h.put_string("minecraft:item") + h.encode_varint(0))
+        with self.assertRaisesRegex(h.HarnessError, "trailing bytes"):
+            h.parse_registry_data(registry + b"x")
+        with self.assertRaisesRegex(h.HarnessError, "duplicate enabled feature"):
+            h.parse_update_enabled_features(h.encode_varint(2) + h.put_string("minecraft:vanilla") * 2)
+
+    def test_critical_configuration_tracker_requires_order_and_all_critical_packets(self):
+        ids = {
+            "disconnect": 2, "keep_alive": 4, "ping": 5,
+            "select_known_packs": 14, "finish_configuration": 3,
+            "update_enabled_features": 12, "registry_data": 7, "update_tags": 13,
+        }
+        tracker = h.ConfigurationCriticalTracker(ids, set(ids.values()))
+        self.assertEqual(
+            tracker.observe(h.Frame(12, h.encode_varint(0), 2, False)),
+            "update_enabled_features",
+        )
+        self.assertEqual(
+            tracker.observe(h.Frame(14, h.encode_varint(0), 2, False)),
+            "select_known_packs",
+        )
+        tracker.record_known_packs_reply(h.encode_varint(0))
+        with self.assertRaisesRegex(h.HarnessError, "before Registry Data"):
+            tracker.observe(h.Frame(13, h.encode_varint(0), 2, False))
+        registry = h.put_string("minecraft:test") + h.encode_varint(0)
+        self.assertEqual(
+            tracker.observe(h.Frame(7, registry, len(registry) + 1, False)),
+            "registry_data",
+        )
+        self.assertEqual(
+            tracker.observe(h.Frame(13, h.encode_varint(0), 2, False)),
+            "update_tags",
+        )
+        finish = h.Frame(3, b"", 1, False)
+        self.assertEqual(tracker.observe(finish), "finish_configuration")
+        tracker.record_finish_ack(b"")
+        tracker.require_complete()
+
+    def test_critical_configuration_tracker_unknown_and_missing_fail(self):
+        ids = {
+            "disconnect": 2, "keep_alive": 4, "ping": 5,
+            "select_known_packs": 14, "finish_configuration": 3,
+            "update_enabled_features": 12, "registry_data": 7, "update_tags": 13,
+        }
+        tracker = h.ConfigurationCriticalTracker(ids, set(ids.values()))
+        with self.assertRaisesRegex(h.HarnessError, "unknown 26.2 configuration"):
+            tracker.observe(h.Frame(99, b"", 1, False))
+        with self.assertRaisesRegex(h.HarnessError, "before Known Packs"):
+            tracker.observe(h.Frame(7, h.put_string("minecraft:test") + h.encode_varint(0), 22, False))
+        with self.assertRaisesRegex(h.HarnessError, "Known Packs"):
+            tracker.require_complete()
+
+    def test_protocol776_allows_omitted_update_enabled_features(self):
+        ids = {
+            "disconnect": 2, "keep_alive": 4, "ping": 5,
+            "select_known_packs": 14, "finish_configuration": 3,
+            "update_enabled_features": 12, "registry_data": 7, "update_tags": 13,
+        }
+        tracker = h.ConfigurationCriticalTracker(ids, set(ids.values()))
+        self.assertEqual(
+            tracker.observe(h.Frame(14, h.encode_varint(0), 2, False)),
+            "select_known_packs",
+        )
+        tracker.record_known_packs_reply(h.encode_varint(0))
+        registry = h.put_string("minecraft:test") + h.encode_varint(0)
+        self.assertEqual(
+            tracker.observe(h.Frame(7, registry, len(registry) + 1, False)),
+            "registry_data",
+        )
+        self.assertEqual(
+            tracker.observe(h.Frame(13, h.encode_varint(0), 2, False)),
+            "update_tags",
+        )
+        self.assertEqual(tracker.observe(h.Frame(3, b"", 1, False)), "finish_configuration")
+        tracker.record_finish_ack(b"")
+        tracker.require_complete()
+
     def test_configuration_regression_tracker_decodes_disconnect_and_order(self):
         ids = {"disconnect": 0, "keep_alive": 4, "ping": 5, "select_known_packs": 14, "finish_configuration": 3}
         tracker = h.ConfigurationRegressionTracker(ids)
-        self.assertEqual(tracker.observe(h.Frame(14, b"opaque", 7, False)), "select_known_packs")
+        self.assertEqual(tracker.observe(h.Frame(14, h.encode_varint(0), 2, False)), "select_known_packs")
         tracker.record_send("known_packs", h.encode_varint(0))
-        self.assertEqual(tracker.observe(h.Frame(45, b"registry", 9, True)), "opaque_configuration")
+        self.assertEqual(tracker.observe(h.Frame(45, b"registry", 9, True)), "needs_review_configuration")
         tracker.record_send("duplicate_known_packs", h.encode_varint(0))
         reason = h.put_string("Received known packs without a pending server request")
         self.assertEqual(tracker.observe(h.Frame(0, reason, len(reason) + 1, False)), "disconnect")
