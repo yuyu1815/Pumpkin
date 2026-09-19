@@ -14,11 +14,7 @@ impl JavaClient {
             return false;
         }
 
-        if !super::super::claim_finish(&self.configuration_phase) {
-            return false;
-        }
-        self.connection_state.store(ConnectionState::Play);
-        true
+        self.complete_reconfiguration_egress()
     }
 
     pub async fn handle_config_acknowledged(&self, server: &Server) -> PacketHandlerResult {

@@ -119,7 +119,7 @@ impl JavaClient {
             .unwrap_or_default();
 
             for packet_data in packets {
-                self.send_packet_now(packet_data).await;
+                self.send_packet_now_data_typed(packet_data).await;
             }
         }
 

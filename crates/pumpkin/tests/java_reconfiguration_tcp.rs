@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    fs,
     io::Read,
     net::SocketAddr,
     path::Path,
@@ -93,7 +94,12 @@ fn isolated_telemetry_config() -> TelemetryConfig {
     }
 }
 
-fn spawn_harness(port: u16, username: &str, case: Option<&str>) -> HarnessChild {
+fn spawn_harness(
+    port: u16,
+    username: &str,
+    case: Option<&str>,
+    diagnostic_file: &Path,
+) -> HarnessChild {
     let harness = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("..")
@@ -126,6 +132,8 @@ fn spawn_harness(port: u16, username: &str, case: Option<&str>) -> HarnessChild 
         .arg(username)
         .arg("--known-packs-case")
         .arg("exact")
+        .arg("--diagnostic-file")
+        .arg(diagnostic_file)
         .arg("--reconfiguration-cycles")
         .arg(if case == Some("disconnect_during_config") {
             "1"
@@ -206,6 +214,7 @@ async fn wait_for_state(
     java: &pumpkin::net::java::JavaClient,
     state: ConnectionState,
     mut child: Option<&mut Child>,
+    diagnostic_file: Option<&Path>,
 ) {
     timeout(Duration::from_secs(15), async {
         loop {
@@ -224,9 +233,10 @@ async fn wait_for_state(
                     let _ = stream.read_to_end(&mut stderr);
                 }
                 panic!(
-                    "protocol harness exited before state {state:?}: {status}; stdout={}; stderr={}",
+                    "protocol harness exited before state {state:?}: {status}; stdout={}; stderr={}; diagnostic={}",
                     String::from_utf8_lossy(&stdout),
-                    String::from_utf8_lossy(&stderr)
+                    String::from_utf8_lossy(&stderr),
+                    diagnostic_file.map_or_else(|| "<none>".to_string(), diagnostic_trace)
                 );
             }
             sleep(Duration::from_millis(10)).await;
@@ -236,8 +246,14 @@ async fn wait_for_state(
     .unwrap_or_else(|_| panic!("timed out waiting for Java connection state {state:?}"));
 }
 
+fn diagnostic_trace(path: &Path) -> String {
+    fs::read_to_string(path).unwrap_or_else(|error| format!("<diagnostic unavailable: {error}>"))
+}
+
 async fn wait_for_play_baseline(
     java: &pumpkin::net::java::JavaClient,
+    diagnostic_file: &Path,
+    required_event: &str,
     mut child: Option<&mut HarnessChild>,
 ) {
     let before_play_packets = java.last_packet_time.load();
@@ -255,21 +271,23 @@ async fn wait_for_play_baseline(
                     let _ = stream.read_to_end(&mut stderr);
                 }
                 panic!(
-                    "protocol harness exited during Play baseline: {status}; stdout={}; stderr={}",
+                    "protocol harness exited during Play baseline: {status}; stdout={}; stderr={}; diagnostic={}",
                     String::from_utf8_lossy(&stdout),
-                    String::from_utf8_lossy(&stderr)
+                    String::from_utf8_lossy(&stderr),
+                    diagnostic_trace(diagnostic_file)
                 );
             }
             if java.connection_state.load() == ConnectionState::Play
                 && java.last_packet_time.load() != before_play_packets
                 && java.pending_bytes.load(Ordering::Acquire) == 0
             {
-                // Player insertion precedes Join Game/chunks. The changed inbound
-                // timestamp proves the client has answered a real Play packet; the
-                // extra interval covers the harness's first keep-alive baseline.
-                sleep(Duration::from_secs(3)).await;
+                // The harness marker is emitted only after Join Game, position,
+                // first chunk, and the real Play keep-alive exchange. Do not add
+                // an arbitrary post-marker delay: the harness continues reading
+                // bounded Play traffic and must be triggered before that bound.
                 if java.connection_state.load() == ConnectionState::Play
                     && java.pending_bytes.load(Ordering::Acquire) == 0
+                    && diagnostic_trace(diagnostic_file).contains(required_event)
                 {
                     return;
                 }
@@ -280,11 +298,12 @@ async fn wait_for_play_baseline(
     .await
     .unwrap_or_else(|error| {
         panic!(
-            "timed out waiting for the strict Play baseline to drain: {error:?}; state={:?}, last_packet_time={:?}, pending_bytes={}, closed={}",
+            "timed out waiting for the strict Play baseline/readiness: {error:?}; state={:?}, last_packet_time={:?}, pending_bytes={}, closed={}\ndiagnostic_trace={}",
             java.connection_state.load(),
             java.last_packet_time.load(),
             java.pending_bytes.load(Ordering::Acquire),
             java.is_closed(),
+            diagnostic_trace(diagnostic_file),
         )
     });
 }
@@ -339,8 +358,18 @@ async fn java_reconfiguration_over_real_tcp_preserves_player_state() {
         .expect("loopback listener address")
         .port();
     let listener_task = tokio::spawn(run_listener(pumpkin_server.clone()));
+    let diagnostic_dir = TempDir::new().expect("diagnostic directory");
+    let normal_diagnostic = diagnostic_dir.path().join("normal.jsonl");
+    let eof_diagnostic = diagnostic_dir.path().join("eof.jsonl");
+    let egress_trace = Path::new("C:/Temp/pumpkin-26_2-current-egress.log");
+    let _ = fs::remove_file(egress_trace);
+    // The production writer emits no trace unless this test-only environment
+    // switch is set. Keep the first state/epoch/packet boundary outside the repo.
+    unsafe {
+        std::env::set_var("PUMPKIN_JAVA_EGRESS_TRACE_FILE", &egress_trace);
+    }
 
-    let mut normal_harness = spawn_harness(port, TEST_USERNAME, None);
+    let mut normal_harness = spawn_harness(port, TEST_USERNAME, None, &normal_diagnostic);
     let player = wait_for_player(
         &pumpkin_server.server,
         TEST_USERNAME,
@@ -351,10 +380,22 @@ async fn java_reconfiguration_over_real_tcp_preserves_player_state() {
         .client
         .java()
         .expect("real TCP test player must be Java");
-    wait_for_state(java, ConnectionState::Play, Some(&mut normal_harness)).await;
+    wait_for_state(
+        java,
+        ConnectionState::Play,
+        Some(&mut normal_harness),
+        Some(&normal_diagnostic),
+    )
+    .await;
     // Wait until the real server has drained Join Game/chunks and the harness has
-    // completed its strict baseline, rather than relying on a synthetic trigger delay.
-    wait_for_play_baseline(java, Some(&mut normal_harness)).await;
+    // published its strict baseline readiness, rather than relying on a synthetic trigger delay.
+    wait_for_play_baseline(
+        java,
+        &normal_diagnostic,
+        "play_baseline_ready",
+        Some(&mut normal_harness),
+    )
+    .await;
 
     let baseline_entity_id = player.entity_id();
     let baseline_position = player.position();
@@ -363,15 +404,32 @@ async fn java_reconfiguration_over_real_tcp_preserves_player_state() {
 
     assert!(
         java.start_reconfiguration().await,
-        "first server-owned trigger was rejected"
+        "first server-owned trigger was rejected: state={:?} version={:?} closed={} pending_bytes={} diagnostic={}",
+        java.connection_state.load(),
+        java.version.load(),
+        java.is_closed(),
+        java.pending_bytes.load(Ordering::Acquire),
+        diagnostic_trace(&normal_diagnostic)
     );
     assert!(
         !java.start_reconfiguration().await,
         "second trigger was admitted before the first cycle returned to Play"
     );
-    wait_for_state(java, ConnectionState::Config, Some(&mut normal_harness)).await;
+    wait_for_state(
+        java,
+        ConnectionState::Config,
+        Some(&mut normal_harness),
+        Some(&normal_diagnostic),
+    )
+    .await;
     let config_packet_time = java.last_packet_time.load();
-    wait_for_state(java, ConnectionState::Play, Some(&mut normal_harness)).await;
+    wait_for_state(
+        java,
+        ConnectionState::Play,
+        Some(&mut normal_harness),
+        Some(&normal_diagnostic),
+    )
+    .await;
     timeout(Duration::from_secs(10), async {
         loop {
             if java.last_packet_time.load() != config_packet_time {
@@ -382,15 +440,21 @@ async fn java_reconfiguration_over_real_tcp_preserves_player_state() {
     })
     .await
     .expect("timed out waiting for the first returned Play keep-alive");
-    // The state flips to Play while processing the Finish ack. Wait for a fresh
-    // one-second Play keep-alive and a drained outbound queue before cycle two.
-    wait_for_play_baseline(java, Some(&mut normal_harness)).await;
+    // The state flips to Play while processing the Finish ack. Wait for the
+    // harness's fresh return-to-Play readiness event and a drained queue before cycle two.
+    wait_for_play_baseline(
+        java,
+        &normal_diagnostic,
+        "returned_play_keepalive",
+        Some(&mut normal_harness),
+    )
+    .await;
     assert!(Arc::ptr_eq(
         &player,
         &pumpkin_server
             .server
             .get_player_by_name(TEST_USERNAME)
-            .expect("player must remain server-owned after first cycle")
+            .unwrap_or_else(|| panic!("player must remain server-owned after first cycle: state={:?} closed={} pending_bytes={} diagnostic={} egress={}", java.connection_state.load(), java.is_closed(), java.pending_bytes.load(Ordering::Acquire), diagnostic_trace(&normal_diagnostic), diagnostic_trace(Path::new("C:/Temp/pumpkin-26_2-current-egress.log"))))
     ));
 
     assert!(
@@ -401,9 +465,21 @@ async fn java_reconfiguration_over_real_tcp_preserves_player_state() {
         !java.start_reconfiguration().await,
         "duplicate second-cycle trigger was admitted"
     );
-    wait_for_state(java, ConnectionState::Config, Some(&mut normal_harness)).await;
+    wait_for_state(
+        java,
+        ConnectionState::Config,
+        Some(&mut normal_harness),
+        Some(&normal_diagnostic),
+    )
+    .await;
     let second_config_packet_time = java.last_packet_time.load();
-    wait_for_state(java, ConnectionState::Play, Some(&mut normal_harness)).await;
+    wait_for_state(
+        java,
+        ConnectionState::Play,
+        Some(&mut normal_harness),
+        Some(&normal_diagnostic),
+    )
+    .await;
     timeout(Duration::from_secs(10), async {
         loop {
             if java.last_packet_time.load() != second_config_packet_time {
@@ -426,6 +502,12 @@ async fn java_reconfiguration_over_real_tcp_preserves_player_state() {
         .await
         .expect("normal harness wait task panicked");
     let normal_result = parse_harness_output(&normal_output);
+    println!("normal_harness_result={normal_result}");
+    println!(
+        "normal_diagnostic_trace=\n{}",
+        diagnostic_trace(&normal_diagnostic)
+    );
+    println!("server_egress_trace=\n{}", diagnostic_trace(&egress_trace));
     assert_eq!(normal_result["result"], "stateful_reconfiguration_pass");
     assert_eq!(normal_result["cycles_completed"], 2);
     assert_eq!(normal_result["same_entity"], true);
@@ -443,6 +525,31 @@ async fn java_reconfiguration_over_real_tcp_preserves_player_state() {
     assert_eq!(event_count("serverbound", "configuration_acknowledged"), 2);
     assert_eq!(event_count("clientbound", "finish_configuration"), 2);
     assert_eq!(event_count("serverbound", "finish_configuration"), 2);
+    assert_eq!(event_count("clientbound", "select_known_packs"), 2);
+    assert_eq!(event_count("clientbound", "update_tags"), 2);
+    assert!(
+        event_count("clientbound", "registry_data") >= 2,
+        "each Configuration cycle must carry Registry Data"
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event["validation"] == "needs_review")
+            .count(),
+        0,
+        "normal pass must not hide mapped Configuration packets as needs_review"
+    );
+    assert!(
+        events
+            .iter()
+            .filter(|event| {
+                event["direction"] == "serverbound"
+                    && (event["event"] == "configuration_acknowledged"
+                        || event["event"] == "finish_configuration")
+            })
+            .all(|event| event["body_is_empty"] == true),
+        "critical acknowledgments must have empty bodies"
+    );
     assert_eq!(
         event_count("serverbound", "duplicate_finish_configuration"),
         0
@@ -461,20 +568,48 @@ async fn java_reconfiguration_over_real_tcp_preserves_player_state() {
     // keep-alive, so server-side disconnect cleanup may already have removed the
     // registration here. The pointer assertion above is the ownership check.
 
-    let mut eof_harness = spawn_harness(port, EOF_USERNAME, Some("disconnect_during_config"));
+    let mut eof_harness = spawn_harness(
+        port,
+        EOF_USERNAME,
+        Some("disconnect_during_config"),
+        &eof_diagnostic,
+    );
     let eof_player =
         wait_for_player(&pumpkin_server.server, EOF_USERNAME, Some(&mut eof_harness)).await;
     let eof_java = eof_player
         .client
         .java()
         .expect("EOF probe player must be Java");
-    wait_for_state(eof_java, ConnectionState::Play, Some(&mut eof_harness)).await;
-    wait_for_play_baseline(eof_java, Some(&mut eof_harness)).await;
+    wait_for_state(
+        eof_java,
+        ConnectionState::Play,
+        Some(&mut eof_harness),
+        Some(&eof_diagnostic),
+    )
+    .await;
+    wait_for_play_baseline(
+        eof_java,
+        &eof_diagnostic,
+        "play_baseline_ready",
+        Some(&mut eof_harness),
+    )
+    .await;
     assert!(
         eof_java.start_reconfiguration().await,
-        "EOF probe trigger was rejected"
+        "EOF probe trigger was rejected: state={:?} version={:?} closed={} pending_bytes={} diagnostic={}",
+        eof_java.connection_state.load(),
+        eof_java.version.load(),
+        eof_java.is_closed(),
+        eof_java.pending_bytes.load(Ordering::Acquire),
+        diagnostic_trace(&eof_diagnostic)
     );
-    wait_for_state(eof_java, ConnectionState::Config, Some(&mut eof_harness)).await;
+    wait_for_state(
+        eof_java,
+        ConnectionState::Config,
+        Some(&mut eof_harness),
+        Some(&eof_diagnostic),
+    )
+    .await;
 
     let eof_output = tokio::task::spawn_blocking(|| wait_for_harness(eof_harness))
         .await
@@ -495,6 +630,12 @@ async fn java_reconfiguration_over_real_tcp_preserves_player_state() {
     .await
     .expect("server did not observe EOF and remove the EOF probe player");
     let eof_result = parse_harness_output(&eof_output);
+    println!("eof_harness_result={eof_result}");
+    println!(
+        "eof_diagnostic_trace=\n{}",
+        diagnostic_trace(&eof_diagnostic)
+    );
+    println!("server_egress_trace=\n{}", diagnostic_trace(&egress_trace));
     assert_eq!(
         eof_result["result"],
         "client_disconnected_during_configuration"

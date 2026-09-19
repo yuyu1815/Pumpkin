@@ -1,11 +1,11 @@
 use pumpkin_protocol::java::client::{
-    config::{CConfigDisconnect, CKeepAlive as CConfigKeepAlive},
+    config::{CConfigDisconnect, CFinishConfig, CKeepAlive as CConfigKeepAlive},
     login::CLoginDisconnect,
     play::{CChunkBatchEnd, CChunkBatchStart, CLightUpdate, CPlayDisconnect, CStartConfiguration},
 };
 use pumpkin_world::level::SyncChunk;
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, AtomicUsize, Ordering};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use std::{
     collections::VecDeque,
@@ -53,7 +53,7 @@ use tokio::{
     sync::oneshot,
 };
 use tokio::{
-    sync::mpsc::{UnboundedReceiver, UnboundedSender, error::TryRecvError},
+    sync::mpsc::{UnboundedReceiver, UnboundedSender},
     task::JoinHandle,
 };
 use tokio_util::sync::CancellationToken;
@@ -90,10 +90,22 @@ pub(crate) enum ConfigurationPhase {
     AwaitingKnownPacks,
     AwaitingFinishAck,
     Play,
+    ReconfigurationAwaitingStart,
     ReconfigurationAwaitingAck,
 }
 
 impl ConfigurationPhase {
+    pub(crate) const fn blocks_outgoing_play_packets(self) -> bool {
+        matches!(
+            self,
+            Self::AwaitingResourcePack
+                | Self::AwaitingKnownPacks
+                | Self::AwaitingFinishAck
+                | Self::ReconfigurationAwaitingStart
+                | Self::ReconfigurationAwaitingAck
+        )
+    }
+
     pub(crate) const fn accepts_known_packs(self) -> bool {
         matches!(self, Self::AwaitingKnownPacks)
     }
@@ -111,7 +123,7 @@ fn claim_reconfiguration(phase: &AtomicCell<ConfigurationPhase>) -> bool {
     phase
         .compare_exchange(
             ConfigurationPhase::Play,
-            ConfigurationPhase::ReconfigurationAwaitingAck,
+            ConfigurationPhase::ReconfigurationAwaitingStart,
         )
         .is_ok()
 }
@@ -276,15 +288,17 @@ pub struct JavaClient {
     rt_handle: tokio::runtime::Handle,
     /// An notifier that is triggered when this client is closed.
     close_token: CancellationToken,
-    /// A normal-priority queue of serialized packets to send to the network.
-    outgoing_packet_queue_send: UnboundedSender<OutgoingPacket>,
-    /// A normal-priority queue of serialized packets to send to the network.
-    outgoing_packet_queue_recv: Option<UnboundedReceiver<OutgoingPacket>>,
-    /// A high-priority queue of serialized packets to send to the network.
-    outgoing_packet_priority_send: UnboundedSender<OutgoingPacket>,
-    /// A high-priority queue of serialized packets to send to the network.
-    outgoing_packet_priority_recv: Option<UnboundedReceiver<OutgoingPacket>>,
-    /// Tracks total buffered payload bytes in the outgoing queues.
+    /// The single FIFO queue consumed by the sole TCP writer.
+    outgoing_packet_send: UnboundedSender<OutgoingPacket>,
+    outgoing_packet_recv: Option<UnboundedReceiver<OutgoingPacket>>,
+    /// Serializes state capture, reconfiguration barriers, and deferred Play egress.
+    egress_gate: Arc<Mutex<EgressGate>>,
+    /// Monotonically identifies a Play/Configuration egress epoch.
+    egress_epoch: Arc<AtomicU64>,
+    /// Optional test-only writer boundary trace.
+    egress_trace_file: Option<Arc<std::path::PathBuf>>,
+    egress_trace_lock: Arc<Mutex<()>>,
+    /// Tracks total buffered payload bytes in the outgoing queue and deferred packets.
     pub pending_bytes: Arc<AtomicUsize>,
     /// The packet encoder for outgoing packets.
     network_writer: std::sync::Mutex<Option<TCPNetworkEncoder<BufWriter<OwnedWriteHalf>>>>,
@@ -317,9 +331,88 @@ pub enum OutgoingPacketType {
     HighPriority,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OutgoingPacketKind {
+    Data,
+    StartConfiguration,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OutgoingPacketOrigin {
+    Typed,
+    Raw,
+}
+
 struct OutgoingPacket {
     data: Bytes,
     completion: Option<oneshot::Sender<()>>,
+    version: JavaMinecraftVersion,
+    connection_state: ConnectionState,
+    configuration_phase: ConfigurationPhase,
+    epoch: u64,
+    packet_id: Option<i32>,
+    kind: OutgoingPacketKind,
+}
+
+struct EgressGate {
+    deferred_play: VecDeque<OutgoingPacket>,
+}
+
+fn serialized_packet_id(data: &[u8]) -> Option<i32> {
+    let mut value = 0i32;
+    let mut shift = 0;
+    for byte in data.iter().copied().take(5) {
+        value |= i32::from(byte & 0x7f) << shift;
+        if byte & 0x80 == 0 {
+            return Some(value);
+        }
+        shift += 7;
+    }
+    None
+}
+
+fn trace_egress(
+    trace_file: &Option<Arc<std::path::PathBuf>>,
+    trace_lock: &Mutex<()>,
+    message: impl std::fmt::Display,
+) {
+    let Some(path) = trace_file else {
+        return;
+    };
+    let _guard = trace_lock
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path.as_ref())
+    {
+        use std::io::Write as _;
+        let _ = writeln!(file, "{message}");
+    }
+}
+
+impl OutgoingPacket {
+    fn new(
+        data: Bytes,
+        completion: Option<oneshot::Sender<()>>,
+        version: JavaMinecraftVersion,
+        connection_state: ConnectionState,
+        configuration_phase: ConfigurationPhase,
+        epoch: u64,
+        kind: OutgoingPacketKind,
+    ) -> Self {
+        Self {
+            packet_id: serialized_packet_id(&data),
+            data,
+            completion,
+            version,
+            connection_state,
+            configuration_phase,
+            epoch,
+            kind,
+        }
+    }
 }
 
 const MAX_FRAME_BATCH_DATA_SIZE: usize = MAX_PACKET_SIZE as usize;
@@ -389,22 +482,6 @@ async fn frame_batch_maybe_offload(
     }
 }
 
-impl OutgoingPacket {
-    const fn normal(data: Bytes) -> Self {
-        Self {
-            data,
-            completion: None,
-        }
-    }
-
-    const fn high_priority(data: Bytes, completion: oneshot::Sender<()>) -> Self {
-        Self {
-            data,
-            completion: Some(completion),
-        }
-    }
-}
-
 impl JavaClient {
     pub(crate) fn remember_known_packs(&self, request: &[pumpkin_protocol::KnownPack<'_>]) {
         remember_known_packs(&self.known_packs_state, request);
@@ -417,11 +494,112 @@ impl JavaClient {
         select_known_packs(&self.known_packs_state, response)
     }
 
+    fn enqueue_encoded(
+        &self,
+        data: Bytes,
+        completion: Option<oneshot::Sender<()>>,
+        forced_phase: Option<ConfigurationPhase>,
+        kind: OutgoingPacketKind,
+        origin: OutgoingPacketOrigin,
+        force_main_queue: bool,
+    ) -> bool {
+        if self.close_token.is_cancelled() {
+            return false;
+        }
+
+        let packet_len = data.len();
+        let mut gate = self
+            .egress_gate
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let state = self.connection_state.load();
+        let encoded_state =
+            if origin == OutgoingPacketOrigin::Raw && state == ConnectionState::Config {
+                // Raw bytes from world/entity/chunk broadcasters are Play packets. Typed
+                // configuration sends use the explicit Typed path below; never infer a
+                // protocol state from the mutable connection state alone.
+                ConnectionState::Play
+            } else {
+                state
+            };
+        let phase = forced_phase.unwrap_or_else(|| self.configuration_phase.load());
+        let epoch = self.egress_epoch.load(Ordering::Acquire);
+        let version = self.version.load();
+        let packet =
+            OutgoingPacket::new(data, completion, version, encoded_state, phase, epoch, kind);
+        let new_bytes = self
+            .pending_bytes
+            .fetch_add(packet_len, Ordering::AcqRel)
+            .saturating_add(packet_len);
+
+        if new_bytes > MAX_PENDING_BYTES {
+            decrement_pending_bytes(&self.pending_bytes, packet_len);
+            drop(gate);
+            if !self.close_token.is_cancelled() {
+                warn!(
+                    "Client {} outbound packet buffer overflow ({} bytes > {} bytes). Closing connection.",
+                    self.id, new_bytes, MAX_PENDING_BYTES
+                );
+                self.close();
+            }
+            return false;
+        }
+
+        let deferred = !force_main_queue
+            && encoded_state == ConnectionState::Play
+            && phase.blocks_outgoing_play_packets();
+        trace_egress(
+            &self.egress_trace_file,
+            &self.egress_trace_lock,
+            format_args!(
+                "enqueue epoch={} actual_state={state:?} encoded_state={encoded_state:?} phase={phase:?} id={:?} len={} origin={origin:?} deferred={deferred}",
+                epoch, packet.packet_id, packet_len
+            ),
+        );
+        if deferred {
+            gate.deferred_play.push_back(packet);
+            return true;
+        }
+
+        if self.outgoing_packet_send.send(packet).is_err() {
+            decrement_pending_bytes(&self.pending_bytes, packet_len);
+            drop(gate);
+            if !self.close_token.is_cancelled() {
+                self.close();
+            }
+            return false;
+        }
+        true
+    }
+
+    fn enqueue_encoded_wait(
+        &self,
+        data: Bytes,
+        forced_phase: Option<ConfigurationPhase>,
+        kind: OutgoingPacketKind,
+        origin: OutgoingPacketOrigin,
+        force_main_queue: bool,
+    ) -> Option<oneshot::Receiver<()>> {
+        let (completion_tx, completion_rx) = oneshot::channel();
+        if !self.enqueue_encoded(
+            data,
+            Some(completion_tx),
+            forced_phase,
+            kind,
+            origin,
+            force_main_queue,
+        ) {
+            return None;
+        }
+        Some(completion_rx)
+    }
+
     /// Starts one Play -> Configuration transition.
     ///
-    /// The phase is claimed before the packet is queued, so concurrent callers
-    /// cannot send a second `start_configuration` packet. The player and its
-    /// world state remain attached to this client throughout the transition.
+    /// The egress gate changes epoch and appends the marker to the one FIFO
+    /// writer queue while holding the same lock used by every sender. Packets
+    /// already captured as Play therefore drain first; later Play packets are
+    /// held with their state/epoch metadata until the Finish acknowledgment.
     pub async fn start_reconfiguration(&self) -> bool {
         if !self.version.load().supports_configuration_state()
             || self.connection_state.load() != ConnectionState::Play
@@ -429,11 +607,89 @@ impl JavaClient {
             return false;
         }
 
-        if !claim_reconfiguration(&self.configuration_phase) {
-            return false;
+        let data = match self.serialize_packet(&CStartConfiguration) {
+            Ok(data) => data,
+            Err(_) => return false,
+        };
+        let (completion_tx, completion_rx) = oneshot::channel();
+        {
+            let _gate = self
+                .egress_gate
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if !claim_reconfiguration(&self.configuration_phase) {
+                return false;
+            }
+            let epoch = self.egress_epoch.fetch_add(1, Ordering::AcqRel) + 1;
+            let version = self.version.load();
+            let packet = OutgoingPacket::new(
+                data,
+                Some(completion_tx),
+                version,
+                ConnectionState::Play,
+                ConfigurationPhase::ReconfigurationAwaitingStart,
+                epoch,
+                OutgoingPacketKind::StartConfiguration,
+            );
+            self.configuration_phase
+                .store(ConfigurationPhase::ReconfigurationAwaitingAck);
+            let packet_len = packet.data.len();
+            self.pending_bytes.fetch_add(packet_len, Ordering::AcqRel);
+            trace_egress(
+                &self.egress_trace_file,
+                &self.egress_trace_lock,
+                format_args!(
+                    "enqueue-marker epoch={} state=Play phase=ReconfigurationAwaitingStart id={:?} len={}",
+                    epoch, packet.packet_id, packet_len
+                ),
+            );
+            if self.outgoing_packet_send.send(packet).is_err() {
+                decrement_pending_bytes(&self.pending_bytes, packet_len);
+                drop(_gate);
+                self.close();
+                return false;
+            }
         }
 
-        self.send_packet(&CStartConfiguration).await;
+        if completion_rx.await.is_err() {
+            trace_egress(
+                &self.egress_trace_file,
+                &self.egress_trace_lock,
+                "start-marker-completion-error",
+            );
+            return false;
+        }
+        true
+    }
+
+    pub(crate) fn complete_reconfiguration_egress(&self) -> bool {
+        let mut gate = self
+            .egress_gate
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if !claim_finish(&self.configuration_phase) {
+            return false;
+        }
+        self.connection_state.store(ConnectionState::Play);
+        while let Some(packet) = gate.deferred_play.pop_front() {
+            trace_egress(
+                &self.egress_trace_file,
+                &self.egress_trace_lock,
+                format_args!(
+                    "release-deferred epoch={} captured_state={:?} captured_phase={:?} id={:?} len={}",
+                    packet.epoch,
+                    packet.connection_state,
+                    packet.configuration_phase,
+                    packet.packet_id,
+                    packet.data.len()
+                ),
+            );
+            if self.outgoing_packet_send.send(packet).is_err() {
+                drop(gate);
+                self.close();
+                return false;
+            }
+        }
         true
     }
 
@@ -559,7 +815,9 @@ impl JavaClient {
         config: PlayerConfig,
     ) -> Self {
         let (send, recv) = tokio::sync::mpsc::unbounded_channel();
-        let (priority_send, priority_recv) = tokio::sync::mpsc::unbounded_channel();
+        let trace_file = std::env::var_os("PUMPKIN_JAVA_EGRESS_TRACE_FILE")
+            .map(std::path::PathBuf::from)
+            .map(Arc::new);
 
         Self {
             id: pending.id,
@@ -573,10 +831,14 @@ impl JavaClient {
             close_token: pending.close_token,
             tasks: TaskTracker::new(),
             rt_handle: tokio::runtime::Handle::current(),
-            outgoing_packet_queue_send: send,
-            outgoing_packet_queue_recv: Some(recv),
-            outgoing_packet_priority_send: priority_send,
-            outgoing_packet_priority_recv: Some(priority_recv),
+            outgoing_packet_send: send,
+            outgoing_packet_recv: Some(recv),
+            egress_gate: Arc::new(Mutex::new(EgressGate {
+                deferred_play: VecDeque::new(),
+            })),
+            egress_epoch: Arc::new(AtomicU64::new(0)),
+            egress_trace_file: trace_file,
+            egress_trace_lock: Arc::new(Mutex::new(())),
             pending_bytes: Arc::new(AtomicUsize::new(0)),
             version: pending.version,
             network_writer: std::sync::Mutex::new(Some(pending.network_writer)),
@@ -869,42 +1131,14 @@ impl JavaClient {
     }
 
     pub fn try_enqueue_packet_data(&self, packet_data: Bytes) {
-        if self.close_token.is_cancelled() {
-            return;
-        }
-
-        let packet_len = packet_data.len();
-        let prev_bytes = self.pending_bytes.fetch_add(packet_len, Ordering::AcqRel);
-        let new_bytes = prev_bytes.saturating_add(packet_len);
-
-        if new_bytes > MAX_PENDING_BYTES {
-            decrement_pending_bytes(&self.pending_bytes, packet_len);
-            if !self.close_token.is_cancelled() {
-                warn!(
-                    "Client {} outbound packet buffer overflow ({} bytes > {} bytes). Closing connection.",
-                    self.id, new_bytes, MAX_PENDING_BYTES
-                );
-                self.close();
-            }
-            return;
-        }
-
-        if let Err(err) = self
-            .outgoing_packet_queue_send
-            .send(OutgoingPacket::normal(packet_data))
-        {
-            decrement_pending_bytes(&self.pending_bytes, packet_len);
-            // This is expected to fail if we are closed
-            if !self.close_token.is_cancelled() {
-                warn!(
-                    "Failed to add packet to the outgoing packet queue for client {}: {}",
-                    self.id, err
-                );
-                // We now need to close the connection to the client since the stream is in an
-                // unknown state
-                self.close();
-            }
-        }
+        let _ = self.enqueue_encoded(
+            packet_data,
+            None,
+            None,
+            OutgoingPacketKind::Data,
+            OutgoingPacketOrigin::Raw,
+            false,
+        );
     }
 
     pub async fn await_close_interrupt(&self) {
@@ -957,11 +1191,14 @@ impl JavaClient {
         };
 
         if let Some(data) = serialized {
-            let packet_len = data.len();
-            let _ = self.pending_bytes.fetch_add(packet_len, Ordering::AcqRel);
-            let _ = self
-                .outgoing_packet_priority_send
-                .send(OutgoingPacket::normal(data));
+            let _ = self.enqueue_encoded(
+                data,
+                None,
+                None,
+                OutgoingPacketKind::Data,
+                OutgoingPacketOrigin::Typed,
+                true,
+            );
         }
         let reason_text = reason.clone().get_text();
         warn!("Closing connection for {}: {reason_text}", self.id);
@@ -1000,48 +1237,22 @@ impl JavaClient {
     }
 
     pub async fn send_packet_now_data(&self, packet: Bytes) {
-        if self.close_token.is_cancelled() {
+        self.send_packet_now_data_inner(packet, OutgoingPacketOrigin::Raw)
+            .await;
+    }
+
+    pub(crate) async fn send_packet_now_data_typed(&self, packet: Bytes) {
+        self.send_packet_now_data_inner(packet, OutgoingPacketOrigin::Typed)
+            .await;
+    }
+
+    async fn send_packet_now_data_inner(&self, packet: Bytes, origin: OutgoingPacketOrigin) {
+        let Some(completion_rx) =
+            self.enqueue_encoded_wait(packet, None, OutgoingPacketKind::Data, origin, false)
+        else {
             return;
-        }
-
-        let packet_len = packet.len();
-        let prev_bytes = self.pending_bytes.fetch_add(packet_len, Ordering::AcqRel);
-        let new_bytes = prev_bytes.saturating_add(packet_len);
-
-        if new_bytes > MAX_PENDING_BYTES {
-            decrement_pending_bytes(&self.pending_bytes, packet_len);
-            if !self.close_token.is_cancelled() {
-                warn!(
-                    "Client {} outbound packet buffer overflow ({} bytes > {} bytes). Closing connection.",
-                    self.id, new_bytes, MAX_PENDING_BYTES
-                );
-                self.close();
-            }
-            return;
-        }
-
-        let (completion_tx, completion_rx) = oneshot::channel();
-
-        if let Err(err) = self
-            .outgoing_packet_priority_send
-            .send(OutgoingPacket::high_priority(packet, completion_tx))
-        {
-            decrement_pending_bytes(&self.pending_bytes, packet_len);
-            // It is expected that the packet will fail if we are closed
-            if !self.close_token.is_cancelled() {
-                warn!(
-                    "Failed to add high-priority packet to the outgoing packet queue for client {}: {}",
-                    self.id, err
-                );
-                // We now need to close the connection to the client since the stream is in an
-                // unknown state
-                self.close();
-            }
-            return;
-        }
-
+        };
         if completion_rx.await.is_err() && !self.close_token.is_cancelled() {
-            // The outgoing packet task dropped before confirming the write.
             self.close();
         }
     }
@@ -1067,19 +1278,34 @@ impl JavaClient {
 
     pub fn try_send_packet<P: ClientPacket>(&self, packet: &P) {
         if let Ok(data) = self.serialize_packet(packet) {
-            self.try_enqueue_packet(data);
+            let _ = self.enqueue_encoded(
+                data,
+                None,
+                None,
+                OutgoingPacketKind::Data,
+                OutgoingPacketOrigin::Typed,
+                false,
+            );
         }
     }
 
     pub async fn send_packet<P: ClientPacket>(&self, packet: &P) {
         if let Ok(data) = self.serialize_packet(packet) {
-            self.send_packet_now(data).await;
+            self.send_packet_now_data_inner(data, OutgoingPacketOrigin::Typed)
+                .await;
         }
     }
 
     pub async fn enqueue_client_packet<P: ClientPacket>(&self, packet: &P) {
         if let Ok(data) = self.serialize_packet(packet) {
-            self.enqueue_packet(data).await;
+            let _ = self.enqueue_encoded(
+                data,
+                None,
+                None,
+                OutgoingPacketKind::Data,
+                OutgoingPacketOrigin::Typed,
+                false,
+            );
         }
     }
 
@@ -1104,14 +1330,14 @@ impl JavaClient {
     pub fn start_outgoing_packet_task(&mut self) {
         const MAX_BATCH_SIZE: usize = 64;
 
-        let Some(mut packet_receiver) = self.outgoing_packet_queue_recv.take() else {
-            return;
-        };
-        let Some(mut priority_packet_receiver) = self.outgoing_packet_priority_recv.take() else {
+        let Some(mut packet_receiver) = self.outgoing_packet_recv.take() else {
             return;
         };
         let close_token = self.close_token.clone();
         let pending_bytes = self.pending_bytes.clone();
+        let trace_file = self.egress_trace_file.clone();
+        let trace_lock = self.egress_trace_lock.clone();
+        let writer_version = self.version.load();
         let Some(mut writer) = self
             .network_writer
             .lock()
@@ -1122,39 +1348,111 @@ impl JavaClient {
         };
         let id = self.id;
         self.spawn_task(async move {
+            trace_egress(
+                &trace_file,
+                &trace_lock,
+                format_args!("writer-task-start version={writer_version:?}"),
+            );
+            let mut writer_epoch = 0u64;
+            let mut reconfiguration_started = false;
+            let mut finish_sent = false;
             loop {
                 let recv_result = tokio::select! {
-                    biased;
-                    res = priority_packet_receiver.recv() => res,
                     res = packet_receiver.recv() => res,
-                    () = close_token.cancelled() => {
-                        priority_packet_receiver
-                            .try_recv()
-                            .ok()
-                            .or_else(|| packet_receiver.try_recv().ok())
-                    }
+                    () = close_token.cancelled() => packet_receiver.try_recv().ok(),
                 };
 
                 let Some(packet_data) = recv_result else {
+                    trace_egress(&trace_file, &trace_lock, "writer-task-exit receiver-closed");
                     break;
                 };
+                trace_egress(
+                    &trace_file,
+                    &trace_lock,
+                    format_args!("writer-recv id={:?} epoch={}", packet_data.packet_id, packet_data.epoch),
+                );
 
                 let mut packet_batch = Vec::with_capacity(MAX_BATCH_SIZE);
                 packet_batch.push(packet_data);
 
                 while packet_batch.len() < MAX_BATCH_SIZE {
-                    match priority_packet_receiver.try_recv() {
-                        Ok(packet_data) => {
-                            packet_batch.push(packet_data);
-                            continue;
-                        }
-                        Err(TryRecvError::Disconnected | TryRecvError::Empty) => {}
-                    }
-
                     match packet_receiver.try_recv() {
                         Ok(packet_data) => packet_batch.push(packet_data),
-                        Err(TryRecvError::Disconnected | TryRecvError::Empty) => break,
+                        Err(tokio::sync::mpsc::error::TryRecvError::Disconnected
+                            | tokio::sync::mpsc::error::TryRecvError::Empty) => break,
                     }
+                }
+
+                let mut boundary_violation = None;
+                for packet in &packet_batch {
+                    let start_id = CStartConfiguration::to_id(packet.version);
+                    let finish_id = CFinishConfig::to_id(packet.version);
+                    let valid = if packet.version != writer_version {
+                        false
+                    } else if packet.kind == OutgoingPacketKind::StartConfiguration {
+                        let valid = packet.connection_state == ConnectionState::Play
+                            && packet.configuration_phase
+                                == ConfigurationPhase::ReconfigurationAwaitingStart
+                            && packet.packet_id == Some(start_id)
+                            && packet.epoch > writer_epoch;
+                        if valid {
+                            writer_epoch = packet.epoch;
+                            reconfiguration_started = true;
+                            finish_sent = false;
+                        }
+                        valid
+                    } else if packet.epoch < writer_epoch {
+                        false
+                    } else if packet.connection_state == ConnectionState::Play
+                        && packet.epoch == writer_epoch
+                        && packet.configuration_phase == ConfigurationPhase::Play
+                        && reconfiguration_started
+                        && !finish_sent
+                    {
+                        false
+                    } else {
+                        if packet.packet_id == Some(finish_id) {
+                            finish_sent = true;
+                        }
+                        true
+                    };
+                    trace_egress(
+                        &trace_file,
+                        &trace_lock,
+                        format_args!(
+                            "writer epoch={} captured_epoch={} state={:?} phase={:?} id={:?} len={} kind={:?} valid={valid}",
+                            writer_epoch,
+                            packet.epoch,
+                            packet.connection_state,
+                            packet.configuration_phase,
+                            packet.packet_id,
+                            packet.data.len(),
+                            packet.kind
+                        ),
+                    );
+                    if !valid && boundary_violation.is_none() {
+                        boundary_violation = Some(format!(
+                            "egress boundary violation: writer_epoch={} captured_epoch={} state={:?} phase={:?} id={:?} kind={:?}",
+                            writer_epoch,
+                            packet.epoch,
+                            packet.connection_state,
+                            packet.configuration_phase,
+                            packet.packet_id,
+                            packet.kind
+                        ));
+                    }
+                }
+                if let Some(reason) = boundary_violation {
+                    trace_egress(&trace_file, &trace_lock, format_args!("FIRST {reason}"));
+                    let dropped_bytes: usize = packet_batch.iter().map(|p| p.data.len()).sum();
+                    decrement_pending_bytes(&pending_bytes, dropped_bytes);
+                    for packet in packet_batch {
+                        if let Some(completion) = packet.completion {
+                            let _ = completion.send(());
+                        }
+                    }
+                    close_token.cancel();
+                    return;
                 }
 
                 let mut packets_to_frame = VecDeque::from(packet_batch);
@@ -1231,6 +1529,16 @@ impl JavaClient {
     /// This function does not attempt to send any disconnect packets to the client.
     pub fn close(&self) {
         self.close_token.cancel();
+        let mut gate = self
+            .egress_gate
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        while let Some(packet) = gate.deferred_play.pop_front() {
+            decrement_pending_bytes(&self.pending_bytes, packet.data.len());
+            if let Some(completion) = packet.completion {
+                let _ = completion.send(());
+            }
+        }
     }
 
     pub fn is_closed(&self) -> bool {
@@ -1932,7 +2240,11 @@ mod configuration_state_tests {
         assert_eq!(phase.load(), ConfigurationPhase::Play);
         assert!(claim_reconfiguration(&phase));
         assert!(!claim_reconfiguration(&phase));
-        assert_eq!(phase.load(), ConfigurationPhase::ReconfigurationAwaitingAck);
+        assert_eq!(
+            phase.load(),
+            ConfigurationPhase::ReconfigurationAwaitingStart
+        );
+        phase.store(ConfigurationPhase::ReconfigurationAwaitingAck);
         assert!(claim_reconfiguration_ack(&phase));
         assert_eq!(phase.load(), ConfigurationPhase::AwaitingKnownPacks);
         assert!(!claim_reconfiguration_ack(&phase));
@@ -1948,6 +2260,7 @@ mod configuration_state_tests {
         assert_eq!(phase.load(), ConfigurationPhase::Play);
 
         assert!(claim_reconfiguration(&phase));
+        phase.store(ConfigurationPhase::ReconfigurationAwaitingAck);
         assert!(claim_reconfiguration_ack(&phase));
         phase.store(ConfigurationPhase::AwaitingFinishAck);
         assert!(claim_finish(&phase));

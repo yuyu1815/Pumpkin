@@ -884,7 +884,15 @@ def parse_first_chunk(payload: bytes) -> dict[str, Any]:
         offset += 1
         _, offset = _read_i16(payload, offset, "chunk block entity y")
         _, offset = decode_varint(payload, offset)
-        offset = _skip_nbt(payload, offset)
+        # Protocol 1.20.2+ writes NBT without the legacy root-name field.
+        # Parse the unnamed form here so a following zero-valued light mask
+        # cannot be mistaken for a legacy root name.
+        if offset >= len(payload):
+            raise HarnessError("truncated chunk block entity NBT root tag")
+        tag_id = payload[offset]
+        if tag_id == 0:
+            raise HarnessError("chunk block entity NBT root cannot be TAG_End")
+        offset = _skip_nbt_payload(payload, offset + 1, tag_id)
 
     sky_mask, offset = _read_bitset(payload, offset, "sky light mask")
     block_mask, offset = _read_bitset(payload, offset, "block light mask")

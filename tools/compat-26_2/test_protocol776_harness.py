@@ -139,7 +139,7 @@ class StructureTests(unittest.TestCase):
         payload.extend(bytes([0]))  # packed xz
         payload.extend(struct.pack(">h", 64))
         payload.extend(h.encode_varint(1))  # opaque type id
-        payload.extend(bytes([10, 0, 0, 0]))  # empty named compound NBT
+        payload.extend(bytes([10, 0]))  # 1.20.2+ unnamed empty compound NBT
         payload.extend(h.encode_varint(0) * 4)
         payload.extend(h.encode_varint(0))
         payload.extend(h.encode_varint(0))
