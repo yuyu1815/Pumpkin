@@ -243,3 +243,501 @@ impl ScreenHandler for PlayerScreenHandler {
         ItemStack::EMPTY.clone()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::crafting::crafting_screen_handler::CraftingTableScreenHandler;
+    use crate::entity_equipment::EntityEquipment;
+    use pumpkin_data::data_component_impl::{EquipmentSlot, MapIdImpl};
+    use pumpkin_data::sound::Sound;
+    use pumpkin_data::statistic::StatisticCategory;
+    use pumpkin_protocol::java::client::play::{
+        CSetContainerContent, CSetContainerProperty, CSetContainerSlot, CSetCursorItem,
+        CSetPlayerInventory, CSetSelectedSlot,
+    };
+    use pumpkin_protocol::java::server::play::SlotActionType;
+    use std::any::Any;
+    use std::sync::{Arc, Mutex};
+
+    struct DropRecorder {
+        inventory: Arc<PlayerInventory>,
+        drops: Mutex<Vec<ItemStack>>,
+    }
+
+    impl DropRecorder {
+        fn new(inventory: Arc<PlayerInventory>) -> Self {
+            Self {
+                inventory,
+                drops: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn dropped_count(&self, item: &'static pumpkin_data::item::Item) -> u32 {
+            self.drops
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|stack| stack.item == item)
+                .map(|stack| u32::from(stack.item_count))
+                .sum()
+        }
+    }
+
+    impl InventoryPlayer for DropRecorder {
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn drop_item(&self, item: ItemStack, _retain_ownership: bool) {
+            self.drops.lock().unwrap().push(item);
+        }
+
+        fn get_inventory(&self) -> Arc<PlayerInventory> {
+            self.inventory.clone()
+        }
+
+        fn has_infinite_materials(&self) -> bool {
+            false
+        }
+
+        fn is_creative(&self) -> bool {
+            false
+        }
+
+        fn experience_level(&self) -> i32 {
+            0
+        }
+
+        fn add_experience_levels(&self, _levels: i32) {}
+
+        fn enchantment_seed(&self) -> i32 {
+            0
+        }
+
+        fn set_enchantment_seed(&self, _seed: i32) {}
+
+        fn enqueue_inventory_packet(
+            &self,
+            _packet: &CSetContainerContent,
+            _window_type: Option<WindowType>,
+        ) {
+        }
+
+        fn enqueue_slot_packet(
+            &self,
+            _packet: &CSetContainerSlot,
+            _window_type: Option<WindowType>,
+            _total_slots: usize,
+        ) {
+        }
+
+        fn enqueue_cursor_packet(&self, _packet: &CSetCursorItem) {}
+
+        fn enqueue_property_packet(&self, _packet: &CSetContainerProperty) {}
+
+        fn enqueue_slot_set_packet(&self, _packet: &CSetPlayerInventory) {}
+
+        fn enqueue_set_held_item_packet(&self, _packet: &CSetSelectedSlot) {}
+
+        fn enqueue_equipment_change(&self, _slot: &EquipmentSlot, _stack: &ItemStack) {}
+
+        fn award_experience(&self, _amount: i32) {}
+
+        fn increment_stat(&self, _category: StatisticCategory, _stat_id: i32, _amount: i32) {}
+
+        fn play_block_sound(&self, _sound: Sound, _pitch: f32) {}
+    }
+
+    fn new_inventory() -> Arc<PlayerInventory> {
+        Arc::new(PlayerInventory::new(
+            Arc::new(Mutex::new(EntityEquipment::new())),
+            Arc::new(rustc_hash::FxHashMap::default()),
+        ))
+    }
+
+    fn new_handler(
+        use_crafting_table: bool,
+        inventory: &Arc<PlayerInventory>,
+    ) -> Box<dyn ScreenHandler> {
+        if use_crafting_table {
+            Box::new(CraftingTableScreenHandler::new(1, inventory, None))
+        } else {
+            Box::new(PlayerScreenHandler::new(inventory, None, 1, None))
+        }
+    }
+
+    fn prepare_recipe(handler: &mut dyn ScreenHandler, ingredient_count: u8) {
+        handler.get_behaviour().slots[1].set_stack(ItemStack::new(
+            ingredient_count,
+            &pumpkin_data::item::Item::OAK_LOG,
+        ));
+        handler.update_to_client();
+        assert_eq!(handler.get_behaviour().slots[0].get_stack().item_count, 4);
+    }
+
+    fn prepare_cake_recipe(handler: &mut dyn ScreenHandler) {
+        use pumpkin_data::item::Item;
+
+        for slot in [1, 2, 3] {
+            handler.get_behaviour().slots[slot].set_stack(ItemStack::new(1, &Item::MILK_BUCKET));
+        }
+        handler.get_behaviour().slots[4].set_stack(ItemStack::new(1, &Item::SUGAR));
+        handler.get_behaviour().slots[5].set_stack(ItemStack::new(1, &Item::EGG));
+        handler.get_behaviour().slots[6].set_stack(ItemStack::new(1, &Item::SUGAR));
+        for slot in [7, 8, 9] {
+            handler.get_behaviour().slots[slot].set_stack(ItemStack::new(1, &Item::WHEAT));
+        }
+        handler.update_to_client();
+        assert_eq!(
+            handler.get_behaviour().slots[0].get_stack().item,
+            &Item::CAKE
+        );
+    }
+
+    fn owned_output_total(
+        handler: &dyn ScreenHandler,
+        inventory: &Arc<PlayerInventory>,
+        player: &DropRecorder,
+    ) -> u32 {
+        let cursor = handler.get_behaviour().cursor_stack.lock().unwrap().clone();
+        inventory.count_item(&pumpkin_data::item::Item::OAK_PLANKS)
+            + u32::from(cursor.item_count)
+            + player.dropped_count(&pumpkin_data::item::Item::OAK_PLANKS)
+    }
+
+    fn assert_all_main_stacks_within_limit(inventory: &Arc<PlayerInventory>) {
+        for slot in 0..PlayerInventory::MAIN_SIZE {
+            let stack = inventory.get_slot(slot);
+            assert!(stack.item_count <= stack.get_max_stack_size());
+        }
+    }
+
+    #[test]
+    fn player_screen_partial_result_shift_click_preserves_output() {
+        run_partial_result_shift_click(false);
+    }
+
+    #[test]
+    fn crafting_table_partial_result_shift_click_preserves_output() {
+        run_partial_result_shift_click(true);
+    }
+
+    fn run_partial_result_shift_click(use_crafting_table: bool) {
+        let inventory = new_inventory();
+        inventory.set_slot(0, ItemStack::new(62, &pumpkin_data::item::Item::OAK_PLANKS));
+        for slot in 1..PlayerInventory::MAIN_SIZE {
+            inventory.set_slot(
+                slot,
+                ItemStack::new(64, &pumpkin_data::item::Item::COBBLESTONE),
+            );
+        }
+        let player = DropRecorder::new(inventory.clone());
+        let mut handler = new_handler(use_crafting_table, &inventory);
+        prepare_recipe(handler.as_mut(), 1);
+
+        let before = owned_output_total(handler.as_ref(), &inventory, &player);
+        handler.on_slot_click(0, 0, SlotActionType::QuickMove, &player);
+
+        assert_eq!(
+            owned_output_total(handler.as_ref(), &inventory, &player),
+            before + 4
+        );
+        assert_eq!(inventory.get_slot(0).item_count, 64);
+        assert_eq!(
+            player.dropped_count(&pumpkin_data::item::Item::OAK_PLANKS),
+            2
+        );
+        assert!(handler.get_behaviour().slots[0].get_stack().is_empty());
+        assert!(handler.get_behaviour().slots[1].get_stack().is_empty());
+        assert!(
+            handler
+                .get_behaviour()
+                .cursor_stack
+                .lock()
+                .unwrap()
+                .is_empty()
+        );
+        assert_all_main_stacks_within_limit(&inventory);
+    }
+
+    #[test]
+    fn player_screen_partial_empty_result_shift_click_preserves_output() {
+        run_partial_empty_result_shift_click(false);
+    }
+
+    #[test]
+    fn crafting_table_partial_empty_result_shift_click_preserves_output() {
+        run_partial_empty_result_shift_click(true);
+    }
+
+    fn run_partial_empty_result_shift_click(use_crafting_table: bool) {
+        let inventory = new_inventory();
+        inventory.set_slot(0, ItemStack::new(62, &pumpkin_data::item::Item::OAK_PLANKS));
+        for slot in 1..(PlayerInventory::MAIN_SIZE - 1) {
+            inventory.set_slot(
+                slot,
+                ItemStack::new(64, &pumpkin_data::item::Item::COBBLESTONE),
+            );
+        }
+        let player = DropRecorder::new(inventory.clone());
+        let mut handler = new_handler(use_crafting_table, &inventory);
+        prepare_recipe(handler.as_mut(), 1);
+
+        let before = owned_output_total(handler.as_ref(), &inventory, &player);
+        handler.on_slot_click(0, 0, SlotActionType::QuickMove, &player);
+
+        assert_eq!(
+            owned_output_total(handler.as_ref(), &inventory, &player),
+            before + 4
+        );
+        assert_eq!(inventory.get_slot(0).item_count, 64);
+        assert_eq!(
+            inventory
+                .get_slot(PlayerInventory::MAIN_SIZE - 1)
+                .item_count,
+            2
+        );
+        assert_eq!(
+            player.dropped_count(&pumpkin_data::item::Item::OAK_PLANKS),
+            0
+        );
+        assert!(handler.get_behaviour().slots[0].get_stack().is_empty());
+        assert!(handler.get_behaviour().slots[1].get_stack().is_empty());
+        assert_all_main_stacks_within_limit(&inventory);
+    }
+
+    #[test]
+    fn player_screen_full_inventory_does_not_consume_recipe() {
+        run_full_inventory_result_shift_click(false);
+    }
+
+    #[test]
+    fn crafting_table_full_inventory_does_not_consume_recipe() {
+        run_full_inventory_result_shift_click(true);
+    }
+
+    fn run_full_inventory_result_shift_click(use_crafting_table: bool) {
+        let inventory = new_inventory();
+        for slot in 0..PlayerInventory::MAIN_SIZE {
+            inventory.set_slot(
+                slot,
+                ItemStack::new(64, &pumpkin_data::item::Item::COBBLESTONE),
+            );
+        }
+        let player = DropRecorder::new(inventory.clone());
+        let mut handler = new_handler(use_crafting_table, &inventory);
+        prepare_recipe(handler.as_mut(), 1);
+
+        handler.on_slot_click(0, 0, SlotActionType::QuickMove, &player);
+
+        assert_eq!(
+            inventory.count_item(&pumpkin_data::item::Item::OAK_PLANKS),
+            0
+        );
+        assert_eq!(
+            player.dropped_count(&pumpkin_data::item::Item::OAK_PLANKS),
+            0
+        );
+        assert_eq!(handler.get_behaviour().slots[0].get_stack().item_count, 4);
+        assert_eq!(handler.get_behaviour().slots[1].get_stack().item_count, 1);
+        assert!(
+            handler
+                .get_behaviour()
+                .cursor_stack
+                .lock()
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn player_screen_repeated_result_shift_click_consumes_all_available_recipes() {
+        run_repeated_result_shift_click(false);
+    }
+
+    #[test]
+    fn crafting_table_repeated_result_shift_click_consumes_all_available_recipes() {
+        run_repeated_result_shift_click(true);
+    }
+
+    fn run_repeated_result_shift_click(use_crafting_table: bool) {
+        let inventory = new_inventory();
+        let player = DropRecorder::new(inventory.clone());
+        let mut handler = new_handler(use_crafting_table, &inventory);
+        prepare_recipe(handler.as_mut(), 2);
+
+        handler.on_slot_click(0, 0, SlotActionType::QuickMove, &player);
+        assert_eq!(owned_output_total(handler.as_ref(), &inventory, &player), 8);
+        assert_eq!(
+            inventory.count_item(&pumpkin_data::item::Item::OAK_PLANKS),
+            8
+        );
+        assert!(handler.get_behaviour().slots[1].get_stack().is_empty());
+        assert!(handler.get_behaviour().slots[0].get_stack().is_empty());
+
+        handler.on_slot_click(0, 0, SlotActionType::QuickMove, &player);
+
+        assert_eq!(owned_output_total(handler.as_ref(), &inventory, &player), 8);
+        assert!(handler.get_behaviour().slots[0].get_stack().is_empty());
+        assert!(handler.get_behaviour().slots[1].get_stack().is_empty());
+        assert_eq!(
+            player.dropped_count(&pumpkin_data::item::Item::OAK_PLANKS),
+            0
+        );
+        assert_all_main_stacks_within_limit(&inventory);
+    }
+
+    #[test]
+    fn cake_pickup_returns_bucket_remainders_and_close_returns_cursor() {
+        // Cake is a 3x3 recipe and is only valid in the crafting-table handler;
+        // the player inventory handler intentionally exposes a 2x2 grid.
+        run_cake_pickup_remainder(true);
+    }
+
+    fn run_cake_pickup_remainder(use_crafting_table: bool) {
+        use pumpkin_data::item::Item;
+
+        let inventory = new_inventory();
+        let player = DropRecorder::new(inventory.clone());
+        let mut handler = new_handler(use_crafting_table, &inventory);
+        prepare_cake_recipe(handler.as_mut());
+
+        handler.on_slot_click(0, 0, SlotActionType::Pickup, &player);
+
+        let cursor = handler.get_behaviour().cursor_stack.lock().unwrap().clone();
+        assert_eq!(cursor.item, &Item::CAKE);
+        assert_eq!(cursor.item_count, 1);
+        assert!(handler.get_behaviour().slots[0].get_stack().is_empty());
+        for slot in [1, 2, 3] {
+            assert_eq!(
+                handler.get_behaviour().slots[slot].get_stack().item,
+                &Item::BUCKET
+            );
+            assert_eq!(
+                handler.get_behaviour().slots[slot].get_stack().item_count,
+                1
+            );
+        }
+        for slot in [4, 5, 6, 7, 8, 9] {
+            assert!(handler.get_behaviour().slots[slot].get_stack().is_empty());
+        }
+
+        handler.on_closed(&player);
+
+        assert!(
+            handler
+                .get_behaviour()
+                .cursor_stack
+                .lock()
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(inventory.count_item(&Item::CAKE), 1);
+        assert_eq!(inventory.count_item(&Item::BUCKET), 3);
+        assert_eq!(player.dropped_count(&Item::CAKE), 0);
+        assert_eq!(player.dropped_count(&Item::BUCKET), 0);
+    }
+
+    #[test]
+    fn map_transmute_uses_material_slot_count_and_preserves_components() {
+        use pumpkin_data::item::Item;
+
+        for material_slots in [1, 2, 8] {
+            assert_map_transmute(material_slots, false, 1 + material_slots as u8);
+        }
+        // A stack of eight maps in one slot is one occupied material slot, not
+        // eight materials. The handler must consume only one map from it.
+        assert_map_transmute(1, true, 2);
+
+        // A 3x3 handler can represent nine occupied material-like slots only
+        // without the required filled-map input; that input must not be
+        // inferred from the occupied count.
+        let inventory = new_inventory();
+        let invalid_player = DropRecorder::new(inventory.clone());
+        let mut invalid_handler = new_handler(true, &inventory);
+        for slot in 1..=9 {
+            invalid_handler.get_behaviour().slots[slot].set_stack(ItemStack::new(1, &Item::MAP));
+        }
+        invalid_handler.update_to_client();
+        assert!(
+            invalid_handler.get_behaviour().slots[0]
+                .get_stack()
+                .is_empty()
+        );
+        invalid_handler.on_slot_click(0, 0, SlotActionType::QuickMove, &invalid_player);
+        assert!(
+            invalid_handler
+                .get_behaviour()
+                .cursor_stack
+                .lock()
+                .unwrap()
+                .is_empty()
+        );
+
+        // Input/input is not a transmute, even though both slots are occupied.
+        let invalid_inventory = new_inventory();
+        let invalid_player = DropRecorder::new(invalid_inventory.clone());
+        let mut invalid_handler = new_handler(true, &invalid_inventory);
+        let mut first_map = ItemStack::new(1, &Item::FILLED_MAP);
+        first_map.set_data_component(MapIdImpl { id: 7 });
+        invalid_handler.get_behaviour().slots[1].set_stack(first_map);
+        invalid_handler.get_behaviour().slots[2].set_stack(ItemStack::new(1, &Item::FILLED_MAP));
+        invalid_handler.update_to_client();
+        assert!(
+            invalid_handler.get_behaviour().slots[0]
+                .get_stack()
+                .is_empty()
+        );
+        invalid_handler.on_slot_click(0, 0, SlotActionType::QuickMove, &invalid_player);
+        assert!(
+            invalid_handler
+                .get_behaviour()
+                .cursor_stack
+                .lock()
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    fn assert_map_transmute(material_slots: usize, stacked_material: bool, expected_count: u8) {
+        use pumpkin_data::item::Item;
+
+        let inventory = new_inventory();
+        let player = DropRecorder::new(inventory.clone());
+        let mut handler = new_handler(true, &inventory);
+        let mut filled_map = ItemStack::new(1, &Item::FILLED_MAP);
+        filled_map.set_data_component(MapIdImpl { id: 42 });
+        handler.get_behaviour().slots[1].set_stack(filled_map);
+        for offset in 0..material_slots {
+            let stack_count = if stacked_material && offset == 0 {
+                8
+            } else {
+                1
+            };
+            handler.get_behaviour().slots[2 + offset]
+                .set_stack(ItemStack::new(stack_count, &Item::MAP));
+        }
+        handler.update_to_client();
+
+        let preview = handler.get_behaviour().slots[0].get_stack();
+        assert_eq!(preview.item, &Item::FILLED_MAP);
+        assert_eq!(preview.item_count, expected_count);
+        assert_eq!(preview.get_data_component::<MapIdImpl>().unwrap().id, 42);
+
+        handler.on_slot_click(0, 0, SlotActionType::Pickup, &player);
+        let cursor = handler.get_behaviour().cursor_stack.lock().unwrap().clone();
+        assert_eq!(cursor.item_count, expected_count);
+        assert_eq!(cursor.get_data_component::<MapIdImpl>().unwrap().id, 42);
+        assert!(handler.get_behaviour().slots[1].get_stack().is_empty());
+        for offset in 0..material_slots {
+            let stack = handler.get_behaviour().slots[2 + offset].get_stack();
+            if stacked_material && offset == 0 {
+                assert_eq!(stack.item, &Item::MAP);
+                assert_eq!(stack.item_count, 7);
+            } else {
+                assert!(stack.is_empty());
+            }
+        }
+    }
+}

@@ -1187,8 +1187,8 @@ impl JavaClient {
                 self.handle_cookie_response(&SPCookieResponse::read(&mut payload, &version)?);
             }
             id if id == SCloseContainer::to_id(version) => {
-                let _ = SCloseContainer::read(&mut payload, &version)?;
-                self.handle_close_container(player);
+                let packet = SCloseContainer::read(&mut payload, &version)?;
+                self.handle_close_container(player, packet.window_id.0);
             }
             id if id == SChunkBatch::to_id(version) => {
                 self.handle_chunk_batch(player, &SChunkBatch::read(&mut payload, &version)?);

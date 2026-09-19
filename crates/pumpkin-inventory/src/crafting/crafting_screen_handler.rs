@@ -24,6 +24,7 @@ use crate::crafting::crafting_inventory::CraftingInventory;
 use crate::player::player_inventory::PlayerInventory;
 use crate::screen_handler::{
     InventoryPlayer, ScreenHandler, ScreenHandlerBehaviour, ScreenHandlerListener,
+    offer_or_drop_stack,
 };
 use crate::slot::{NormalSlot, Slot};
 
@@ -51,6 +52,8 @@ pub struct ResultSlot {
 pub struct RecipeResult {
     pub item_id: String,
     pub count: u8,
+    /// Input slot whose patched components must be carried into the result.
+    pub copy_components_from: Option<usize>,
 }
 
 /// Checks if a recipe pattern is symmetrical horizontally.
@@ -171,6 +174,7 @@ fn recipe_matches(
             matched.then_some(RecipeResult {
                 item_id: result.id.to_string(),
                 count: result.count,
+                copy_components_from: None,
             })
         }
         GenericRecipe::Vanilla(CraftingRecipeTypes::CraftingShapeless {
@@ -198,6 +202,7 @@ fn recipe_matches(
             Some(RecipeResult {
                 item_id: result.id.to_string(),
                 count: result.count,
+                copy_components_from: None,
             })
         }
         GenericRecipe::Vanilla(CraftingRecipeTypes::CraftingTransmute {
@@ -206,21 +211,62 @@ fn recipe_matches(
             result,
             ..
         }) => {
-            if count != 2 {
-                return None;
-            }
-            'item_stack: for i in 0..inventory.size() {
-                let slot = inventory.get_stack(i);
-                if slot.is_empty() {
-                    continue 'item_stack;
-                }
-                if !material.match_item(slot.item) && !input.match_item(slot.item) {
+            let occupied: Vec<usize> = (0..inventory.size())
+                .filter(|&i| !inventory.get_stack(i).is_empty())
+                .collect();
+
+            // The generated 26.2 recipe model does not retain the transmute
+            // material_count bounds or add_material_count_to_result flag.
+            // Map cloning is the only generated transmute with those fields:
+            // it accepts one input slot and one to eight material slots. Each
+            // occupied material slot contributes one result item, regardless
+            // of the stack count stored in that slot.
+            let is_map_cloning = result.id == "minecraft:filled_map";
+            let material_slot_count = if is_map_cloning {
+                count.checked_sub(1)?
+            } else {
+                if count != 2 {
                     return None;
                 }
+                1
+            };
+            if !(1..=8).contains(&material_slot_count) {
+                return None;
             }
+
+            let input_indices: Vec<usize> = occupied
+                .iter()
+                .copied()
+                .filter(|&index| input.match_item(inventory.get_stack(index).item))
+                .collect();
+            if input_indices.len() != 1 {
+                return None;
+            }
+            let input_index = input_indices[0];
+
+            let material_indices: Vec<usize> = occupied
+                .iter()
+                .copied()
+                .filter(|&index| index != input_index)
+                .collect();
+            if material_indices.len() != material_slot_count
+                || material_indices
+                    .iter()
+                    .any(|&index| !material.match_item(inventory.get_stack(index).item))
+            {
+                return None;
+            }
+
+            let output_count = if is_map_cloning {
+                result.count.saturating_add(material_slot_count as u8)
+            } else {
+                result.count
+            };
+
             Some(RecipeResult {
                 item_id: result.id.to_string(),
-                count: result.count,
+                count: output_count,
+                copy_components_from: Some(input_index),
             })
         }
         GenericRecipe::Vanilla(CraftingRecipeTypes::CraftingDecoratedPot { .. }) => {
@@ -240,6 +286,7 @@ fn recipe_matches(
             Some(RecipeResult {
                 item_id: "minecraft:decorated_pot".to_string(),
                 count: 1,
+                copy_components_from: None,
             })
         }
         GenericRecipe::Dynamic(OwnedCraftingRecipe::Shaped {
@@ -291,6 +338,7 @@ fn recipe_matches(
             matched.then_some(RecipeResult {
                 item_id: result.item_id.clone(),
                 count: result.count,
+                copy_components_from: None,
             })
         }
         GenericRecipe::Dynamic(OwnedCraftingRecipe::Shapeless {
@@ -318,6 +366,7 @@ fn recipe_matches(
             Some(RecipeResult {
                 item_id: result.item_id.clone(),
                 count: result.count,
+                copy_components_from: None,
             })
         }
         _ => None,
@@ -390,6 +439,24 @@ pub fn match_crafting_recipe(
 }
 
 impl ResultSlot {
+    fn recipe_remainder(stack: &ItemStack) -> Option<ItemStack> {
+        use pumpkin_data::item::Item;
+
+        let remainder = match stack.item.id {
+            id if id == Item::MILK_BUCKET.id => &Item::BUCKET,
+            id if id == Item::MUSHROOM_STEW.id
+                || id == Item::RABBIT_STEW.id
+                || id == Item::BEETROOT_SOUP.id
+                || id == Item::SUSPICIOUS_STEW.id =>
+            {
+                &Item::BOWL
+            }
+            id if id == Item::POTION.id || id == Item::HONEY_BOTTLE.id => &Item::GLASS_BOTTLE,
+            _ => return None,
+        };
+        Some(ItemStack::new(1, remainder))
+    }
+
     pub fn new(
         inventory: Arc<dyn RecipeInputInventory>,
         provider: Option<Arc<dyn RecipeProvider>>,
@@ -414,7 +481,11 @@ impl ResultSlot {
                 .unwrap_or(&matched.item_id);
             let item = pumpkin_data::item::Item::from_registry_key(key)
                 .unwrap_or(&pumpkin_data::item::Item::AIR);
-            ItemStack::new(matched.count, item)
+            let mut result = ItemStack::new(matched.count, item);
+            if let Some(source_index) = matched.copy_components_from {
+                result.patch = self.inventory.get_stack(source_index).patch;
+            }
+            result
         } else {
             ItemStack::EMPTY.clone()
         };
@@ -446,8 +517,21 @@ impl Slot for ResultSlot {
             stack.item_count as i32,
         );
         for i in 0..self.inventory.size() {
+            let input = self.inventory.get_stack(i);
+            if input.is_empty() {
+                continue;
+            }
+
             self.inventory.remove_stack_specific(i, 1);
+            if let Some(remainder) = Self::recipe_remainder(&input) {
+                if self.inventory.get_stack(i).is_empty() {
+                    self.inventory.set_stack(i, remainder);
+                } else {
+                    offer_or_drop_stack(player, remainder);
+                }
+            }
         }
+        self.refill_output();
         self.mark_dirty();
     }
     fn can_insert(&self, _stack: &ItemStack) -> bool {
