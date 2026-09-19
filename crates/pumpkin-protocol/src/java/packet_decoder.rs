@@ -146,7 +146,7 @@ impl<R: AsyncRead + Unpin> TCPNetworkDecoder<R> {
                 DecompressionReader::Decompress(ZlibDecoder::new(BufReader::new(bounded_reader)))
             } else {
                 // Validate that we are not less than the compression threshold
-                if raw_packet_length > threshold as u64 {
+                if raw_packet_length >= threshold as u64 {
                     Err(PacketDecodeError::NotCompressed)?;
                 }
 
@@ -177,6 +177,12 @@ impl<R: AsyncRead + Unpin> TCPNetworkDecoder<R> {
                 break;
             }
             total_read += bytes_read;
+        }
+
+        if total_read != payload_len_hint {
+            return Err(PacketDecodeError::FailedDecompression(format!(
+                "Declared packet payload length {payload_len_hint} but decoded {total_read} bytes"
+            )));
         }
 
         if let Some(expected_uncompressed_packet_data_len) = expected_uncompressed_packet_data_len {
@@ -212,6 +218,7 @@ mod tests {
     use cfb8::Encryptor as Cfb8Encryptor;
     use flate2::Compression;
     use flate2::write::ZlibEncoder;
+    use tokio::io::AsyncWriteExt;
 
     /// Helper function to compress data using libdeflater's Zlib compressor
     fn compress_zlib(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
@@ -322,6 +329,68 @@ mod tests {
         assert_eq!(raw_packet.id, packet_id);
         assert_eq!(raw_packet.payload.as_ref(), payload);
         Ok(())
+    }
+
+    /// The compression threshold is inclusive: a packet whose uncompressed
+    /// packet-data length equals the threshold must use zlib compression.
+    #[tokio::test]
+    async fn reject_uncompressed_packet_at_compression_threshold() {
+        let mut body = Vec::new();
+        body.write_var_int(&VarInt(0)).expect("data length");
+        body.write_var_int(&VarInt(2)).expect("packet id");
+        body.write_slice(b"1234").expect("payload");
+        let mut packet = Vec::new();
+        packet
+            .write_var_int(&VarInt(body.len() as i32))
+            .expect("packet length");
+        packet.extend_from_slice(&body);
+        let mut decoder = TCPNetworkDecoder::new(packet.as_slice());
+        // Packet data is the packet ID (one byte) plus the payload (four bytes).
+        decoder.set_compression(5);
+
+        assert!(matches!(
+            decoder.get_raw_packet().await,
+            Err(PacketDecodeError::NotCompressed)
+        ));
+    }
+
+    /// A TCP frame may arrive in multiple reads; an open stream must wait for the rest.
+    #[tokio::test]
+    async fn decode_uncompressed_frame_split_across_reads() {
+        let (mut writer, reader) = tokio::io::duplex(16);
+        let mut decoder = TCPNetworkDecoder::new(reader);
+
+        let write_frame = async move {
+            writer.write_all(&[3, 1]).await.expect("write frame prefix");
+            tokio::task::yield_now().await;
+            writer.write_all(b"ab").await.expect("write frame payload");
+        };
+        let (_, decode_result) = tokio::join!(write_frame, decoder.get_raw_packet());
+
+        let packet = decode_result.expect("split frame should decode after the payload arrives");
+        assert_eq!(packet.id, 1);
+        assert_eq!(packet.payload.as_ref(), b"ab");
+    }
+
+    /// A declared uncompressed body must not be accepted when the connection ends early.
+    #[tokio::test]
+    async fn reject_uncompressed_frame_on_connection_eof() {
+        let (mut writer, reader) = tokio::io::duplex(16);
+        let mut decoder = TCPNetworkDecoder::new(reader);
+
+        let write_truncated_frame = async move {
+            writer
+                .write_all(&[3, 1, b'a'])
+                .await
+                .expect("write truncated frame");
+            writer.shutdown().await.expect("close frame stream");
+        };
+        let (_, decode_result) = tokio::join!(write_truncated_frame, decoder.get_raw_packet());
+
+        assert!(matches!(
+            decode_result,
+            Err(PacketDecodeError::FailedDecompression(_))
+        ));
     }
 
     /// Test decoding with encryption

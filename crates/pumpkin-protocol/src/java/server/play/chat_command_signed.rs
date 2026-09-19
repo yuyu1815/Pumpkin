@@ -24,12 +24,21 @@ pub struct SChatCommandSigned<'a> {
     pub checksum: u8,
 }
 
+const MIN_ARGUMENT_SIGNATURE_WIRE_BYTES: usize = 1 + 256;
+
 impl<'a> ServerPacket<'a> for SChatCommandSigned<'a> {
     fn read(read: &mut &'a [u8], version: &JavaMinecraftVersion) -> Result<Self, ReadingError> {
         let command = read.get_str_bounded_borrowed(256)?;
         let timestamp = read.get_i64_be()?;
         let salt = read.get_i64_be()?;
-        let arg_count = read.get_var_int()?.0 as usize;
+        let arg_count = usize::try_from(read.get_var_int()?.0)
+            .map_err(|_| ReadingError::Message("Negative argument signature count".into()))?;
+        let remaining = (*read).len();
+        if arg_count > remaining / MIN_ARGUMENT_SIGNATURE_WIRE_BYTES {
+            return Err(ReadingError::TooLarge(format!(
+                "argument signature count {arg_count} cannot fit in {remaining} remaining bytes"
+            )));
+        }
         let mut argument_signatures = Vec::with_capacity(arg_count);
         for _ in 0..arg_count {
             let name = read.get_str_bounded_borrowed(16)?;
@@ -76,5 +85,67 @@ impl ClientPacket for SChatCommandSigned<'_> {
             write.write_u8(self.checksum)?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{ClientPacket, ser::NetworkWriteExt};
+
+    fn signed_command_prefix(count: i32) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.write_var_int(&VarInt(0)).expect("command");
+        bytes.write_i64_be(0).expect("timestamp");
+        bytes.write_i64_be(0).expect("salt");
+        bytes.write_var_int(&VarInt(count)).expect("count");
+        bytes
+    }
+
+    #[test]
+    fn rejects_negative_signed_command_argument_count() {
+        let bytes = signed_command_prefix(-1);
+        let result =
+            SChatCommandSigned::read(&mut bytes.as_slice(), &JavaMinecraftVersion::V_1_21_5);
+
+        assert!(matches!(result, Err(ReadingError::Message(_))));
+    }
+
+    #[test]
+    fn rejects_signed_command_count_that_cannot_fit_payload() {
+        let bytes = signed_command_prefix(i32::MAX);
+        let result =
+            SChatCommandSigned::read(&mut bytes.as_slice(), &JavaMinecraftVersion::V_1_21_5);
+
+        assert!(matches!(result, Err(ReadingError::TooLarge(_))));
+    }
+
+    #[test]
+    fn accepts_signed_command_with_wire_fit_argument_signature() {
+        let signature = [7u8; 256];
+        let acknowledged = [0u8; 3];
+        let packet = SChatCommandSigned {
+            command: "say hello",
+            timestamp: 1,
+            salt: 2,
+            argument_signatures: vec![ArgumentSignature {
+                name: "target",
+                signature: &signature,
+            }],
+            message_count: VarInt(0),
+            acknowledged: &acknowledged,
+            checksum: 0,
+        };
+        let version = JavaMinecraftVersion::V_1_21_5;
+        let mut bytes = Vec::new();
+        packet
+            .write_packet_data(&mut bytes, &version)
+            .expect("encode signed command");
+
+        let decoded = SChatCommandSigned::read(&mut bytes.as_slice(), &version)
+            .expect("wire-fit signed command");
+        assert_eq!(decoded.command, packet.command);
+        assert_eq!(decoded.argument_signatures.len(), 1);
+        assert_eq!(decoded.argument_signatures[0].signature, &signature);
     }
 }

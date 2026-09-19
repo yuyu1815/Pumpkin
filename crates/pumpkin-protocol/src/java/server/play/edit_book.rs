@@ -19,13 +19,23 @@ impl<'a> ServerPacket<'a> for SEditBook<'a> {
     fn read(read: &mut &'a [u8], version: &JavaMinecraftVersion) -> Result<Self, ReadingError> {
         if *version >= JavaMinecraftVersion::V_1_17_1 {
             let slot = read.get_var_int()?;
-            let count = read.get_var_int()?.0 as usize;
+            let count = usize::try_from(read.get_var_int()?.0)
+                .map_err(|_| ReadingError::Message("Negative book page count".into()))?;
             let max_pages = if *version >= JavaMinecraftVersion::V_1_21_2 {
                 100
             } else {
                 200
             };
-            let count = count.min(max_pages);
+            if count > max_pages {
+                return Err(ReadingError::TooLarge(format!(
+                    "Book page count {count} exceeds limit {max_pages}"
+                )));
+            }
+            if count > (*read).len() {
+                return Err(ReadingError::TooLarge(format!(
+                    "Book page count {count} cannot fit in the remaining payload"
+                )));
+            }
             let char_limit = if *version >= JavaMinecraftVersion::V_1_21_2 {
                 1024
             } else {
@@ -81,5 +91,52 @@ impl crate::ClientPacket for SEditBook<'_> {
             write.write_bool(false)?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{ClientPacket, ser::NetworkWriteExt};
+
+    fn decode(bytes: &[u8]) -> Result<SEditBook<'_>, ReadingError> {
+        let mut input = bytes;
+        SEditBook::read(&mut input, &JavaMinecraftVersion::V_1_21_5)
+    }
+
+    #[test]
+    fn rejects_negative_book_page_count() {
+        let mut bytes = Vec::new();
+        bytes.write_var_int(&VarInt(0)).expect("slot");
+        bytes.write_var_int(&VarInt(-1)).expect("page count");
+
+        assert!(matches!(decode(&bytes), Err(ReadingError::Message(_))));
+    }
+
+    #[test]
+    fn rejects_book_page_count_above_protocol_limit() {
+        let mut bytes = Vec::new();
+        bytes.write_var_int(&VarInt(0)).expect("slot");
+        bytes.write_var_int(&VarInt(101)).expect("page count");
+
+        assert!(matches!(decode(&bytes), Err(ReadingError::TooLarge(_))));
+    }
+
+    #[test]
+    fn accepts_book_page_count_that_fits_payload() {
+        let packet = SEditBook {
+            slot: VarInt(0),
+            pages: vec!["page"],
+            title: None,
+        };
+        let version = JavaMinecraftVersion::V_1_21_5;
+        let mut bytes = Vec::new();
+        packet
+            .write_packet_data(&mut bytes, &version)
+            .expect("encode book");
+
+        let decoded = decode(&bytes).expect("wire-fit book");
+        assert_eq!(decoded.pages, packet.pages);
+        assert!(decoded.title.is_none());
     }
 }
