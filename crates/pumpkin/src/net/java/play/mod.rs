@@ -27,7 +27,6 @@ use crate::plugin::player::player_chat::PlayerChatEvent;
 use crate::plugin::player::player_command_send::PlayerCommandSendEvent;
 use crate::plugin::player::player_interact_entity_event::PlayerInteractEntityEvent;
 use crate::plugin::player::player_interact_event::{InteractAction, PlayerInteractEvent};
-use crate::plugin::player::player_interact_unknown_entity_event::PlayerInteractUnknownEntityEvent;
 use crate::plugin::player::player_move::PlayerMoveEvent;
 use crate::plugin::player::player_toggle_flight_event::PlayerToggleFlightEvent;
 use crate::plugin::player::player_toggle_sneak_event::PlayerToggleSneakEvent;
@@ -73,7 +72,7 @@ use pumpkin_protocol::java::server::play::{
     SUseItemOn, Status,
 };
 use pumpkin_util::math::vector3::Vector3;
-use pumpkin_util::math::{polynomial_rolling_hash, position::BlockPos, wrap_degrees};
+use pumpkin_util::math::{position::BlockPos, wrap_degrees};
 use pumpkin_util::{GameMode, text::TextComponent};
 use pumpkin_world::generation::structure::structures::jigsaw::JigsawJointType;
 use pumpkin_world::world::BlockFlags;

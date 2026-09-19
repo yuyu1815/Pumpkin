@@ -1,3 +1,4 @@
+use super::attack::{can_use_ordinary_attack_item, valid_entity_interaction};
 #[allow(clippy::wildcard_imports)]
 use super::*;
 
@@ -24,6 +25,24 @@ impl JavaClient {
             self.try_kick(&TextComponent::text("Invalid action type"));
             return;
         };
+        if action == ActionType::Attack && entity_id.0 == player.entity_id() {
+            self.try_kick(&TextComponent::translate_cross(
+                translation::java::MULTIPLAYER_DISCONNECT_INVALID_ENTITY_ATTACKED,
+                translation::java::MULTIPLAYER_DISCONNECT_INVALID_ENTITY_ATTACKED,
+                [],
+            ));
+            return;
+        }
+
+        let hand = if action == ActionType::Attack {
+            None
+        } else {
+            match interact.hand.map(|hand| hand.0) {
+                Some(0) => Some(Hand::Right),
+                Some(1) => Some(Hand::Left),
+                _ => return,
+            }
+        };
 
         // Resolve the target entity for the event
         let world = player_entity.world.load_full();
@@ -34,6 +53,22 @@ impl JavaClient {
             .or_else(|| world.get_entity_by_id(entity_id.0));
 
         if let Some(target) = target {
+            let is_attack = action == ActionType::Attack;
+            if !valid_entity_interaction(player, &target, is_attack) {
+                return;
+            }
+            let selected_item = if is_attack {
+                player.inventory().held_item()
+            } else {
+                player
+                    .inventory()
+                    .get_stack_in_hand(hand.expect("entity interaction hand was validated"))
+            };
+            if !selected_item.is_item_enabled(&server.get_enabled_features())
+                || (is_attack && !can_use_ordinary_attack_item(player, &selected_item))
+            {
+                return;
+            }
             if player.gamemode.load() == GameMode::Spectator {
                 player.camera_target_id.store(Some(entity_id.0));
                 player.try_send_client_packet(&CSetCamera::new(entity_id));
@@ -57,27 +92,16 @@ impl JavaClient {
                                 return;
                             }
 
-                            if entity_id.0 == player.entity_id() {
-                                self.try_kick(&TextComponent::translate_cross(translation::java::MULTIPLAYER_DISCONNECT_INVALID_ENTITY_ATTACKED, translation::java::MULTIPLAYER_DISCONNECT_INVALID_ENTITY_ATTACKED, []));
+                            if let Some(player_victim) = &player_target
+                                && config.protect_creative
+                                && player_victim.gamemode.load() == GameMode::Creative
+                            {
+                                world.play_sound(
+                                    Sound::EntityPlayerAttackNodamage,
+                                    SoundCategory::Players,
+                                    &player_victim.position(),
+                                );
                                 return;
-                            }
-
-                            if let Some(player_victim) = &player_target {
-                                if player_victim.living_entity.health.load() <= 0.0 {
-                                    return;
-                                }
-                                if config.protect_creative
-                                    && player_victim.gamemode.load() == GameMode::Creative
-                                {
-                                    world
-                                        .play_sound(
-                                            Sound::EntityPlayerAttackNodamage,
-                                            SoundCategory::Players,
-                                            &player_victim.position(),
-                                        )
-                                        ;
-                                    return;
-                                }
                             }
                             player.attack(&event.target);
                         }
@@ -91,14 +115,15 @@ impl JavaClient {
                                     pos.x,
                                     pos.y,
                                     pos.z,
-                                    u8::from(interact.hand.map_or(0, |h| h.0) != 0),
+                                    u8::from(hand == Some(Hand::Left)),
                                 );
                                 server.plugin_manager.fire_blocking(server, &mut at_event);
                                 if at_event.cancelled {
                                     return;
                                 }
                             }
-                            let mut stack = player.inventory().held_item();
+                            let hand = hand.expect("entity interaction hand was validated");
+                            let mut stack = player.inventory().get_stack_in_hand(hand);
 
                             let item_id = stack.item.id;
                             let before = stack.clone();
@@ -118,33 +143,31 @@ impl JavaClient {
                                     );
                                     player.world().send_entity_status(
                                         player.get_entity(),
-                                        equipment_break_status(&EquipmentSlot::MAIN_HAND),
+                                        equipment_break_status(&match hand {
+                                            Hand::Right => EquipmentSlot::MAIN_HAND,
+                                            Hand::Left => EquipmentSlot::OFF_HAND,
+                                        }),
                                         None,
                                     );
                                 }
                             }
-                            player.inventory().set_held_item(stack);
+                            player.inventory().set_stack_in_hand(hand, stack);
                         }
                     }
                 }
             }}
-        } else {
-            // Entity not found
-            send_cancellable_blocking! {{
-                server;
-                PlayerInteractUnknownEntityEvent::new(player, entity_id.0, action);
-
-                'after: {
-                    if event.action == ActionType::Attack {
-                        error!(
-                            "Player id {} interacted with entity id {}, which was not found.",
-                            player.entity_id(),
-                            event.entity_id
-                        );
-                        self.try_kick(&TextComponent::translate_cross(translation::java::MULTIPLAYER_DISCONNECT_INVALID_ENTITY_ATTACKED, translation::java::MULTIPLAYER_DISCONNECT_INVALID_ENTITY_ATTACKED, []));
-                    }
-                }
-            }}
+        } else if action == ActionType::Attack {
+            // An unknown target is invalid for attack, but must not fire an interaction event.
+            error!(
+                "Player id {} interacted with entity id {}, which was not found.",
+                player.entity_id(),
+                entity_id.0
+            );
+            self.try_kick(&TextComponent::translate_cross(
+                translation::java::MULTIPLAYER_DISCONNECT_INVALID_ENTITY_ATTACKED,
+                translation::java::MULTIPLAYER_DISCONNECT_INVALID_ENTITY_ATTACKED,
+                [],
+            ));
         }
     }
 }

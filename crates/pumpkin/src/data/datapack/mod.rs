@@ -298,8 +298,8 @@ impl DatapackManager {
         known_packs
     }
 
-    /// Returns the enabled world feature flags (e.g. `minecraft:vanilla`, `minecraft:trade_rebalance`,
-    /// `minecraft:minecart_improvements`, `minecraft:redstone_experiments`, `minecraft:bundle`).
+    /// Returns the enabled 26.2 world feature flags (vanilla plus the three
+    /// official optional flags). Bundles are vanilla item data, not a feature flag.
     #[must_use]
     pub fn get_enabled_features(&self, server: &Server) -> Vec<&'static str> {
         let enabled_packs = Self::get_enabled_packs(server);
@@ -320,14 +320,12 @@ impl DatapackManager {
                 "redstone_experiments" | "file/redstone_experiments" => {
                     "minecraft:redstone_experiments"
                 }
-                "bundle" | "file/bundle" => "minecraft:bundle",
                 _ => {
                     if let Some(stripped) = pack_name.strip_prefix("file/") {
                         match stripped {
                             "trade_rebalance" => "minecraft:trade_rebalance",
                             "minecart_improvements" => "minecraft:minecart_improvements",
                             "redstone_experiments" => "minecraft:redstone_experiments",
-                            "bundle" => "minecraft:bundle",
                             _ => continue,
                         }
                     } else {
@@ -1200,8 +1198,7 @@ mod tests {
             [
                 "minecraft:vanilla",
                 "minecraft:trade_rebalance",
-                "minecraft:redstone_experiments",
-                "minecraft:bundle"
+                "minecraft:redstone_experiments"
             ]
         );
     }

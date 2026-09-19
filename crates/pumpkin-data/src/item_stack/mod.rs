@@ -97,6 +97,19 @@ impl Default for ItemStackIdGenerator {
 
 static ITEM_STACK_ID_GEN: ItemStackIdGenerator = ItemStackIdGenerator::new();
 
+/// 26.2 built-in item metadata currently available in Pumpkin. The generated
+/// 26.2 registry contains only vanilla-required built-ins; custom/non-vanilla
+/// required-feature metadata remains an explicit follow-up instead of being
+/// inferred from components, tags, or item names.
+const VANILLA_REQUIRED_FEATURES: &[&str] = &["minecraft:vanilla"];
+
+impl Item {
+    #[must_use]
+    pub const fn required_features(&self) -> &'static [&'static str] {
+        VANILLA_REQUIRED_FEATURES
+    }
+}
+
 impl ItemStack {
     #[must_use]
     pub fn new(item_count: u8, item: &'static Item) -> Self {
@@ -139,6 +152,18 @@ impl ItemStack {
                 None => panic!("1 is non-zero"),
             },
         }
+    }
+
+    /// Mirrors 26.2 `ItemStack.isItemEnabled`: empty stacks are enabled and
+    /// every required feature must be present in the server's enabled set.
+    #[must_use]
+    pub fn is_item_enabled(&self, enabled_features: &[&str]) -> bool {
+        self.is_empty()
+            || self
+                .item
+                .required_features()
+                .iter()
+                .all(|required| enabled_features.contains(required))
     }
 
     #[must_use]
@@ -881,6 +906,22 @@ mod tests {
     /// Helper: creates a fresh Iron Sword (max_damage 250, damage 0).
     fn iron_sword() -> ItemStack {
         ItemStack::new(1, &Item::IRON_SWORD)
+    }
+
+    #[test]
+    fn item_enabled_requires_all_required_features_without_mutating_stack() {
+        let stack = ItemStack::new(1, &Item::DIAMOND_SWORD);
+        assert!(stack.is_item_enabled(&["minecraft:vanilla"]));
+        assert!(!stack.is_item_enabled(&[]));
+        assert_eq!(stack.item_count, 1);
+        assert!(stack.patch.is_empty());
+    }
+
+    #[test]
+    fn empty_stack_is_enabled_without_feature_flags() {
+        let stack = ItemStack::static_new_java(0, &Item::AIR);
+        assert!(stack.is_empty());
+        assert!(stack.is_item_enabled(&[]));
     }
 
     #[test]
