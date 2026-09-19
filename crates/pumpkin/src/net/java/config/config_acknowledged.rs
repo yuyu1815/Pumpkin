@@ -2,6 +2,25 @@
 use super::*;
 
 impl JavaClient {
+    pub(crate) async fn handle_reconfiguration_finish(&self, server: &Server) -> bool {
+        if !self.configuration_phase.load().accepts_finish_ack() {
+            return false;
+        }
+
+        let profile = self.gameprofile.clone();
+        let address = self.address;
+        if let Some(reason) = can_not_join(&profile, &address, server).await {
+            self.kick(reason).await;
+            return false;
+        }
+
+        if !super::super::claim_finish(&self.configuration_phase) {
+            return false;
+        }
+        self.connection_state.store(ConnectionState::Play);
+        true
+    }
+
     pub async fn handle_config_acknowledged(&self, server: &Server) -> PacketHandlerResult {
         debug!("Handling config acknowledgement");
 

@@ -1,5 +1,7 @@
-use pumpkin_protocol::java::client::play::{
-    CChunkBatchEnd, CChunkBatchStart, CLightUpdate, CPlayDisconnect,
+use pumpkin_protocol::java::client::{
+    config::{CConfigDisconnect, CKeepAlive as CConfigKeepAlive},
+    login::CLoginDisconnect,
+    play::{CChunkBatchEnd, CChunkBatchStart, CLightUpdate, CPlayDisconnect, CStartConfiguration},
 };
 use pumpkin_world::level::SyncChunk;
 use std::net::SocketAddr;
@@ -14,6 +16,11 @@ use std::{
 use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
 use pumpkin_data::translation;
+use pumpkin_protocol::java::server::config::{
+    SAcceptCodeOfConduct, SAcknowledgeFinishConfig, SClientInformationConfig,
+    SConfigCookieResponse, SConfigPong, SConfigResourcePack, SKeepAlive as SConfigKeepAlive,
+    SKnownPacks, SPluginMessage as SConfigPluginMessage,
+};
 use pumpkin_protocol::java::server::play::{
     SAttack, SBlockEntityTagQuery, SBundleItemSelected, SChangeDifficulty, SChangeGameMode,
     SChatAck, SChatCommand, SChatCommandSigned, SChatMessage, SChunkBatch, SClickSlot,
@@ -35,12 +42,8 @@ use pumpkin_protocol::{
     ClientPacket, ConnectionState, MAX_PACKET_SIZE, PacketDecodeError, PacketEncodeError,
     RawPacket, ServerPacket,
     codec::var_int::VarInt,
-    java::{
-        client::{config::CConfigDisconnect, login::CLoginDisconnect},
-        packet_decoder::TCPNetworkDecoder,
-        packet_encoder::TCPNetworkEncoder,
-    },
-    ser::{NetworkWriteExt, WritingError},
+    java::{packet_decoder::TCPNetworkDecoder, packet_encoder::TCPNetworkEncoder},
+    ser::{NetworkWriteExt, ReadingError, WritingError},
 };
 use pumpkin_util::text::TextComponent;
 use pumpkin_util::version::JavaMinecraftVersion;
@@ -102,9 +105,42 @@ impl ConfigurationPhase {
     pub(crate) const fn accepts_resource_pack(self) -> bool {
         matches!(self, Self::AwaitingResourcePack)
     }
+}
 
-    pub(crate) const fn accepts_reconfiguration_ack(self) -> bool {
-        matches!(self, Self::ReconfigurationAwaitingAck)
+fn claim_reconfiguration(phase: &AtomicCell<ConfigurationPhase>) -> bool {
+    phase
+        .compare_exchange(
+            ConfigurationPhase::Play,
+            ConfigurationPhase::ReconfigurationAwaitingAck,
+        )
+        .is_ok()
+}
+
+fn claim_reconfiguration_ack(phase: &AtomicCell<ConfigurationPhase>) -> bool {
+    phase
+        .compare_exchange(
+            ConfigurationPhase::ReconfigurationAwaitingAck,
+            ConfigurationPhase::AwaitingKnownPacks,
+        )
+        .is_ok()
+}
+
+fn claim_finish(phase: &AtomicCell<ConfigurationPhase>) -> bool {
+    phase
+        .compare_exchange(
+            ConfigurationPhase::AwaitingFinishAck,
+            ConfigurationPhase::Play,
+        )
+        .is_ok()
+}
+
+fn require_empty_body(payload: &[u8], packet_name: &str) -> Result<(), ReadingError> {
+    if payload.is_empty() {
+        Ok(())
+    } else {
+        Err(ReadingError::Message(format!(
+            "Trailing data in {packet_name}"
+        )))
     }
 }
 
@@ -381,6 +417,141 @@ impl JavaClient {
         select_known_packs(&self.known_packs_state, response)
     }
 
+    /// Starts one Play -> Configuration transition.
+    ///
+    /// The phase is claimed before the packet is queued, so concurrent callers
+    /// cannot send a second `start_configuration` packet. The player and its
+    /// world state remain attached to this client throughout the transition.
+    pub async fn start_reconfiguration(&self) -> bool {
+        if !self.version.load().supports_configuration_state()
+            || self.connection_state.load() != ConnectionState::Play
+        {
+            return false;
+        }
+
+        if !claim_reconfiguration(&self.configuration_phase) {
+            return false;
+        }
+
+        self.send_packet(&CStartConfiguration).await;
+        true
+    }
+
+    /// Dispatches serverbound Configuration packets after a reconfiguration ack.
+    pub(crate) async fn handle_configuration_packet(
+        &self,
+        server: &Server,
+        packet: &RawPacket,
+    ) -> Result<(), ReadingError> {
+        let mut payload = &packet.payload[..];
+        let version = self.version.load();
+
+        match packet.id {
+            id if id == SClientInformationConfig::to_id(version) => {
+                let client_information = SClientInformationConfig::read(&mut payload, &version)?;
+                if !payload.is_empty() {
+                    return Err(ReadingError::Message(
+                        "Trailing data in client information packet".into(),
+                    ));
+                }
+                self.handle_client_information_config(client_information)
+                    .await;
+            }
+            id if id == SConfigPluginMessage::to_id(version) => {
+                let plugin_message = SConfigPluginMessage::read(&mut payload, &version)?;
+                if !payload.is_empty() {
+                    return Err(ReadingError::Message(
+                        "Trailing data in configuration plugin message".into(),
+                    ));
+                }
+                self.handle_plugin_message(plugin_message).await;
+            }
+            id if id == SConfigKeepAlive::to_id(version) => {
+                let keep_alive = SConfigKeepAlive::read(&mut payload, &version)?;
+                if !payload.is_empty() {
+                    return Err(ReadingError::Message(
+                        "Trailing data in configuration keep alive".into(),
+                    ));
+                }
+                self.handle_config_keep_alive(&keep_alive);
+            }
+            id if id == SConfigCookieResponse::to_id(version) => {
+                let cookie = SConfigCookieResponse::read(&mut payload, &version)?;
+                if !payload.is_empty() {
+                    return Err(ReadingError::Message(
+                        "Trailing data in configuration cookie response".into(),
+                    ));
+                }
+                self.handle_config_cookie_response(&cookie);
+            }
+            id if id == SConfigPong::to_id(version) => {
+                let _ = SConfigPong::read(&mut payload, &version)?;
+                if !payload.is_empty() {
+                    return Err(ReadingError::Message(
+                        "Trailing data in configuration pong".into(),
+                    ));
+                }
+            }
+            id if id == SAcceptCodeOfConduct::to_id(version) => {
+                let _ = SAcceptCodeOfConduct::read(&mut payload, &version)?;
+                if !payload.is_empty() {
+                    return Err(ReadingError::Message(
+                        "Trailing data in code of conduct acceptance".into(),
+                    ));
+                }
+            }
+            id if id == SConfigResourcePack::to_id(version) => {
+                if !self.configuration_phase.load().accepts_resource_pack() {
+                    return Err(ReadingError::Message(
+                        "Received resource pack response without a pending resource pack".into(),
+                    ));
+                }
+                let response = SConfigResourcePack::read(&mut payload, &version)?;
+                if !payload.is_empty() {
+                    return Err(ReadingError::Message(
+                        "Trailing data in resource pack response".into(),
+                    ));
+                }
+                self.handle_resource_pack_response(server, response).await;
+            }
+            id if id == SKnownPacks::to_id(version) => {
+                if !self.configuration_phase.load().accepts_known_packs() {
+                    return Err(ReadingError::Message(
+                        "Received known packs without a pending server request".into(),
+                    ));
+                }
+                let known_packs = SKnownPacks::read(&mut payload, &version)?;
+                if !payload.is_empty() {
+                    return Err(ReadingError::Message(
+                        "Trailing data in select known packs packet".into(),
+                    ));
+                }
+                self.handle_known_packs_response(server, &known_packs).await;
+            }
+            id if id == SAcknowledgeFinishConfig::to_id(version) => {
+                require_empty_body(&payload, "finish configuration acknowledgment")?;
+                if !self.handle_reconfiguration_finish(server).await {
+                    return Err(ReadingError::Message(
+                        "Finish configuration acknowledgment is not pending".into(),
+                    ));
+                }
+            }
+            _ => {
+                return Err(ReadingError::Message(format!(
+                    "Failed to handle java client packet id {} in Configuration State",
+                    packet.id
+                )));
+            }
+        }
+
+        if !payload.is_empty() {
+            return Err(ReadingError::Message(
+                "Trailing data in configuration packet".into(),
+            ));
+        }
+        Ok(())
+    }
+
     #[must_use]
     pub fn from_pending(
         pending: PendingConnection,
@@ -485,8 +656,14 @@ impl JavaClient {
                             pending.remove(0);
                         }
                     }
-                    let packet = pumpkin_protocol::java::client::play::CKeepAlive::new(keep_alive_id);
-                    self.enqueue_client_packet(&packet).await;
+                    if self.connection_state.load() == ConnectionState::Config {
+                        self.enqueue_client_packet(&CConfigKeepAlive::new(keep_alive_id))
+                            .await;
+                    } else {
+                        let packet =
+                            pumpkin_protocol::java::client::play::CKeepAlive::new(keep_alive_id);
+                        self.enqueue_client_packet(&packet).await;
+                    }
                 }
 
                 () = self.close_token.cancelled() => {
@@ -518,6 +695,36 @@ impl JavaClient {
                         ))
                         .await;
                         break;
+                    }
+
+                    if self.connection_state.load() == ConnectionState::Config {
+                        if let Err(error) = self.handle_configuration_packet(server, &packet).await {
+                            let text = format!("Error while reading configuration packet {error}");
+                            self.kick(TextComponent::text(text)).await;
+                            break;
+                        }
+                        continue;
+                    }
+
+                    if self.connection_state.load() == ConnectionState::Play
+                        && packet.id
+                            == SConfigurationAcknowledged::to_id(self.version.load())
+                    {
+                        let mut payload = &packet.payload[..];
+                        if SConfigurationAcknowledged::read(&mut payload, &self.version.load())
+                            .is_err()
+                            || require_empty_body(&payload, "configuration acknowledgment").is_err()
+                        {
+                            self.kick(TextComponent::text(
+                                "Invalid configuration acknowledgment body",
+                            ))
+                            .await;
+                            break;
+                        }
+                        if self.handle_configuration_acknowledged(player) {
+                            self.send_known_packs(server).await;
+                        }
+                        continue;
                     }
 
                     player.inbound_packets.push(packet);
@@ -1518,6 +1725,11 @@ impl JavaClient {
             }
             id if id == SConfigurationAcknowledged::to_id(version) => {
                 let _ = SConfigurationAcknowledged::read(&mut payload, &version)?;
+                if !payload.is_empty() {
+                    return Err(Box::new(ReadingError::Message(
+                        "Trailing data in configuration acknowledgment".into(),
+                    )));
+                }
                 self.handle_configuration_acknowledged(player);
             }
             _ => {
@@ -1531,10 +1743,12 @@ impl JavaClient {
 #[cfg(test)]
 mod configuration_state_tests {
     use super::{
-        ConfigurationPhase, KnownPacksSelection, ResourcePackResponseAction,
-        registry_entries_for_known_packs, resource_pack_response_action, resource_pack_uuid,
+        ConfigurationPhase, KnownPacksSelection, ResourcePackResponseAction, claim_finish,
+        claim_reconfiguration, claim_reconfiguration_ack, registry_entries_for_known_packs,
+        require_empty_body, resource_pack_response_action, resource_pack_uuid,
         resource_pack_uuid_matches,
     };
+    use crossbeam::atomic::AtomicCell;
     use pumpkin_protocol::{KnownPack, java::server::config::ResourcePackResponseResult};
     use std::sync::{Arc, Mutex};
 
@@ -1703,5 +1917,41 @@ mod configuration_state_tests {
             1
         );
         assert!(!ConfigurationPhase::AwaitingKnownPacks.accepts_finish_ack());
+    }
+
+    #[test]
+    fn reconfiguration_dispatch_transitions_twice_without_duplicate_ack_or_finish() {
+        let phase = AtomicCell::new(ConfigurationPhase::Play);
+
+        assert!(require_empty_body(&[], "test packet").is_ok());
+        assert!(require_empty_body(&[0], "test packet").is_err());
+
+        // An unsolicited Play acknowledgment is rejected without publishing a
+        // new phase. The legal empty-body acknowledgment is accepted once.
+        assert!(!claim_reconfiguration_ack(&phase));
+        assert_eq!(phase.load(), ConfigurationPhase::Play);
+        assert!(claim_reconfiguration(&phase));
+        assert!(!claim_reconfiguration(&phase));
+        assert_eq!(phase.load(), ConfigurationPhase::ReconfigurationAwaitingAck);
+        assert!(claim_reconfiguration_ack(&phase));
+        assert_eq!(phase.load(), ConfigurationPhase::AwaitingKnownPacks);
+        assert!(!claim_reconfiguration_ack(&phase));
+        assert_eq!(phase.load(), ConfigurationPhase::AwaitingKnownPacks);
+        assert!(!claim_finish(&phase));
+
+        // Finish acknowledgment is also exactly once, and a second complete
+        // transition retains the same state machine rather than rebuilding a player.
+        phase.store(ConfigurationPhase::AwaitingFinishAck);
+        assert!(claim_finish(&phase));
+        assert_eq!(phase.load(), ConfigurationPhase::Play);
+        assert!(!claim_finish(&phase));
+        assert_eq!(phase.load(), ConfigurationPhase::Play);
+
+        assert!(claim_reconfiguration(&phase));
+        assert!(claim_reconfiguration_ack(&phase));
+        phase.store(ConfigurationPhase::AwaitingFinishAck);
+        assert!(claim_finish(&phase));
+        assert_eq!(phase.load(), ConfigurationPhase::Play);
+        assert!(!claim_finish(&phase));
     }
 }
