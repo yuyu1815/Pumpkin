@@ -4,7 +4,7 @@ use crate::{
     entity::player::ChatMode,
     net::{
         PlayerConfig, can_not_join,
-        java::{JavaClient, PacketHandlerResult},
+        java::{ConfigurationPhase, JavaClient, PacketHandlerResult},
     },
     server::Server,
 };
@@ -16,7 +16,7 @@ use pumpkin_protocol::{
         client::config::{CFeatureFlags, CFinishConfig, CKnownPacks, CRegistryData, CUpdateTags},
         server::config::{
             ResourcePackResponseResult, SClientInformationConfig, SConfigCookieResponse,
-            SConfigResourcePack, SKeepAlive, SPluginMessage,
+            SConfigResourcePack, SKeepAlive, SKnownPacks, SPluginMessage,
         },
     },
 };

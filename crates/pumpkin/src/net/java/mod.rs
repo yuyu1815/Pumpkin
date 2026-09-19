@@ -5,7 +5,11 @@ use pumpkin_world::level::SyncChunk;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize, Ordering};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use std::{collections::VecDeque, io::Write, sync::Arc};
+use std::{
+    collections::VecDeque,
+    io::Write,
+    sync::{Arc, Mutex},
+};
 
 use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
@@ -76,6 +80,140 @@ use crate::plugin::api::events::world::chunk_send::ChunkSend;
 use crate::plugin::player::player_custom_payload::PlayerCustomPayloadEvent;
 use crate::{error::PumpkinError, server::Server};
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub(crate) enum ConfigurationPhase {
+    NotInConfiguration,
+    AwaitingResourcePack,
+    AwaitingKnownPacks,
+    AwaitingFinishAck,
+    Play,
+    ReconfigurationAwaitingAck,
+}
+
+impl ConfigurationPhase {
+    pub(crate) const fn accepts_known_packs(self) -> bool {
+        matches!(self, Self::AwaitingKnownPacks)
+    }
+
+    pub(crate) const fn accepts_finish_ack(self) -> bool {
+        matches!(self, Self::AwaitingFinishAck)
+    }
+
+    pub(crate) const fn accepts_resource_pack(self) -> bool {
+        matches!(self, Self::AwaitingResourcePack)
+    }
+
+    pub(crate) const fn accepts_reconfiguration_ack(self) -> bool {
+        matches!(self, Self::ReconfigurationAwaitingAck)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct KnownPackIdentity {
+    namespace: String,
+    id: String,
+    version: String,
+}
+
+impl From<&pumpkin_protocol::KnownPack<'_>> for KnownPackIdentity {
+    fn from(pack: &pumpkin_protocol::KnownPack<'_>) -> Self {
+        Self {
+            namespace: pack.namespace.to_owned(),
+            id: pack.id.to_owned(),
+            version: pack.version.to_owned(),
+        }
+    }
+}
+
+pub(crate) type KnownPacksState = Arc<Mutex<Option<Vec<KnownPackIdentity>>>>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum KnownPacksSelection {
+    Exact,
+    Fallback,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ResourcePackResponseAction {
+    Wait,
+    Complete,
+    Kick(&'static str),
+}
+
+pub(crate) const fn resource_pack_response_action(
+    result: &pumpkin_protocol::java::server::config::ResourcePackResponseResult,
+    force: bool,
+) -> ResourcePackResponseAction {
+    use pumpkin_protocol::java::server::config::ResourcePackResponseResult;
+
+    match result {
+        ResourcePackResponseResult::Accepted | ResourcePackResponseResult::Downloaded => {
+            ResourcePackResponseAction::Wait
+        }
+        ResourcePackResponseResult::DownloadSuccess
+        | ResourcePackResponseResult::DownloadFail
+        | ResourcePackResponseResult::Discarded
+        | ResourcePackResponseResult::Unknown(_) => ResourcePackResponseAction::Complete,
+        ResourcePackResponseResult::Declined if force => {
+            ResourcePackResponseAction::Kick("Required resource pack was declined")
+        }
+        ResourcePackResponseResult::Declined
+        | ResourcePackResponseResult::InvalidUrl
+        | ResourcePackResponseResult::ReloadFailed => ResourcePackResponseAction::Complete,
+    }
+}
+
+pub(crate) fn resource_pack_uuid(url: &str) -> uuid::Uuid {
+    uuid::Uuid::new_v3(&uuid::Uuid::NAMESPACE_DNS, url.as_bytes())
+}
+
+pub(crate) fn resource_pack_uuid_matches(url: &str, actual: uuid::Uuid) -> bool {
+    resource_pack_uuid(url) == actual
+}
+
+fn known_packs_match(
+    request: &[KnownPackIdentity],
+    response: &[pumpkin_protocol::KnownPack<'_>],
+) -> bool {
+    request.len() == response.len()
+        && request.iter().zip(response).all(|(expected, actual)| {
+            expected.namespace == actual.namespace
+                && expected.id == actual.id
+                && expected.version == actual.version
+        })
+}
+
+fn remember_known_packs(state: &KnownPacksState, request: &[pumpkin_protocol::KnownPack<'_>]) {
+    let mut state = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    *state = Some(request.iter().map(KnownPackIdentity::from).collect());
+}
+
+fn select_known_packs(
+    state: &KnownPacksState,
+    response: &[pumpkin_protocol::KnownPack<'_>],
+) -> KnownPacksSelection {
+    let state = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    state
+        .as_deref()
+        .is_some_and(|request| known_packs_match(request, response))
+        .then_some(KnownPacksSelection::Exact)
+        .unwrap_or(KnownPacksSelection::Fallback)
+}
+
+/// The generated registry table has no per-entry Known Pack ownership metadata.
+/// Keep every registry packet and every entry payload for both official selection
+/// outcomes; only a safe per-entry omission can be added once that metadata exists.
+pub(crate) fn registry_entries_for_known_packs(
+    registry: &pumpkin_data::registry::Registry,
+    _selection: KnownPacksSelection,
+) -> &[pumpkin_data::registry::RegistryEntryData] {
+    &registry.registry_entries
+}
+
 pub struct JavaClient {
     pub id: u64,
     pub version: AtomicCell<JavaMinecraftVersion>,
@@ -87,7 +225,11 @@ pub struct JavaClient {
     pub server_address: String,
     /// The current connection state of the client (e.g., Handshaking, Status, Play).
     pub connection_state: AtomicCell<ConnectionState>,
-    /// The client's IP address. Direct field (lock-free).
+    /// The single source of truth for configuration sub-phases, shared with the pending connection.
+    pub(crate) configuration_phase: AtomicCell<ConfigurationPhase>,
+    /// The most recently sent Known Packs request, shared across initial and future config paths.
+    pub(crate) known_packs_state: KnownPacksState,
+    /// The client's IP address. Direct field.
     pub address: SocketAddr,
     /// The client's brand or modpack information. Lock-free `ArcSwap`.
     pub brand: ArcSwap<Option<String>>,
@@ -228,6 +370,17 @@ impl OutgoingPacket {
 }
 
 impl JavaClient {
+    pub(crate) fn remember_known_packs(&self, request: &[pumpkin_protocol::KnownPack<'_>]) {
+        remember_known_packs(&self.known_packs_state, request);
+    }
+
+    pub(crate) fn known_packs_selection(
+        &self,
+        response: &[pumpkin_protocol::KnownPack<'_>],
+    ) -> KnownPacksSelection {
+        select_known_packs(&self.known_packs_state, response)
+    }
+
     #[must_use]
     pub fn from_pending(
         pending: PendingConnection,
@@ -244,6 +397,8 @@ impl JavaClient {
             server_address: pending.server_address,
             address: pending.address,
             connection_state: pending.connection_state,
+            configuration_phase: pending.configuration_phase,
+            known_packs_state: pending.known_packs_state,
             close_token: pending.close_token,
             tasks: TaskTracker::new(),
             rt_handle: tokio::runtime::Handle::current(),
@@ -1362,6 +1517,7 @@ impl JavaClient {
                 );
             }
             id if id == SConfigurationAcknowledged::to_id(version) => {
+                let _ = SConfigurationAcknowledged::read(&mut payload, &version)?;
                 self.handle_configuration_acknowledged(player);
             }
             _ => {
@@ -1369,5 +1525,183 @@ impl JavaClient {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod configuration_state_tests {
+    use super::{
+        ConfigurationPhase, KnownPacksSelection, ResourcePackResponseAction,
+        registry_entries_for_known_packs, resource_pack_response_action, resource_pack_uuid,
+        resource_pack_uuid_matches,
+    };
+    use pumpkin_protocol::{KnownPack, java::server::config::ResourcePackResponseResult};
+    use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn known_packs_exact_list_preserves_order_and_rejects_subset_unknown_and_duplicates() {
+        let state = Arc::new(Mutex::new(None));
+        super::remember_known_packs(
+            &state,
+            &[
+                KnownPack {
+                    namespace: "minecraft",
+                    id: "core",
+                    version: "26.2",
+                },
+                KnownPack {
+                    namespace: "minecraft",
+                    id: "bundle",
+                    version: "26.2",
+                },
+            ],
+        );
+
+        let exact = [
+            KnownPack {
+                namespace: "minecraft",
+                id: "core",
+                version: "26.2",
+            },
+            KnownPack {
+                namespace: "minecraft",
+                id: "bundle",
+                version: "26.2",
+            },
+        ];
+        assert_eq!(
+            super::select_known_packs(&state, &exact),
+            KnownPacksSelection::Exact
+        );
+
+        let subset = [KnownPack {
+            namespace: "minecraft",
+            id: "core",
+            version: "26.2",
+        }];
+        assert_eq!(
+            super::select_known_packs(&state, &subset),
+            KnownPacksSelection::Fallback
+        );
+        let reordered = [
+            KnownPack {
+                namespace: "minecraft",
+                id: "bundle",
+                version: "26.2",
+            },
+            KnownPack {
+                namespace: "minecraft",
+                id: "core",
+                version: "26.2",
+            },
+        ];
+        assert_eq!(
+            super::select_known_packs(&state, &reordered),
+            KnownPacksSelection::Fallback
+        );
+        let duplicate = [
+            KnownPack {
+                namespace: "minecraft",
+                id: "core",
+                version: "26.2",
+            },
+            KnownPack {
+                namespace: "minecraft",
+                id: "core",
+                version: "26.2",
+            },
+        ];
+        assert_eq!(
+            super::select_known_packs(&state, &duplicate),
+            KnownPacksSelection::Fallback
+        );
+        let unknown = [
+            KnownPack {
+                namespace: "minecraft",
+                id: "core",
+                version: "26.2",
+            },
+            KnownPack {
+                namespace: "example",
+                id: "unknown",
+                version: "1",
+            },
+        ];
+        assert_eq!(
+            super::select_known_packs(&state, &unknown),
+            KnownPacksSelection::Fallback
+        );
+        assert_eq!(
+            super::select_known_packs(&state, &[]),
+            KnownPacksSelection::Fallback
+        );
+    }
+
+    #[test]
+    fn resource_pack_status_matrix_waits_for_download_success_and_applies_force_policy() {
+        assert_eq!(
+            resource_pack_response_action(&ResourcePackResponseResult::Accepted, true),
+            ResourcePackResponseAction::Wait
+        );
+        assert_eq!(
+            resource_pack_response_action(&ResourcePackResponseResult::Downloaded, true),
+            ResourcePackResponseAction::Wait
+        );
+        assert_eq!(
+            resource_pack_response_action(&ResourcePackResponseResult::DownloadSuccess, true),
+            ResourcePackResponseAction::Complete
+        );
+        assert_eq!(
+            resource_pack_response_action(&ResourcePackResponseResult::Declined, false),
+            ResourcePackResponseAction::Complete
+        );
+        assert_eq!(
+            resource_pack_response_action(&ResourcePackResponseResult::DownloadFail, true),
+            ResourcePackResponseAction::Complete
+        );
+        assert_eq!(
+            resource_pack_response_action(&ResourcePackResponseResult::DownloadFail, false),
+            ResourcePackResponseAction::Complete
+        );
+        assert_eq!(
+            resource_pack_response_action(&ResourcePackResponseResult::Discarded, true),
+            ResourcePackResponseAction::Complete
+        );
+        assert_eq!(
+            resource_pack_response_action(&ResourcePackResponseResult::InvalidUrl, true),
+            ResourcePackResponseAction::Complete
+        );
+        assert_eq!(
+            resource_pack_response_action(&ResourcePackResponseResult::ReloadFailed, false),
+            ResourcePackResponseAction::Complete
+        );
+    }
+
+    #[test]
+    fn resource_pack_uuid_mismatch_is_not_the_configured_pack() {
+        assert!(!resource_pack_uuid_matches(
+            "https://example.invalid/a.zip",
+            resource_pack_uuid("https://example.invalid/b.zip"),
+        ));
+    }
+
+    #[test]
+    fn known_packs_registry_fallback_does_not_skip_configuration_data() {
+        let registry = pumpkin_data::registry::Registry {
+            registry_id: "minecraft:test".to_owned(),
+            registry_entries: vec![pumpkin_data::registry::RegistryEntryData {
+                entry_id: "minecraft:entry".to_owned(),
+                data: Some(vec![1, 2, 3].into_boxed_slice()),
+            }],
+        };
+        assert_eq!(
+            registry_entries_for_known_packs(&registry, KnownPacksSelection::Exact).len(),
+            1
+        );
+        assert_eq!(
+            registry_entries_for_known_packs(&registry, KnownPacksSelection::Fallback).len(),
+            1
+        );
+        assert!(!ConfigurationPhase::AwaitingKnownPacks.accepts_finish_ack());
     }
 }

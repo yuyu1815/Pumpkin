@@ -1,8 +1,18 @@
 #[allow(clippy::wildcard_imports)]
 use super::*;
+use crate::net::java::{KnownPacksSelection, registry_entries_for_known_packs};
 
 impl PendingConnection {
     pub async fn handle_known_packs(&mut self, server: &Server) {
+        self.handle_known_packs_with_selection(server, KnownPacksSelection::Fallback)
+            .await;
+    }
+
+    pub(crate) async fn handle_known_packs_with_selection(
+        &mut self,
+        server: &Server,
+        selection: KnownPacksSelection,
+    ) {
         let version = self.version.load();
         if version.supports_configuration_state() {
             if version < JavaMinecraftVersion::V_1_20_5 {
@@ -11,7 +21,8 @@ impl PendingConnection {
             }
             let registry = pumpkin_data::registry::Registry::get_synced(version);
             for reg in &registry {
-                self.send_packet_now(&CRegistryData::new(&reg.registry_id, &reg.registry_entries))
+                let entries = registry_entries_for_known_packs(reg, selection);
+                self.send_packet_now(&CRegistryData::new(&reg.registry_id, entries))
                     .await;
             }
         }
@@ -24,6 +35,8 @@ impl PendingConnection {
             }
         }
         self.send_packet_now(&CUpdateTags::new(&tags)).await;
+        self.configuration_phase
+            .store(ConfigurationPhase::AwaitingFinishAck);
         self.send_packet_now(&CFinishConfig).await;
     }
 }

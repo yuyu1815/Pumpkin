@@ -40,7 +40,7 @@ use crate::{
     server::Server,
 };
 
-use super::JavaClient;
+use super::{ConfigurationPhase, JavaClient};
 
 const BRAND_CHANNEL_PREFIX: &str = "minecraft:brand";
 
@@ -60,6 +60,8 @@ pub struct PendingConnection {
     pub server_address: String,
     pub version: AtomicCell<JavaMinecraftVersion>,
     pub connection_state: AtomicCell<ConnectionState>,
+    pub(crate) configuration_phase: AtomicCell<ConfigurationPhase>,
+    pub(crate) known_packs_state: super::KnownPacksState,
     pub close_token: CancellationToken,
     pub network_writer: TCPNetworkEncoder<BufWriter<OwnedWriteHalf>>,
     pub network_reader: TCPNetworkDecoder<BufReader<OwnedReadHalf>>,
@@ -72,6 +74,17 @@ pub struct PendingConnection {
 }
 
 impl PendingConnection {
+    pub(crate) fn remember_known_packs(&self, request: &[pumpkin_protocol::KnownPack<'_>]) {
+        super::remember_known_packs(&self.known_packs_state, request);
+    }
+
+    pub(crate) fn known_packs_selection(
+        &self,
+        response: &[pumpkin_protocol::KnownPack<'_>],
+    ) -> super::KnownPacksSelection {
+        super::select_known_packs(&self.known_packs_state, response)
+    }
+
     #[must_use]
     pub fn new(
         tcp_stream: TcpStream,
@@ -86,6 +99,8 @@ impl PendingConnection {
             server_address: String::new(),
             version: AtomicCell::new(CURRENT_MC_VERSION),
             connection_state: AtomicCell::new(ConnectionState::HandShake),
+            configuration_phase: AtomicCell::new(ConfigurationPhase::NotInConfiguration),
+            known_packs_state: std::sync::Arc::new(std::sync::Mutex::new(None)),
             close_token: CancellationToken::new(),
             network_writer: TCPNetworkEncoder::new(BufWriter::new(write)),
             network_reader: TCPNetworkDecoder::new(BufReader::new(read)),
@@ -411,28 +426,60 @@ impl PendingConnection {
                 Ok(None)
             }
             id if id == SAcknowledgeFinishConfig::to_id(version) => {
+                if !payload.is_empty() {
+                    return Err(ReadingError::Message(
+                        "Trailing data in finish configuration acknowledgment".into(),
+                    ));
+                }
+                if !self.configuration_phase.load().accepts_finish_ack() {
+                    return Err(ReadingError::Message(
+                        "Received finish configuration acknowledgment before finish configuration"
+                            .into(),
+                    ));
+                }
                 let Some(profile) = self.gameprofile.clone() else {
                     return Ok(Some(PacketHandlerResult::Stop));
                 };
                 let config = self.config.clone().unwrap_or_default();
-                self.connection_state.store(ConnectionState::Play);
                 if let Some(reason) = can_not_join(&profile, &self.address, server).await {
                     self.kick(reason).await;
                     Ok(Some(PacketHandlerResult::Stop))
                 } else {
+                    self.configuration_phase.store(ConfigurationPhase::Play);
+                    self.connection_state.store(ConnectionState::Play);
                     Ok(Some(PacketHandlerResult::ReadyToPlay(profile, config)))
                 }
             }
             id if id == SKnownPacks::to_id(version) => {
-                self.handle_known_packs(server).await;
+                if !self.configuration_phase.load().accepts_known_packs() {
+                    return Err(ReadingError::Message(
+                        "Received known packs without a pending server request".into(),
+                    ));
+                }
+                let known_packs = SKnownPacks::read(&mut payload, &version)?;
+                if !payload.is_empty() {
+                    return Err(ReadingError::Message(
+                        "Trailing data in select known packs packet".into(),
+                    ));
+                }
+                let selection = self.known_packs_selection(&known_packs.known_packs);
+                self.handle_known_packs_with_selection(server, selection)
+                    .await;
                 Ok(None)
             }
             id if id == SConfigResourcePack::to_id(version) => {
-                self.handle_resource_pack_response(
-                    server,
-                    SConfigResourcePack::read(&mut payload, &version)?,
-                )
-                .await;
+                if !self.configuration_phase.load().accepts_resource_pack() {
+                    return Err(ReadingError::Message(
+                        "Received resource pack response without a pending resource pack".into(),
+                    ));
+                }
+                let response = SConfigResourcePack::read(&mut payload, &version)?;
+                if !payload.is_empty() {
+                    return Err(ReadingError::Message(
+                        "Trailing data in resource pack response".into(),
+                    ));
+                }
+                self.handle_resource_pack_response(server, response).await;
                 Ok(None)
             }
             id if id == SConfigCookieResponse::to_id(version) => {
@@ -508,48 +555,36 @@ impl PendingConnection {
         packet: SConfigResourcePack,
     ) {
         let resource_config = &server.advanced_config.resource_pack.java;
-        if resource_config.enabled {
-            use pumpkin_protocol::java::server::config::ResourcePackResponseResult;
-            match packet.response_result() {
-                ResourcePackResponseResult::Downloaded
-                | ResourcePackResponseResult::DownloadSuccess
-                | ResourcePackResponseResult::Discarded
-                | ResourcePackResponseResult::Unknown(_) => {
-                    if self.version.load() >= JavaMinecraftVersion::V_1_20_5 {
-                        self.send_known_packs(server).await;
-                    } else {
-                        self.handle_known_packs(server).await;
-                    }
+        if !resource_config.enabled {
+            self.kick(TextComponent::text(
+                "Resource pack response is not expected",
+            ))
+            .await;
+            return;
+        }
+
+        if !super::resource_pack_uuid_matches(&resource_config.url, packet.uuid) {
+            warn!(
+                "Client {} returned a response for an unknown resource pack",
+                self.id
+            );
+            self.kick(TextComponent::text("Unknown resource pack response"))
+                .await;
+            return;
+        }
+
+        match super::resource_pack_response_action(&packet.response_result(), resource_config.force)
+        {
+            super::ResourcePackResponseAction::Wait => {}
+            super::ResourcePackResponseAction::Complete => {
+                if self.version.load() >= JavaMinecraftVersion::V_1_20_5 {
+                    self.send_known_packs(server).await;
+                } else {
+                    self.handle_known_packs(server).await;
                 }
-                ResourcePackResponseResult::Accepted => {}
-                ResourcePackResponseResult::Declined => {
-                    if resource_config.force {
-                        self.kick(TextComponent::text("Required resource pack was declined"))
-                            .await;
-                    } else if self.version.load() >= JavaMinecraftVersion::V_1_20_5 {
-                        self.send_known_packs(server).await;
-                    } else {
-                        self.handle_known_packs(server).await;
-                    }
-                }
-                ResourcePackResponseResult::DownloadFail => {
-                    if resource_config.force {
-                        self.kick(TextComponent::text("Failed to download resource pack"))
-                            .await;
-                    } else if self.version.load() >= JavaMinecraftVersion::V_1_20_5 {
-                        self.send_known_packs(server).await;
-                    } else {
-                        self.handle_known_packs(server).await;
-                    }
-                }
-                ResourcePackResponseResult::InvalidUrl => {
-                    self.kick(TextComponent::text("Invalid resource pack URL"))
-                        .await;
-                }
-                ResourcePackResponseResult::ReloadFailed => {
-                    self.kick(TextComponent::text("Failed to reload resource pack"))
-                        .await;
-                }
+            }
+            super::ResourcePackResponseAction::Kick(reason) => {
+                self.kick(TextComponent::text(reason)).await;
             }
         }
     }
@@ -560,5 +595,32 @@ impl PendingConnection {
             packet.key,
             packet.payload.as_ref().map(|p| p.len())
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ConfigurationPhase;
+
+    #[test]
+    fn configuration_finish_ack_requires_finish_packet_to_be_sent() {
+        assert!(!ConfigurationPhase::AwaitingKnownPacks.accepts_finish_ack());
+        assert!(!ConfigurationPhase::AwaitingResourcePack.accepts_finish_ack());
+        assert!(ConfigurationPhase::AwaitingFinishAck.accepts_finish_ack());
+        assert!(!ConfigurationPhase::Play.accepts_finish_ack());
+    }
+
+    #[test]
+    fn configuration_known_packs_requires_server_request_and_rejects_duplicates() {
+        assert!(ConfigurationPhase::AwaitingKnownPacks.accepts_known_packs());
+        assert!(!ConfigurationPhase::AwaitingFinishAck.accepts_known_packs());
+        assert!(!ConfigurationPhase::Play.accepts_known_packs());
+    }
+
+    #[test]
+    fn configuration_resource_pack_response_is_only_valid_while_pending() {
+        assert!(ConfigurationPhase::AwaitingResourcePack.accepts_resource_pack());
+        assert!(!ConfigurationPhase::AwaitingKnownPacks.accepts_resource_pack());
+        assert!(!ConfigurationPhase::AwaitingFinishAck.accepts_resource_pack());
     }
 }

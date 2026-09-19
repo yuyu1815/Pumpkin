@@ -1,8 +1,22 @@
 #[allow(clippy::wildcard_imports)]
 use super::*;
+use crate::net::java::{KnownPacksSelection, registry_entries_for_known_packs};
 
 impl JavaClient {
-    pub async fn handle_known_packs(&self, server: &Server) -> Option<PacketHandlerResult> {
+    pub async fn handle_known_packs_response(
+        &self,
+        server: &Server,
+        response: &SKnownPacks<'_>,
+    ) -> Option<PacketHandlerResult> {
+        let selection = self.known_packs_selection(&response.known_packs);
+        self.handle_known_packs(server, selection).await
+    }
+
+    pub(crate) async fn handle_known_packs(
+        &self,
+        server: &Server,
+        selection: KnownPacksSelection,
+    ) -> Option<PacketHandlerResult> {
         debug!("Handling known packs");
 
         let version = self.version.load();
@@ -39,7 +53,8 @@ impl JavaClient {
                         continue;
                     }
 
-                    let packet = CRegistryData::new(&reg.registry_id, &reg.registry_entries);
+                    let entries = registry_entries_for_known_packs(reg, selection);
+                    let packet = CRegistryData::new(&reg.registry_id, entries);
 
                     if let Ok(data) = Self::serialize_packet_for_version(&packet, version) {
                         packets.push(data);
@@ -109,6 +124,8 @@ impl JavaClient {
         }
 
         // We are done with configuring
+        self.configuration_phase
+            .store(ConfigurationPhase::AwaitingFinishAck);
         self.send_packet(&CFinishConfig).await;
 
         if !version.supports_configuration_state() {

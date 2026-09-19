@@ -4,7 +4,6 @@ use super::*;
 impl JavaClient {
     pub async fn handle_config_acknowledged(&self, server: &Server) -> PacketHandlerResult {
         debug!("Handling config acknowledgement");
-        self.connection_state.store(ConnectionState::Play);
 
         let profile = self.gameprofile.clone();
         let address = self.address;
@@ -15,6 +14,8 @@ impl JavaClient {
         }
 
         let config = self.config.load();
+        self.configuration_phase.store(ConfigurationPhase::Play);
+        self.connection_state.store(ConnectionState::Play);
         PacketHandlerResult::ReadyToPlay(profile, (**config).clone())
     }
 }

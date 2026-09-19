@@ -82,6 +82,8 @@ impl PendingConnection {
 
         let resource_config = &server.advanced_config.resource_pack.java;
         if resource_config.enabled {
+            self.configuration_phase
+                .store(ConfigurationPhase::AwaitingResourcePack);
             let uuid = Uuid::new_v3(&uuid::Uuid::NAMESPACE_DNS, resource_config.url.as_bytes());
             let resource_pack = CConfigAddResourcePack::new(
                 &uuid,
@@ -106,11 +108,14 @@ impl PendingConnection {
     }
 
     pub async fn send_known_packs(&mut self, server: &Server) {
+        self.configuration_phase
+            .store(ConfigurationPhase::AwaitingKnownPacks);
         let features = server.get_enabled_features();
         self.send_packet_now(&CFeatureFlags::new(&features)).await;
         let version_str = self.version.load().to_string();
         let loaded_packs = server.datapack_manager.get_loaded_packs();
         let known_packs = server.get_known_packs(&version_str, &loaded_packs);
+        self.remember_known_packs(&known_packs);
         self.send_packet_now(&CKnownPacks::new(&known_packs)).await;
     }
 }
