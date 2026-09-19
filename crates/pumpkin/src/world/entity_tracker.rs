@@ -557,8 +557,30 @@ impl EntityTracker {
     }
 
     pub fn remove_entity(&self, entity: &dyn EntityBase, world: &World) {
+        self.remove_entity_inner(entity, world, None);
+    }
+
+    /// Removes an old duplicate-UUID player without dropping the replacement's
+    /// UUID-keyed observer relationship from every other tracked entity.
+    pub fn remove_entity_preserving_player(
+        &self,
+        entity: &dyn EntityBase,
+        world: &World,
+        preserved_uuid: Uuid,
+    ) {
+        self.remove_entity_inner(entity, world, Some(preserved_uuid));
+    }
+
+    fn remove_entity_inner(
+        &self,
+        entity: &dyn EntityBase,
+        world: &World,
+        preserved_uuid: Option<Uuid>,
+    ) {
         let entity_id = entity.get_entity().entity_id;
-        if let Some(player) = entity.get_player() {
+        if let Some(player) = entity.get_player()
+            && preserved_uuid != Some(player.gameprofile.id)
+        {
             for entry in &self.entity_map {
                 entry.value().remove_player(player);
             }

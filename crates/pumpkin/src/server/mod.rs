@@ -734,17 +734,31 @@ impl Server {
         }}
     }
 
+    fn has_player_replacement(&self, player: &Player) -> bool {
+        let uuid = player.gameprofile.id;
+        self.worlds.load().iter().any(|world| {
+            world
+                .players
+                .load()
+                .iter()
+                .any(|candidate| candidate.gameprofile.id == uuid)
+        })
+    }
+
     pub fn remove_player(&self, player: &Player) {
         player.increment_stat(
             pumpkin_data::statistic::StatisticCategory::Custom,
             pumpkin_data::statistic::CustomStatistic::LeaveGame as i32,
             1,
         );
-        // TODO: Config if we want decrease online
-        self.listing
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .remove_player(player);
+        // A stale connection with the same UUID must not remove the replacement
+        // from the server-list sample or decrement its online count.
+        if !self.has_player_replacement(player) {
+            self.listing
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .remove_player(player);
+        }
     }
 
     pub async fn shutdown(&self) -> Result<(), String> {

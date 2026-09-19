@@ -133,9 +133,12 @@ impl JavaClient {
                 return Err(ChatError::ChatValidationFailed);
             }
 
-            // Keep the installed session stable through preview, verification,
-            // and commit. A concurrent session replacement must not rebind a
-            // successful packet after its signature was checked.
+            // Serialize this packet with session replacement and disconnect
+            // retirement. The state store also checks the explicit owner token.
+            let _chat_lifecycle = player
+                .chat_lifecycle
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let chat_session = player
                 .chat_session
                 .lock()
@@ -165,6 +168,7 @@ impl JavaClient {
                     | ChatStateError::ChainBroken => ChatError::OutOfOrderChat,
                     ChatStateError::TooManyPendingChats => ChatError::TooManyPendingChats,
                     ChatStateError::SessionMismatch
+                    | ChatStateError::LifecycleMismatch
                     | ChatStateError::AckValidation
                     | ChatStateError::ChecksumMismatch { .. }
                     | ChatStateError::IndexOverflow
@@ -202,6 +206,21 @@ impl JavaClient {
             return;
         }
 
+        // Install the owner/state while holding the same lifecycle lock used by
+        // message verification and disconnect cleanup. A stale async task cannot
+        // overwrite a newer same-UUID owner or recreate a retired state.
+        let _chat_lifecycle = player
+            .chat_lifecycle
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if !crate::net::chat::state::reset_inbound_state(
+            player.gameprofile.id,
+            session.session_id,
+            player.chat_owner_generation,
+        ) {
+            return;
+        }
+
         // A retransmitted identical profile-key packet is an idempotent update;
         // resetting the inbound chain here would make an index-0 replay valid.
         let mut chat_session = player
@@ -222,7 +241,6 @@ impl JavaClient {
             session.key_signature.clone(),
         );
         drop(chat_session);
-        crate::net::chat::state::reset_inbound_state(player.gameprofile.id, session.session_id);
 
         server.broadcast_packet_all(&CPlayerInfoUpdate::new(
             PlayerInfoFlags::INITIALIZE_CHAT.bits(),

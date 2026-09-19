@@ -6,7 +6,9 @@ use std::collections::{HashMap, VecDeque};
 use std::f64::consts::TAU;
 use std::num::NonZero;
 use std::str::FromStr;
-use std::sync::atomic::{AtomicBool, AtomicI8, AtomicI32, AtomicU8, AtomicU32, Ordering};
+use std::sync::atomic::{
+    AtomicBool, AtomicI8, AtomicI32, AtomicU8, AtomicU32, AtomicU64, Ordering,
+};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 
@@ -303,7 +305,7 @@ use crate::plugin::player::player_permission_check::PlayerPermissionCheckEvent;
 use crate::plugin::player::player_teleport::PlayerTeleportEvent;
 use crate::plugin::server::packet::PacketSentEvent;
 use crate::server::Server;
-use crate::world::{BlockBreakingProgress, World};
+use crate::world::{BlockBreakingProgress, PlayerRemovalReason, World};
 use bytes::Bytes;
 
 use super::breath::BreathManager;
@@ -397,6 +399,8 @@ pub enum SpamType {
     Chat,
     Command,
 }
+
+static NEXT_CHAT_OWNER_GENERATION: AtomicU64 = AtomicU64::new(1);
 
 pub struct Player {
     /// The underlying living entity object that represents the player.
@@ -502,6 +506,10 @@ pub struct Player {
     pub has_played_before: AtomicBool,
     root_vehicle_uuid: AtomicCell<Option<Uuid>>,
     pub chat_session: Arc<Mutex<ChatSession>>,
+    /// Serializes chat session installation, secure-message verification, and disconnect retirement.
+    pub(crate) chat_lifecycle: Mutex<()>,
+    /// Monotonic connection owner token; unlike an allocation address it cannot ABA-reuse.
+    pub(crate) chat_owner_generation: u64,
     pub signature_cache: Mutex<MessageCache>,
     pub player_screen_handler: Arc<std::sync::Mutex<PlayerScreenHandler>>,
     pub current_screen_handler: std::sync::Mutex<Arc<std::sync::Mutex<dyn ScreenHandler>>>,
@@ -804,6 +812,8 @@ impl Player {
             has_played_before: AtomicBool::new(false),
             root_vehicle_uuid: AtomicCell::new(None),
             chat_session: Arc::new(Mutex::new(ChatSession::default())), // Placeholder value until the player actually sets their session id
+            chat_lifecycle: Mutex::new(()),
+            chat_owner_generation: NEXT_CHAT_OWNER_GENERATION.fetch_add(1, Ordering::Relaxed),
             signature_cache: Mutex::new(MessageCache::default()),
             player_screen_handler: player_screen_handler.clone(),
             current_screen_handler: std::sync::Mutex::new(player_screen_handler),
@@ -1063,7 +1073,9 @@ impl Player {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .increment_custom(statistics::CustomStatistic::LeaveGame, 1);
         let world = self.world();
-        world.remove_player(self, true).await;
+        world
+            .remove_player(self, PlayerRemovalReason::Disconnect)
+            .await;
 
         let cylindrical = self.watched_section.load();
         self.clean_up_chunk_tickets(&world.level);
@@ -3882,7 +3894,10 @@ impl Player {
                 let new_world = event.new_world;
 
                 self.set_client_loaded(false);
-                let Some(player) = current_world.remove_player(self, false).await else {
+                let Some(player) = current_world
+                    .remove_player(self, PlayerRemovalReason::DimensionTransfer)
+                    .await
+                else {
                     return;
                 };
                new_world.players.rcu(|current_list| {

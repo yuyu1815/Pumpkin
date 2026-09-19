@@ -247,6 +247,12 @@ impl PumpkinError for GetBlockError {
 /// - Manages the `Level` instance for handling chunk-related operations.
 /// - Stores and tracks active `Player` entities within the world.
 /// - Provides a central hub for interacting with the world's entities and environment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlayerRemovalReason {
+    Disconnect,
+    DimensionTransfer,
+}
+
 pub struct World {
     /// Represents the World's Unique Identifier
     pub uuid: Uuid,
@@ -4545,7 +4551,8 @@ impl World {
 
                         // Detach from the old world before publishing into the new one, so no
                         // observer sees the player in a world whose chunk manager doesn't match.
-                        self.remove_player(player, false).await;
+                        self.remove_player(player, PlayerRemovalReason::DimensionTransfer)
+                            .await;
                         player.unload_watched_chunks(self).await;
                         player.change_world_chunks(&self.level, &destination);
                         player.living_entity.entity.set_world(destination.clone());
@@ -5169,7 +5176,7 @@ impl World {
     /// # Arguments
     ///
     /// * `player`: A reference to the `Player` object to be removed.
-    /// * `fire_event`: A boolean flag indicating whether to fire a `PlayerLeaveEvent` event.
+    /// * `reason`: Whether this is a disconnect or a cross-dimension transfer.
     ///
     /// # Notes
     ///
@@ -5178,26 +5185,64 @@ impl World {
     pub async fn remove_player(
         &self,
         player: &Arc<Player>,
-        fire_event: bool,
+        reason: PlayerRemovalReason,
     ) -> Option<Arc<Player>> {
         let mut removed_player: Option<Arc<Player>> = None;
 
         self.players.rcu(|current_list| {
             let mut new_list = (**current_list).clone();
             // Find the player before we filter them out
-            let pos = new_list
-                .iter()
-                .position(|p| p.gameprofile.id == player.gameprofile.id);
+            let pos = new_list.iter().position(|p| Arc::ptr_eq(p, player));
             if let Some(pos) = pos {
                 removed_player = Some(new_list.remove(pos));
             }
             new_list
         });
         if let Some(ref player) = removed_player {
-            self.entity_tracker
-                .remove_entity(player.as_ref() as &dyn EntityBase, self);
             let uuid = player.gameprofile.id;
             let entity_id = player.entity_id();
+            let replacement_is_present = self
+                .players
+                .load()
+                .iter()
+                .any(|candidate| candidate.gameprofile.id == uuid)
+                || self.server.upgrade().is_some_and(|server| {
+                    server.worlds.load().iter().any(|world| {
+                        world
+                            .players
+                            .load()
+                            .iter()
+                            .any(|candidate| candidate.gameprofile.id == uuid)
+                    })
+                });
+
+            if matches!(reason, PlayerRemovalReason::Disconnect) {
+                let _chat_lifecycle = player
+                    .chat_lifecycle
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let session_id = player
+                    .chat_session
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .session_id;
+                crate::net::chat::state::clear_inbound_state(
+                    uuid,
+                    session_id,
+                    player.chat_owner_generation,
+                );
+            }
+
+            if replacement_is_present {
+                self.entity_tracker.remove_entity_preserving_player(
+                    player.as_ref() as &dyn EntityBase,
+                    self,
+                    uuid,
+                );
+            } else {
+                self.entity_tracker
+                    .remove_entity(player.as_ref() as &dyn EntityBase, self);
+            }
 
             let bedrock_remove_player = CPlayerList {
                 action: CPlayerList::ACTION_REMOVE,
@@ -5216,14 +5261,16 @@ impl World {
                 }],
             };
 
-            self.broadcast_editioned(&CRemovePlayerInfo::new(&[uuid]), &bedrock_remove_player);
+            if !replacement_is_present {
+                self.broadcast_editioned(&CRemovePlayerInfo::new(&[uuid]), &bedrock_remove_player);
+            }
 
             self.broadcast_editioned(
                 &CRemoveEntities::new(&[entity_id.into()]),
                 &CRemoveActor::new(VarLong(entity_id as i64)),
             );
 
-            if fire_event {
+            if matches!(reason, PlayerRemovalReason::Disconnect) {
                 let msg_comp = TextComponent::translate_cross(
                     translation::java::MULTIPLAYER_PLAYER_LEFT,
                     translation::bedrock::MULTIPLAYER_PLAYER_LEFT,
