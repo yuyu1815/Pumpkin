@@ -78,7 +78,7 @@ use crate::entity::player::Player;
 use crate::net::java::play::chat_command::SignedCommandPacket;
 use crate::net::{
     ClientPlatform, GameProfile, MAX_PENDING_BYTES, PacketHandlerResult, PacketRateLimiter,
-    PlayerConfig, decrement_pending_bytes,
+    PlayerConfig,
 };
 use crate::plugin::api::events::world::chunk_send::ChunkSend;
 use crate::plugin::player::player_custom_payload::PlayerCustomPayloadEvent;
@@ -347,6 +347,7 @@ enum OutgoingPacketOrigin {
 struct OutgoingPacket {
     data: Bytes,
     completion: Option<oneshot::Sender<()>>,
+    pending_bytes: Arc<AtomicUsize>,
     version: JavaMinecraftVersion,
     connection_state: ConnectionState,
     configuration_phase: ConfigurationPhase,
@@ -355,8 +356,56 @@ struct OutgoingPacket {
     kind: OutgoingPacketKind,
 }
 
+impl Drop for OutgoingPacket {
+    fn drop(&mut self) {
+        if let Some(completion) = self.completion.take() {
+            let _ = completion.send(());
+        }
+        release_pending_bytes(&self.pending_bytes, self.data.len());
+    }
+}
+
 struct EgressGate {
     deferred_play: VecDeque<OutgoingPacket>,
+}
+
+fn try_reserve_pending_bytes(pending_bytes: &AtomicUsize, bytes: usize) -> Result<usize, usize> {
+    let mut current = pending_bytes.load(Ordering::Acquire);
+    loop {
+        let next = current
+            .checked_add(bytes)
+            .expect("pending egress byte counter overflow");
+        if next > MAX_PENDING_BYTES {
+            return Err(next);
+        }
+        match pending_bytes.compare_exchange_weak(
+            current,
+            next,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        ) {
+            Ok(_) => return Ok(next),
+            Err(actual) => current = actual,
+        }
+    }
+}
+
+fn release_pending_bytes(pending_bytes: &AtomicUsize, bytes: usize) {
+    let mut current = pending_bytes.load(Ordering::Acquire);
+    loop {
+        let next = current
+            .checked_sub(bytes)
+            .expect("pending egress byte counter underflow");
+        match pending_bytes.compare_exchange_weak(
+            current,
+            next,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        ) {
+            Ok(_) => return,
+            Err(actual) => current = actual,
+        }
+    }
 }
 
 fn serialized_packet_id(data: &[u8]) -> Option<i32> {
@@ -402,11 +451,13 @@ impl OutgoingPacket {
         configuration_phase: ConfigurationPhase,
         epoch: u64,
         kind: OutgoingPacketKind,
+        pending_bytes: Arc<AtomicUsize>,
     ) -> Self {
         Self {
             packet_id: serialized_packet_id(&data),
             data,
             completion,
+            pending_bytes,
             version,
             connection_state,
             configuration_phase,
@@ -513,6 +564,10 @@ impl JavaClient {
             .egress_gate
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if self.close_token.is_cancelled() {
+            drop(gate);
+            return false;
+        }
         let state = self.connection_state.load();
         let encoded_state =
             if origin == OutgoingPacketOrigin::Raw && state == ConnectionState::Config {
@@ -526,15 +581,7 @@ impl JavaClient {
         let phase = forced_phase.unwrap_or_else(|| self.configuration_phase.load());
         let epoch = self.egress_epoch.load(Ordering::Acquire);
         let version = self.version.load();
-        let packet =
-            OutgoingPacket::new(data, completion, version, encoded_state, phase, epoch, kind);
-        let new_bytes = self
-            .pending_bytes
-            .fetch_add(packet_len, Ordering::AcqRel)
-            .saturating_add(packet_len);
-
-        if new_bytes > MAX_PENDING_BYTES {
-            decrement_pending_bytes(&self.pending_bytes, packet_len);
+        if let Err(new_bytes) = try_reserve_pending_bytes(&self.pending_bytes, packet_len) {
             drop(gate);
             if !self.close_token.is_cancelled() {
                 warn!(
@@ -543,8 +590,19 @@ impl JavaClient {
                 );
                 self.close();
             }
+            drop(completion);
             return false;
-        }
+        };
+        let packet = OutgoingPacket::new(
+            data,
+            completion,
+            version,
+            encoded_state,
+            phase,
+            epoch,
+            kind,
+            self.pending_bytes.clone(),
+        );
 
         let deferred = !force_main_queue
             && encoded_state == ConnectionState::Play
@@ -563,7 +621,6 @@ impl JavaClient {
         }
 
         if self.outgoing_packet_send.send(packet).is_err() {
-            decrement_pending_bytes(&self.pending_bytes, packet_len);
             drop(gate);
             if !self.close_token.is_cancelled() {
                 self.close();
@@ -618,11 +675,25 @@ impl JavaClient {
                 .egress_gate
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if self.close_token.is_cancelled() {
+                return false;
+            }
             if !claim_reconfiguration(&self.configuration_phase) {
                 return false;
             }
             let epoch = self.egress_epoch.fetch_add(1, Ordering::AcqRel) + 1;
             let version = self.version.load();
+            let packet_len = data.len();
+            if let Err(new_bytes) = try_reserve_pending_bytes(&self.pending_bytes, packet_len) {
+                drop(_gate);
+                warn!(
+                    "Client {} outbound packet buffer overflow ({} bytes > {} bytes). Closing connection.",
+                    self.id, new_bytes, MAX_PENDING_BYTES
+                );
+                drop(completion_tx);
+                self.close();
+                return false;
+            }
             let packet = OutgoingPacket::new(
                 data,
                 Some(completion_tx),
@@ -631,11 +702,10 @@ impl JavaClient {
                 ConfigurationPhase::ReconfigurationAwaitingStart,
                 epoch,
                 OutgoingPacketKind::StartConfiguration,
+                self.pending_bytes.clone(),
             );
             self.configuration_phase
                 .store(ConfigurationPhase::ReconfigurationAwaitingAck);
-            let packet_len = packet.data.len();
-            self.pending_bytes.fetch_add(packet_len, Ordering::AcqRel);
             trace_egress(
                 &self.egress_trace_file,
                 &self.egress_trace_lock,
@@ -645,7 +715,6 @@ impl JavaClient {
                 ),
             );
             if self.outgoing_packet_send.send(packet).is_err() {
-                decrement_pending_bytes(&self.pending_bytes, packet_len);
                 drop(_gate);
                 self.close();
                 return false;
@@ -668,6 +737,10 @@ impl JavaClient {
             .egress_gate
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if self.close_token.is_cancelled() {
+            gate.deferred_play.clear();
+            return false;
+        }
         if !claim_finish(&self.configuration_phase) {
             return false;
         }
@@ -1335,7 +1408,6 @@ impl JavaClient {
             return;
         };
         let close_token = self.close_token.clone();
-        let pending_bytes = self.pending_bytes.clone();
         let trace_file = self.egress_trace_file.clone();
         let trace_lock = self.egress_trace_lock.clone();
         let writer_version = self.version.load();
@@ -1445,13 +1517,7 @@ impl JavaClient {
                 }
                 if let Some(reason) = boundary_violation {
                     trace_egress(&trace_file, &trace_lock, format_args!("FIRST {reason}"));
-                    let dropped_bytes: usize = packet_batch.iter().map(|p| p.data.len()).sum();
-                    decrement_pending_bytes(&pending_bytes, dropped_bytes);
-                    for packet in packet_batch {
-                        if let Some(completion) = packet.completion {
-                            let _ = completion.send(());
-                        }
-                    }
+                    drop(packet_batch);
                     close_token.cancel();
                     return;
                 }
@@ -1483,26 +1549,44 @@ impl JavaClient {
                         break;
                     }
 
-                    if let Err(err) = writer.write_frame(&frame).await {
-                        if !close_token.is_cancelled() {
-                            warn!("Failed to send packet batch to client {id}: {err}");
+                    let write_result = tokio::select! {
+                        result = writer.write_frame(&frame) => Some(result),
+                        () = close_token.cancelled() => None,
+                    };
+                    match write_result {
+                        Some(Ok(())) => {}
+                        Some(Err(err)) => {
+                            if !close_token.is_cancelled() {
+                                warn!("Failed to send packet batch to client {id}: {err}");
+                            }
+                            send_failed = true;
+                            break;
                         }
-                        send_failed = true;
-                        break;
+                        None => {
+                            send_failed = true;
+                            break;
+                        }
                     }
 
                     written_packets.extend(returned_batch);
                 }
 
-                if !send_failed && let Err(err) = writer.flush().await {
-                    if !close_token.is_cancelled() {
-                        warn!("Failed to flush packet batch for client {id}: {err}");
+                if !send_failed {
+                    let flush_result = tokio::select! {
+                        result = writer.flush() => Some(result),
+                        () = close_token.cancelled() => None,
+                    };
+                    match flush_result {
+                        Some(Ok(())) => {}
+                        Some(Err(err)) => {
+                            if !close_token.is_cancelled() {
+                                warn!("Failed to flush packet batch for client {id}: {err}");
+                            }
+                            send_failed = true;
+                        }
+                        None => send_failed = true,
                     }
-                    send_failed = true;
                 }
-
-                let flushed_bytes: usize = written_packets.iter().map(|p| p.data.len()).sum();
-                decrement_pending_bytes(&pending_bytes, flushed_bytes);
 
                 if send_failed {
                     // We now need to close the connection to the client since the stream is in an unknown state.
@@ -1510,11 +1594,7 @@ impl JavaClient {
                     break;
                 }
 
-                for packet in written_packets {
-                    if let Some(completion) = packet.completion {
-                        let _ = completion.send(());
-                    }
-                }
+                drop(written_packets);
             }
         });
     }
@@ -1534,12 +1614,7 @@ impl JavaClient {
             .egress_gate
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        while let Some(packet) = gate.deferred_play.pop_front() {
-            decrement_pending_bytes(&self.pending_bytes, packet.data.len());
-            if let Some(completion) = packet.completion {
-                let _ = completion.send(());
-            }
-        }
+        gate.deferred_play.clear();
     }
 
     pub fn is_closed(&self) -> bool {
@@ -2039,6 +2114,148 @@ impl JavaClient {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod egress_accounting_tests {
+    use super::{ConfigurationPhase, JavaClient};
+    use crate::net::java::pending::PendingConnection;
+    use crate::net::{GameProfile, PacketRateLimiter, PlayerConfig};
+    use arc_swap::ArcSwap;
+    use bytes::Bytes;
+    use pumpkin_protocol::ConnectionState;
+    use std::net::SocketAddr;
+    use std::sync::{Arc, atomic::Ordering};
+    use std::time::Duration;
+    use tokio::net::{TcpListener, TcpStream};
+    use tokio::sync::Barrier;
+    use tokio::time::timeout;
+    use uuid::Uuid;
+
+    async fn fixture() -> (JavaClient, TcpStream) {
+        let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
+            .await
+            .expect("egress fixture listener");
+        let address = listener
+            .local_addr()
+            .expect("egress fixture listener address");
+        let connector = tokio::spawn(TcpStream::connect(address));
+        let (server_stream, peer_address) = listener.accept().await.expect("egress fixture accept");
+        let peer = connector
+            .await
+            .expect("egress fixture connector task")
+            .expect("egress fixture connect");
+        let pending = PendingConnection::new(
+            server_stream,
+            peer_address,
+            1,
+            PacketRateLimiter::new(false, 0.0, 0.0),
+        );
+        let profile = GameProfile {
+            id: Uuid::from_u128(0x2620_0001),
+            name: "egress_fixture".to_owned(),
+            properties: ArcSwap::from_pointee(Vec::new()),
+            profile_actions: None,
+        };
+        (
+            JavaClient::from_pending(pending, profile, PlayerConfig::default()),
+            peer,
+        )
+    }
+
+    async fn wait_for_pending(java: &JavaClient) {
+        timeout(Duration::from_secs(1), async {
+            while java.pending_bytes.load(Ordering::Acquire) == 0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("egress packet was not accounted");
+    }
+
+    #[tokio::test]
+    async fn deferred_close_releases_bytes_and_unblocks_send_packet_now() {
+        let (java, _peer) = fixture().await;
+        java.connection_state.store(ConnectionState::Play);
+        java.configuration_phase
+            .store(ConfigurationPhase::ReconfigurationAwaitingAck);
+        let java = Arc::new(java);
+        let waiter_java = java.clone();
+        let waiter = tokio::spawn(async move {
+            waiter_java
+                .send_packet_now_data(Bytes::from_static(&[0]))
+                .await;
+        });
+        wait_for_pending(&java).await;
+        for _ in 0..8 {
+            java.close();
+        }
+        timeout(Duration::from_secs(1), waiter)
+            .await
+            .expect("deferred send waiter remained pending")
+            .expect("deferred send waiter task panicked");
+        assert_eq!(java.pending_bytes.load(Ordering::Acquire), 0);
+    }
+
+    #[tokio::test]
+    async fn concurrent_close_and_enqueue_has_no_accounting_leak() {
+        let (java, _peer) = fixture().await;
+        java.connection_state.store(ConnectionState::Play);
+        java.configuration_phase
+            .store(ConfigurationPhase::ReconfigurationAwaitingAck);
+        let java = Arc::new(java);
+        let barrier = Arc::new(Barrier::new(33));
+        let mut tasks = Vec::new();
+        for index in 0..32 {
+            let java = java.clone();
+            let barrier = barrier.clone();
+            tasks.push(tokio::spawn(async move {
+                barrier.wait().await;
+                if index % 2 == 0 {
+                    java.close();
+                } else {
+                    java.try_enqueue_packet_data(Bytes::from_static(&[0]));
+                }
+            }));
+        }
+        barrier.wait().await;
+        for task in tasks {
+            task.await.expect("concurrent egress task panicked");
+        }
+        java.close();
+        assert_eq!(java.pending_bytes.load(Ordering::Acquire), 0);
+    }
+
+    #[tokio::test]
+    async fn sender_closed_releases_packet_and_unblocks_waiter() {
+        let (mut java, _peer) = fixture().await;
+        java.outgoing_packet_recv
+            .take()
+            .expect("fixture receiver must exist");
+        let java = Arc::new(java);
+        timeout(
+            Duration::from_secs(1),
+            java.send_packet_now_data(Bytes::from_static(&[0])),
+        )
+        .await
+        .expect("sender-closed waiter remained pending");
+        assert!(java.is_closed());
+        assert_eq!(java.pending_bytes.load(Ordering::Acquire), 0);
+    }
+
+    #[tokio::test]
+    async fn writer_frame_error_releases_bytes_and_unblocks_waiter() {
+        let (mut java, _peer) = fixture().await;
+        java.start_outgoing_packet_task();
+        let java = Arc::new(java);
+        let oversized = Bytes::from(vec![0; pumpkin_protocol::MAX_PACKET_DATA_SIZE + 1]);
+        timeout(Duration::from_secs(2), java.send_packet_now_data(oversized))
+            .await
+            .expect("writer-error waiter remained pending");
+        assert!(java.is_closed());
+        assert_eq!(java.pending_bytes.load(Ordering::Acquire), 0);
+        java.await_tasks().await;
     }
 }
 
