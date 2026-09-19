@@ -572,17 +572,17 @@ impl World {
         dx <= radius && dz <= radius
     }
 
-    pub async fn shutdown(&self) {
+    pub async fn shutdown(&self) -> Result<(), String> {
         let entities = self.entities.load_full();
         for entity in entities.iter() {
-            self.save_entity(entity).await;
+            self.save_entity(entity).await?;
         }
         drop(entities);
 
-        // Stop retaining live entity/client/world ownership cycles before the
-        // level and world state are torn down. Entity NBT has already been
-        // appended to the owning chunk above, so clearing these runtime indexes
-        // does not discard persisted entities.
+        // Stop retaining live entity/client/world ownership cycles only after
+        // every entity save succeeded. On failure the live index is deliberately
+        // retained and the error is propagated instead of being treated as a
+        // successful save.
         self.entities.store(Arc::new(Vec::new()));
         self.entity_tracker.clear();
         self.spawn_state.store(Arc::new(SpawnState::empty()));
@@ -602,43 +602,55 @@ impl World {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .save_all();
-        if let Err(e) = save_result {
-            error!("Failed to save portal POI: {e}");
-        }
+        save_result.map_err(|error| format!("failed to save portal POI: {error}"))?;
 
-        self.level.shutdown().await;
+        self.level.shutdown().await
     }
 
     /// Serializes a live entity into its current chunk's entity data. The live
     /// entity list is the source of truth while a chunk is loaded (its saved NBT
-    /// is consumed on load), so this simply appends the entity to the chunk it is
-    /// currently in; the chunk is rewritten from scratch every unload cycle, so
-    /// there is nothing stale to deduplicate.
-    async fn save_entity(&self, entity: &Arc<dyn EntityBase>) {
+    /// is consumed on load), so this loads/merges the live snapshot into the
+    /// serialized destination chunk. Repeated saves replace the same UUID rather
+    /// than accumulating duplicate entity records.
+    async fn save_entity(&self, entity: &Arc<dyn EntityBase>) -> Result<(), String> {
         let base_entity = entity.get_entity();
         if base_entity.is_removed() {
-            return;
+            return Ok(());
         }
-        let current_chunk = base_entity.block_pos.load().chunk_position();
-        let Some(chunk) = self.level.get_entity_chunk_sync(&current_chunk) else {
-            // Entity chunks are saved before eviction. A live entity without a
-            // resident chunk is therefore already persisted; reloading it here
-            // would race shutdown with the entity saver and can recurse through
-            // the async load path.
-            warn!(
-                "Skipping entity {} in evicted chunk {:?} during shutdown save",
-                base_entity.entity_id, current_chunk
-            );
-            return;
-        };
         let mut nbt = NbtCompound::new();
         entity.write_nbt(&mut nbt);
-        chunk
-            .data
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .push(nbt);
-        chunk.mark_dirty(true);
+        // Choose the destination from the serialized position, not from an
+        // earlier block_pos read. This prevents an eviction boundary move from
+        // writing a new-position snapshot into the old chunk.
+        let current_chunk = nbt
+            .get_list("Pos")
+            .and_then(|position| {
+                let [x, _, z] = position else {
+                    return None;
+                };
+                Some(Vector2::new(
+                    (x.extract_double()?.floor() as i32) >> 4,
+                    (z.extract_double()?.floor() as i32) >> 4,
+                ))
+            })
+            .unwrap_or_else(|| base_entity.block_pos.load().chunk_position());
+        // The old shutdown path overflowed the main task while re-entering the
+        // async entity loader. Keep the bounded direct IO future heap-backed and
+        // run it as a separate Tokio task; this does not enlarge the OS stack or
+        // introduce a generation fallback.
+        let level = self.level.clone();
+        let entity_uuid = base_entity.entity_uuid;
+        let save_result = tokio::spawn(async move {
+            Box::pin(level.save_entity_nbt(current_chunk, entity_uuid, nbt)).await
+        })
+        .await
+        .map_err(|error| format!("entity save task failed: {error}"))?;
+        save_result.map_err(|error| {
+            format!(
+                "failed to save entity {} in chunk {:?}: {error}",
+                base_entity.entity_id, current_chunk
+            )
+        })
     }
 
     /// Serializes the live block entities of a chunk back into that chunk's block
@@ -1867,8 +1879,17 @@ impl World {
                     let world_clone = self.clone();
                     if let Some(server) = self.server.upgrade() {
                         server.spawn_task(async move {
-                            world_clone.remove_entities_in_chunks(&cleaned_chunks).await;
-                            world_clone.level.clean_entity_chunks(&cleaned_chunks);
+                            if let Err(error) =
+                                world_clone.remove_entities_in_chunks(&cleaned_chunks).await
+                            {
+                                error!("Autosave entity eviction failed: {error}");
+                                return;
+                            }
+                            if let Err(error) =
+                                world_clone.level.clean_entity_chunks(&cleaned_chunks).await
+                            {
+                                error!("Autosave entity chunk cleanup failed: {error}");
+                            }
                         });
                     }
                 }
@@ -5290,10 +5311,10 @@ impl World {
     pub async fn remove_entities_in_chunks(
         &self,
         chunks: impl IntoIterator<Item = impl std::borrow::Borrow<Vector2<i32>>>,
-    ) {
+    ) -> Result<(), String> {
         let chunks_set: FxHashSet<_> = chunks.into_iter().map(|c| *c.borrow()).collect();
         if chunks_set.is_empty() {
-            return;
+            return Ok(());
         }
         let mut entities_to_remove = Vec::new();
 
@@ -5314,7 +5335,25 @@ impl World {
 
         for entity in entities_to_remove {
             self.entity_tracker.remove_entity(entity.as_ref(), self);
-            self.save_entity(&entity).await;
+            if let Err(error) = self.save_entity(&entity).await {
+                // The entity was removed from the live index before saving so
+                // it cannot be ticked while its chunk is being evicted. Restore
+                // that ownership on failure; silently dropping it would make a
+                // subsequent reload impossible even though the process is still
+                // alive.
+                self.entity_tracker.add_entity(&entity, self);
+                self.entities.rcu(|current_entities| {
+                    if current_entities.iter().any(|live| {
+                        live.get_entity().entity_uuid == entity.get_entity().entity_uuid
+                    }) {
+                        return (**current_entities).clone();
+                    }
+                    let mut restored = (**current_entities).clone();
+                    restored.push(entity.clone());
+                    restored
+                });
+                return Err(error);
+            }
             self.spawn_state.load().remove_entity(self, entity.as_ref());
         }
 
@@ -5322,6 +5361,7 @@ impl World {
             self.save_block_entities(*chunk_pos);
             self.block_entities.remove(chunk_pos);
         }
+        Ok(())
     }
 
     pub(crate) fn set_block_breaking(
@@ -7225,9 +7265,9 @@ impl World {
         }
     }
 
-    pub async fn save(&self) {
+    pub async fn save(&self) -> Result<(), String> {
         for entity in self.entities.load().iter() {
-            self.save_entity(entity).await;
+            self.save_entity(entity).await?;
         }
 
         let chunks: Vec<Vector2<i32>> = self
@@ -7270,6 +7310,7 @@ impl World {
         if let Some(server) = self.server.upgrade() {
             server.plugin_manager.fire(&server, &mut save_event).await;
         }
+        Ok(())
     }
 
     pub fn set_custom_data(&self, namespace: &str, key: &str, value: pumpkin_nbt::tag::NbtTag) {

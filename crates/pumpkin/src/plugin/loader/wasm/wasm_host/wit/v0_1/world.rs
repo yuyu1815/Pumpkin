@@ -1325,11 +1325,11 @@ impl pumpkin::plugin::world::HostWorldWithStore<PluginHostState> for HasSelf<Plu
         world: Resource<World>,
     ) -> wasmtime::Result<Result<(), String>> {
         let (world, plugin) = world_and_plugin(host.get(), &world)?;
-        plugin
+        let result = plugin
             .store
             .pump_reentry(&mut host, async move { world.save().await })
             .await?;
-        Ok(Ok(()))
+        Ok(result)
     }
 
     async fn set_block(

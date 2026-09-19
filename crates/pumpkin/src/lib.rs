@@ -534,9 +534,13 @@ impl PumpkinServer {
 
         info!("Starting save.");
 
-        self.server.shutdown().await;
-
-        info!("Completed save!");
+        match self.server.shutdown().await {
+            Ok(()) => info!("Completed save!"),
+            Err(error) => {
+                SERVER_EXIT_CODE.store(1, Ordering::Release);
+                error!("Server save failed; live entity data was not discarded: {error}");
+            }
+        }
 
         if let Some((wrapper, _, _)) = LOGGER_IMPL.wait()
             && let Some(rl) = wrapper.take_readline()

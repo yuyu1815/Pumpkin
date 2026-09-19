@@ -41,6 +41,7 @@ use tracing::{debug, error, info, trace, warn};
 use tokio::{
     select,
     sync::{
+        Mutex as TokioMutex,
         mpsc::{self, Receiver},
         oneshot,
     },
@@ -50,6 +51,13 @@ use tokio_util::task::TaskTracker;
 
 pub type SyncChunk = Arc<ChunkData>;
 pub type SyncEntityChunk = Arc<ChunkEntityData>;
+
+/// The outcome of a bounded entity-chunk read used while persisting live entities.
+/// Missing storage is safe to initialize; a read error is not.
+pub(crate) enum EntityChunkLoad {
+    Loaded(SyncEntityChunk),
+    Missing(SyncEntityChunk),
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LoadedChunkChange {
@@ -89,6 +97,9 @@ pub struct Level {
     pub loaded_chunks: Arc<DashMap<Vector2<i32>, SyncChunk>>,
     pub(crate) loaded_chunk_changes: Arc<SegQueue<LoadedChunkChange>>,
     loaded_entity_chunks: Arc<DashMap<Vector2<i32>, SyncEntityChunk>>,
+    /// Serializes entity snapshot/load/eviction IO so an old async unload write
+    /// cannot race a live snapshot loaded for the same nonresident chunk.
+    entity_save_lock: Arc<TokioMutex<()>>,
     pub chunks_with_scheduled_ticks: Arc<dashmap::DashSet<Vector2<i32>>>,
     pub chunk_loading: Mutex<ChunkLoading>,
 
@@ -281,6 +292,7 @@ impl Level {
             loaded_chunks: Arc::new(DashMap::new()),
             loaded_chunk_changes: Arc::new(SegQueue::new()),
             loaded_entity_chunks: Arc::new(DashMap::new()),
+            entity_save_lock: Arc::new(TokioMutex::new(())),
             chunks_with_scheduled_ticks: Arc::new(dashmap::DashSet::new()),
             chunk_loading: Mutex::new(ChunkLoading::new(level_channel.clone())),
             chunk_watchers: Arc::new(DashMap::new()),
@@ -332,7 +344,14 @@ impl Level {
                 dirty: AtomicBool::new(false),
             });
 
-            level.loaded_entity_chunks.insert(pos, arc_chunk.clone());
+            // A save may publish a Missing chunk while a normal load is waiting
+            // for generation. Never replace that saved snapshot with the empty
+            // generation result.
+            let arc_chunk = level
+                .loaded_entity_chunks
+                .entry(pos)
+                .or_insert(arc_chunk)
+                .clone();
 
             if let Some((_, waiters)) = level.pending_entity_generations.remove(&pos) {
                 for tx in waiters {
@@ -352,7 +371,7 @@ impl Level {
         self.tasks.spawn(task)
     }
 
-    pub async fn shutdown(&self) {
+    pub async fn shutdown(&self) -> Result<(), String> {
         let world_id = self.level_folder.root_folder.display();
         info!("Saving level ({})...", world_id);
         self.cancel_token.cancel();
@@ -410,17 +429,21 @@ impl Level {
         info!("Flushing entity data to disk for {}...", world_id);
         self.entity_saver.block_and_await_ongoing_tasks().await;
 
-        // save all chunks currently in memory
+        // Serialize final entity-cache removal and the write itself. A save
+        // started by a live entity or an eviction must not be able to publish
+        // an older snapshot after this final flush.
+        let _save_guard = self.entity_save_lock.lock().await;
         let chunks_to_write = self
             .loaded_entity_chunks
             .iter()
             .map(|chunk| (*chunk.key(), chunk.value().clone()))
             .collect::<Vec<_>>();
-        self.loaded_entity_chunks.clear();
 
         // TODO: I think the chunk_saver should be at the server level
         self.entity_saver.clear_watched_chunks().await;
-        self.write_entity_chunks(chunks_to_write).await;
+        self.write_entity_chunks(chunks_to_write).await?;
+        self.loaded_entity_chunks.clear();
+        Ok(())
     }
 
     pub fn loaded_chunk_count(&self) -> usize {
@@ -481,15 +504,18 @@ impl Level {
     }
 
     // In Level::clean_entity_chunks()
-    pub fn clean_entity_chunks(
+    pub async fn clean_entity_chunks(
         self: &Arc<Self>,
         chunks: impl IntoIterator<Item = impl std::borrow::Borrow<Vector2<i32>>>,
-    ) {
+    ) -> Result<(), String> {
+        // The map removal must be covered by the same lock as load/merge/write.
+        // Removing it before waiting allowed a concurrent live save to load a
+        // disk snapshot and then be overwritten by this older in-memory chunk.
+        let _save_guard = self.entity_save_lock.lock().await;
         let chunks_to_process: Vec<_> = chunks
             .into_iter()
             .filter_map(|pos_borrow| {
                 let pos = pos_borrow.borrow();
-                // Only include chunks with no watchers
                 let has_watchers = self
                     .chunk_watchers
                     .get(pos)
@@ -499,22 +525,25 @@ impl Level {
                     return None;
                 }
 
-                // Remove immediately to prevent race conditions
                 self.loaded_entity_chunks.remove(pos)
             })
             .collect();
 
         if chunks_to_process.is_empty() {
-            return;
+            return Ok(());
         }
 
-        let level = self.clone();
-        self.spawn_task(async move {
-            debug!("Writing {} entity chunks to disk", chunks_to_process.len());
-            level.write_entity_chunks(chunks_to_process).await;
-        });
+        debug!("Writing {} entity chunks to disk", chunks_to_process.len());
+        if let Err(error) = self.write_entity_chunks(chunks_to_process.clone()).await {
+            // Keep the cache and its entity data available for a retry. The
+            // caller must not treat a failed write as a completed eviction.
+            for (pos, chunk) in chunks_to_process {
+                self.loaded_entity_chunks.entry(pos).or_insert(chunk);
+            }
+            return Err(error);
+        }
+        Ok(())
     }
-
     pub fn get_tick_data(
         &self,
         active_chunks: &FxHashSet<Vector2<i32>>,
@@ -605,8 +634,8 @@ impl Level {
         ticks
     }
 
-    pub fn clean_entity_chunk(self: &Arc<Self>, chunk: &Vector2<i32>) {
-        self.clean_entity_chunks([*chunk]);
+    pub async fn clean_entity_chunk(self: &Arc<Self>, chunk: &Vector2<i32>) -> Result<(), String> {
+        self.clean_entity_chunks([*chunk]).await
     }
 
     pub fn is_chunk_watched(&self, chunk: &Vector2<i32>) -> bool {
@@ -706,6 +735,107 @@ impl Level {
         }
     }
 
+    /// Reads one entity chunk without falling back to entity generation.
+    ///
+    /// This path is deliberately separate from `get_entity_chunk`: shutdown,
+    /// autosave, and eviction must never turn a malformed/I/O-failed file into
+    /// an empty chunk and then overwrite the original bytes.
+    async fn load_entity_chunk_for_save_unlocked(
+        &self,
+        pos: Vector2<i32>,
+    ) -> Result<EntityChunkLoad, String> {
+        if let Some(chunk) = self.loaded_entity_chunks.get(&pos) {
+            return Ok(EntityChunkLoad::Loaded(chunk.value().clone()));
+        }
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+        self.entity_saver
+            .fetch_chunks(&self.level_folder, &[pos], tx)
+            .await;
+
+        match rx.recv().await {
+            Some(LoadedData::Loaded(chunk)) => Ok(EntityChunkLoad::Loaded(chunk)),
+            Some(LoadedData::Missing(_)) => {
+                Ok(EntityChunkLoad::Missing(Arc::new(ChunkEntityData {
+                    x: pos.x,
+                    z: pos.y,
+                    data: std::sync::Mutex::new(Vec::new()),
+                    dirty: AtomicBool::new(false),
+                })))
+            }
+            Some(LoadedData::Error((_, error))) => {
+                Err(format!("failed to load entity chunk {pos:?}: {error}"))
+            }
+            None => Err(format!(
+                "entity chunk loader closed without a result for {pos:?}"
+            )),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn load_entity_chunk_for_save(
+        &self,
+        pos: Vector2<i32>,
+    ) -> Result<EntityChunkLoad, String> {
+        let _save_guard = self.entity_save_lock.lock().await;
+        self.load_entity_chunk_for_save_unlocked(pos).await
+    }
+
+    /// Serializes and persists one live entity under the same lock as entity
+    /// eviction. This keeps load, merge, and write atomic relative to an old
+    /// chunk-clean task and makes repeated saves replace the same UUID instead
+    /// of duplicating it.
+    pub async fn save_entity_nbt(
+        &self,
+        pos: Vector2<i32>,
+        entity_uuid: uuid::Uuid,
+        nbt: pumpkin_nbt::compound::NbtCompound,
+    ) -> Result<(), String> {
+        let _save_guard = self.entity_save_lock.lock().await;
+        let chunk = match self.load_entity_chunk_for_save_unlocked(pos).await? {
+            EntityChunkLoad::Loaded(chunk) => chunk,
+            EntityChunkLoad::Missing(chunk) => self
+                .loaded_entity_chunks
+                .entry(pos)
+                .or_insert(chunk)
+                .clone(),
+        };
+        {
+            let mut data = chunk
+                .data
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if let Some(existing) = data
+                .iter_mut()
+                .find(|existing| existing.get_uuid("UUID") == Some(entity_uuid))
+            {
+                *existing = nbt;
+            } else {
+                data.push(nbt);
+            }
+        }
+        chunk.mark_dirty(true);
+        self.entity_saver
+            .save_chunks(&self.level_folder, vec![(pos, chunk)])
+            .await
+            .map_err(|error| format!("failed to persist entity chunk {pos:?}: {error}"))
+    }
+
+    /// Persists one entity chunk and surfaces serializer/I/O failures to the
+    /// caller.
+    #[cfg(test)]
+    pub(crate) async fn persist_entity_chunk(
+        &self,
+        pos: Vector2<i32>,
+        chunk: SyncEntityChunk,
+    ) -> Result<(), String> {
+        let _save_guard = self.entity_save_lock.lock().await;
+        self.entity_saver
+            .save_chunks(&self.level_folder, vec![(pos, chunk)])
+            .await
+            .map_err(|error| format!("failed to persist entity chunk {pos:?}: {error}"))
+    }
+
     pub fn receive_entity_chunks(
         self: &Arc<Self>,
         chunks: Vec<Vector2<i32>>,
@@ -733,19 +863,25 @@ impl Level {
                         LoadedData<SyncEntityChunk, ChunkReadingError>,
                     >(to_fetch.len());
 
+                    // Linearize the disk read with insertion into the cache. A
+                    // live save cannot otherwise race this fetch and have its
+                    // newer file replaced by the fetched old snapshot.
+                    let save_guard = level.entity_save_lock.lock().await;
                     level
                         .entity_saver
                         .fetch_chunks(&level.level_folder, &to_fetch, tx)
                         .await;
 
+                    let mut loaded_notifications = Vec::new();
+                    let mut generation_waiters = Vec::new();
                     while let Some(data) = rx.recv().await {
                         match data {
                             LoadedData::Loaded(chunk) => {
                                 let pos = Vector2::new(chunk.x, chunk.z);
                                 level.loaded_entity_chunks.insert(pos, chunk.clone());
-                                let _ = sender.send((Arc::downgrade(&chunk), true)).await;
+                                loaded_notifications.push(chunk);
                             }
-                            LoadedData::Missing(pos) | LoadedData::Error((pos, _)) => {
+                            LoadedData::Missing(pos) => {
                                 let (tx, rx) = oneshot::channel();
                                 match level.pending_entity_generations.entry(pos) {
                                     dashmap::mapref::entry::Entry::Occupied(mut entry) => {
@@ -756,15 +892,28 @@ impl Level {
                                         level.spawn_entity_generation(pos);
                                     }
                                 }
-                                let sender_clone = sender.clone();
-                                tokio::spawn(async move {
-                                    if let Ok(chunk) = rx.await {
-                                        let _ =
-                                            sender_clone.send((Arc::downgrade(&chunk), true)).await;
-                                    }
-                                });
+                                generation_waiters.push(rx);
+                            }
+                            LoadedData::Error((pos, error)) => {
+                                // A corrupt/unreadable entity file is not a missing
+                                // chunk. Do not generate an empty replacement: that
+                                // would make the next save destroy the original bytes.
+                                error!("Failed to load entity chunk {pos:?}: {error}");
                             }
                         }
+                    }
+                    drop(save_guard);
+
+                    for chunk in loaded_notifications {
+                        let _ = sender.send((Arc::downgrade(&chunk), true)).await;
+                    }
+                    for rx in generation_waiters {
+                        let sender_clone = sender.clone();
+                        tokio::spawn(async move {
+                            if let Ok(chunk) = rx.await {
+                                let _ = sender_clone.send((Arc::downgrade(&chunk), true)).await;
+                            }
+                        });
                     }
                 }
             };
@@ -783,6 +932,14 @@ impl Level {
             return chunk.clone();
         }
 
+        // Keep ordinary entity loads in the same ordering domain as save and
+        // eviction. The generation waiter is registered before releasing the
+        // guard; its async result is awaited afterwards.
+        let save_guard = self.entity_save_lock.lock().await;
+        if let Some(chunk) = self.loaded_entity_chunks.get(&pos) {
+            return chunk.clone();
+        }
+
         if let Ok((chunk, _)) = self.load_single_entity_chunk(pos).await {
             self.loaded_entity_chunks.insert(pos, chunk.clone());
             chunk
@@ -797,6 +954,7 @@ impl Level {
                     self.spawn_entity_generation(pos);
                 }
             }
+            drop(save_guard);
             rx.await.unwrap_or_else(|_| {
                 Arc::new(ChunkEntityData {
                     x: pos.x,
@@ -861,21 +1019,22 @@ impl Level {
         }
     }
 
-    pub async fn write_entity_chunks(&self, chunks_to_write: Vec<(Vector2<i32>, SyncEntityChunk)>) {
+    async fn write_entity_chunks(
+        &self,
+        chunks_to_write: Vec<(Vector2<i32>, SyncEntityChunk)>,
+    ) -> Result<(), String> {
         if chunks_to_write.is_empty() {
-            return;
+            return Ok(());
         }
 
         let chunk_saver = self.entity_saver.clone();
         let level_folder = self.level_folder.clone();
 
         trace!("Sending chunks to ChunkIO {:}", chunks_to_write.len());
-        if let Err(error) = chunk_saver
+        chunk_saver
             .save_chunks(&level_folder, chunks_to_write)
             .await
-        {
-            error!("Failed writing Chunk to disk {error}");
-        }
+            .map_err(|error| format!("failed writing entity chunks to disk: {error}"))
     }
 
     pub fn is_chunk_loaded(&self, coordinates: &Vector2<i32>) -> bool {
@@ -1010,6 +1169,7 @@ impl Level {
 mod tests {
     use super::*;
     use pumpkin_config::world::LevelConfig;
+    use pumpkin_nbt::compound::NbtCompound;
     use tempfile::TempDir;
 
     #[tokio::test]
@@ -1043,6 +1203,210 @@ mod tests {
             end_level.level_folder.dim_folder,
             root.join("dimensions").join("minecraft").join("the_end")
         );
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn entity_save_load_reopen_preserves_live_and_existing_nbt() {
+        let temp_dir = TempDir::new().unwrap();
+        let config = LevelConfig::default();
+        let pos = Vector2::new(7, -3);
+        let first_uuid = uuid::Uuid::from_u128(1);
+        let second_uuid = uuid::Uuid::from_u128(2);
+
+        let level = Level::from_root_folder(
+            &config,
+            temp_dir.path().to_path_buf(),
+            0,
+            Dimension::OVERWORLD,
+        );
+        let EntityChunkLoad::Missing(chunk) = level
+            .load_entity_chunk_for_save(pos)
+            .await
+            .expect("fresh entity chunk must be Missing")
+        else {
+            panic!("fresh entity chunk was unexpectedly Loaded");
+        };
+        let mut first = NbtCompound::new();
+        first.put_string("id", "minecraft:item".to_string());
+        first.put_uuid("UUID", first_uuid);
+        first.put_list(
+            "Pos",
+            vec![
+                pumpkin_nbt::tag::NbtTag::Double(112.5),
+                pumpkin_nbt::tag::NbtTag::Double(64.0),
+                pumpkin_nbt::tag::NbtTag::Double(-47.25),
+            ],
+        );
+        first.put_string("TestMarker", "first".to_string());
+        chunk
+            .data
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(first);
+        chunk.mark_dirty(true);
+        level
+            .persist_entity_chunk(pos, chunk)
+            .await
+            .expect("missing entity chunk save must succeed");
+
+        let EntityChunkLoad::Loaded(chunk) = level
+            .load_entity_chunk_for_save(pos)
+            .await
+            .expect("saved entity chunk must load")
+        else {
+            panic!("saved entity chunk was unexpectedly Missing");
+        };
+        let mut second = NbtCompound::new();
+        second.put_string("id", "minecraft:armor_stand".to_string());
+        second.put_uuid("UUID", second_uuid);
+        second.put_list(
+            "Pos",
+            vec![
+                pumpkin_nbt::tag::NbtTag::Double(113.5),
+                pumpkin_nbt::tag::NbtTag::Double(65.0),
+                pumpkin_nbt::tag::NbtTag::Double(-46.25),
+            ],
+        );
+        second.put_string("TestMarker", "live-snapshot".to_string());
+        chunk
+            .data
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(second);
+        chunk.mark_dirty(true);
+        level
+            .persist_entity_chunk(pos, chunk)
+            .await
+            .expect("live snapshot save must succeed");
+        level.shutdown().await.expect("fixture level shutdown");
+
+        let reopened = Level::from_root_folder(
+            &config,
+            temp_dir.path().to_path_buf(),
+            0,
+            Dimension::OVERWORLD,
+        );
+        let EntityChunkLoad::Loaded(chunk) = reopened
+            .load_entity_chunk_for_save(pos)
+            .await
+            .expect("reopened entity chunk must load")
+        else {
+            panic!("reopened entity chunk was unexpectedly Missing");
+        };
+        {
+            let entities = chunk
+                .data
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            assert_eq!(entities.len(), 2);
+            assert!(entities.iter().any(|entity| {
+                entity.get_uuid("UUID") == Some(first_uuid)
+                    && entity.get_string("id") == Some("minecraft:item")
+                    && entity.get_string("TestMarker") == Some("first")
+            }));
+            assert!(entities.iter().any(|entity| {
+                entity.get_uuid("UUID") == Some(second_uuid)
+                    && entity.get_string("id") == Some("minecraft:armor_stand")
+                    && entity.get_string("TestMarker") == Some("live-snapshot")
+            }));
+        };
+        reopened.shutdown().await.expect("reopened level shutdown");
+    }
+
+    #[tokio::test]
+    async fn entity_save_load_error_does_not_overwrite_raw_region_bytes() {
+        let temp_dir = TempDir::new().unwrap();
+        let config = LevelConfig::default();
+        let level = Level::from_root_folder(
+            &config,
+            temp_dir.path().to_path_buf(),
+            0,
+            Dimension::OVERWORLD,
+        );
+        let pos = Vector2::new(0, 0);
+        let chunk = Arc::new(ChunkEntityData {
+            x: pos.x,
+            z: pos.y,
+            data: std::sync::Mutex::new(Vec::new()),
+            dirty: AtomicBool::new(true),
+        });
+        level
+            .persist_entity_chunk(pos, chunk)
+            .await
+            .expect("fixture entity region write must succeed");
+        level.shutdown().await.expect("fixture level shutdown");
+
+        let mut entity_files = Vec::new();
+        let mut pending = vec![level.level_folder.entities_folder.clone()];
+        while let Some(path) = pending.pop() {
+            for entry in std::fs::read_dir(path).unwrap() {
+                let entry = entry.unwrap();
+                let path = entry.path();
+                if path.is_dir() {
+                    pending.push(path);
+                } else {
+                    entity_files.push(path);
+                }
+            }
+        }
+        assert_eq!(entity_files.len(), 1);
+        let corrupt_bytes = b"malformed entity region bytes".to_vec();
+        std::fs::write(&entity_files[0], &corrupt_bytes).unwrap();
+
+        let reopened = Level::from_root_folder(
+            &config,
+            temp_dir.path().to_path_buf(),
+            0,
+            Dimension::OVERWORLD,
+        );
+        let result = reopened.load_entity_chunk_for_save(pos).await;
+        assert!(result.is_err(), "malformed entity IO must fail closed");
+        assert_eq!(std::fs::read(&entity_files[0]).unwrap(), corrupt_bytes);
+        reopened.shutdown().await.expect("reopened level shutdown");
+    }
+
+    #[tokio::test]
+    async fn generated_missing_chunk_does_not_replace_saved_snapshot() {
+        let temp_dir = TempDir::new().unwrap();
+        let config = LevelConfig::default();
+        let pos = Vector2::new(2, 4);
+        let entity_uuid = uuid::Uuid::from_u128(3);
+        let level = Level::from_root_folder(
+            &config,
+            temp_dir.path().to_path_buf(),
+            0,
+            Dimension::OVERWORLD,
+        );
+
+        let mut nbt = NbtCompound::new();
+        nbt.put_string("id", "minecraft:item".to_string());
+        nbt.put_uuid("UUID", entity_uuid);
+        nbt.put_string("TestMarker", "saved-before-generation".to_string());
+        level
+            .save_entity_nbt(pos, entity_uuid, nbt)
+            .await
+            .expect("save missing chunk snapshot");
+
+        let (tx, rx) = oneshot::channel();
+        level.pending_entity_generations.insert(pos, vec![tx]);
+        level.spawn_entity_generation(pos);
+        let generated = tokio::time::timeout(std::time::Duration::from_secs(5), rx)
+            .await
+            .expect("entity generation completion")
+            .expect("entity generation waiter");
+        {
+            let entities = generated
+                .data
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            assert_eq!(entities.len(), 1);
+            assert_eq!(
+                entities[0].get_string("TestMarker"),
+                Some("saved-before-generation")
+            );
+        };
+        level.shutdown().await.expect("test level shutdown");
     }
 
     #[tokio::test]

@@ -1087,14 +1087,20 @@ impl Player {
         let chunks_to_clean = level.mark_chunks_as_not_watched(radial_chunks).await;
         // Remove chunks with no watchers from the cache
         if !chunks_to_clean.is_empty() {
-            world.remove_entities_in_chunks(&chunks_to_clean).await;
-            level.clean_entity_chunks(&chunks_to_clean);
+            if let Err(error) = world.remove_entities_in_chunks(&chunks_to_clean).await {
+                warn!("Entity eviction during disconnect failed: {error}");
+            } else if let Err(error) = level.clean_entity_chunks(&chunks_to_clean).await {
+                warn!("Entity chunk cleanup during disconnect failed: {error}");
+            }
         }
         // Remove left over entries from all possiblily loaded chunks
         let cleaned_chunks = level.clean_memory();
         if !cleaned_chunks.is_empty() {
-            world.remove_entities_in_chunks(&cleaned_chunks).await;
-            level.clean_entity_chunks(&cleaned_chunks);
+            if let Err(error) = world.remove_entities_in_chunks(&cleaned_chunks).await {
+                warn!("Entity eviction during disconnect cleanup failed: {error}");
+            } else if let Err(error) = level.clean_entity_chunks(&cleaned_chunks).await {
+                warn!("Entity chunk cleanup during disconnect cleanup failed: {error}");
+            }
         }
 
         debug!(
@@ -3822,8 +3828,11 @@ impl Player {
         let level = &world.level;
         let chunks_to_clean = level.mark_chunks_as_not_watched(radial_chunks).await;
         if !chunks_to_clean.is_empty() {
-            world.remove_entities_in_chunks(&chunks_to_clean).await;
-            level.clean_entity_chunks(&chunks_to_clean);
+            if let Err(error) = world.remove_entities_in_chunks(&chunks_to_clean).await {
+                warn!("Entity eviction during chunk unload failed: {error}");
+            } else if let Err(error) = level.clean_entity_chunks(&chunks_to_clean).await {
+                warn!("Entity chunk cleanup during unload failed: {error}");
+            }
         }
         for chunk in &chunks_to_clean {
             self.send_client_packet(&CUnloadChunk::new(chunk.x, chunk.y))

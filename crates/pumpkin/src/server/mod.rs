@@ -519,7 +519,10 @@ impl Server {
             ));
         }
 
-        world_to_unload.shutdown().await;
+        world_to_unload
+            .shutdown()
+            .await
+            .map_err(|error| format!("Failed to save world '{name}': {error}"))?;
         world_to_unload.unload().await;
 
         self.worlds.rcu(|w_list| {
@@ -603,7 +606,7 @@ impl Server {
         }
 
         for world in self.worlds.load().iter() {
-            world.save().await;
+            world.save().await?;
         }
 
         Ok(())
@@ -744,7 +747,7 @@ impl Server {
             .remove_player(player);
     }
 
-    pub async fn shutdown(&self) {
+    pub async fn shutdown(&self) -> Result<(), String> {
         self.tasks.close();
         debug!("Awaiting tasks for server");
         self.tasks.wait().await;
@@ -752,18 +755,16 @@ impl Server {
 
         info!("Starting worlds");
         for world in self.worlds.load().iter() {
-            world.shutdown().await;
+            world.shutdown().await?;
         }
         let level_data = self.level_info.load();
         // then lets save the world info
 
-        if let Err(err) = self
-            .world_info_writer
+        self.world_info_writer
             .write_world_info(&level_data, &self.basic_config.get_world_path())
-        {
-            error!("Failed to save level.dat: {err}");
-        }
+            .map_err(|error| format!("Failed to save level.dat: {error}"))?;
         info!("Completed worlds");
+        Ok(())
     }
 
     /// Broadcasts a packet to all players in all worlds.

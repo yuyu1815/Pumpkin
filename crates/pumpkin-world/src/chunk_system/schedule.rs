@@ -2126,7 +2126,7 @@ mod anvil_load_integration_tests {
         );
 
         drop(scheduler);
-        level.shutdown().await;
+        level.shutdown().await.expect("test level shutdown");
         drop(temp_dir);
     }
 
@@ -2184,7 +2184,7 @@ mod anvil_load_integration_tests {
             assert!(matches!(outcome, RecvChunk::LoadFailure { pos: failed, .. } if failed == pos));
         }
 
-        level.shutdown().await;
+        level.shutdown().await.expect("test level shutdown");
         drop(temp_dir);
     }
 }

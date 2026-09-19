@@ -162,10 +162,18 @@ pub fn update_position(player: &Arc<Player>) {
                     .await;
 
                 if !chunks_to_clean.is_empty() {
-                    world_clone
+                    if let Err(error) = world_clone
                         .remove_entities_in_chunks(&chunks_to_clean)
-                        .await;
-                    world_clone.level.clean_entity_chunks(&chunks_to_clean);
+                        .await
+                    {
+                        tracing::error!("Entity eviction during chunk move failed: {error}");
+                    } else if let Err(error) = world_clone
+                        .level
+                        .clean_entity_chunks(&chunks_to_clean)
+                        .await
+                    {
+                        tracing::error!("Entity chunk cleanup failed: {error}");
+                    }
                 }
             });
         }
