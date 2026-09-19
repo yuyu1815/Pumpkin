@@ -573,9 +573,19 @@ impl World {
     }
 
     pub async fn shutdown(&self) {
-        for entity in self.entities.load().iter() {
+        let entities = self.entities.load_full();
+        for entity in entities.iter() {
             self.save_entity(entity).await;
         }
+        drop(entities);
+
+        // Stop retaining live entity/client/world ownership cycles before the
+        // level and world state are torn down. Entity NBT has already been
+        // appended to the owning chunk above, so clearing these runtime indexes
+        // does not discard persisted entities.
+        self.entities.store(Arc::new(Vec::new()));
+        self.entity_tracker.clear();
+        self.spawn_state.store(Arc::new(SpawnState::empty()));
 
         let chunks: Vec<Vector2<i32>> = self
             .block_entities
@@ -610,9 +620,19 @@ impl World {
             return;
         }
         let current_chunk = base_entity.block_pos.load().chunk_position();
+        let Some(chunk) = self.level.get_entity_chunk_sync(&current_chunk) else {
+            // Entity chunks are saved before eviction. A live entity without a
+            // resident chunk is therefore already persisted; reloading it here
+            // would race shutdown with the entity saver and can recurse through
+            // the async load path.
+            warn!(
+                "Skipping entity {} in evicted chunk {:?} during shutdown save",
+                base_entity.entity_id, current_chunk
+            );
+            return;
+        };
         let mut nbt = NbtCompound::new();
         entity.write_nbt(&mut nbt);
-        let chunk = self.level.get_entity_chunk(current_chunk).await;
         chunk
             .data
             .lock()

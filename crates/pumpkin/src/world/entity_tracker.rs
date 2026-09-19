@@ -569,6 +569,10 @@ impl EntityTracker {
         }
     }
 
+    pub fn clear(&self) {
+        self.entity_map.clear();
+    }
+
     pub fn update_player_position(&self, player: &Arc<Player>, world: &World) {
         let pos = player.get_entity().pos.load();
         let new_pos = Vector3::new(
