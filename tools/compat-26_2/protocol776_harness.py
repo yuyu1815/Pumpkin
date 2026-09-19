@@ -1616,7 +1616,7 @@ def run_reconfiguration(
                 return {
                     "mode": "reconfiguration", "case": case, "protocol": PROTOCOL,
                     "login_success": login_success, "baseline_entity_id": baseline_entity_id,
-                    "baseline_position": baseline_position, "server_disconnect": "client_eof",
+                    "baseline_position": baseline_position, "peer_shutdown": "client_eof",
                     "result": "client_disconnected_during_configuration",
                     "real_client_compatibility": "not_claimed",
                 }
