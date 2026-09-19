@@ -128,6 +128,7 @@ pub struct RequiredArgumentBuilder<S: CommandSource = DummySource> {
     name: Cow<'static, str>,
     argument_type: Arc<dyn AnyArgumentType<S>>,
     suggestion_provider: Option<Arc<dyn SuggestionProvider<S>>>,
+    signable: bool,
 }
 
 mod private {
@@ -397,7 +398,19 @@ impl<S: CommandSource> RequiredArgumentBuilder<S> {
             name: name.into(),
             argument_type: Arc::new(arg_type),
             suggestion_provider: None,
+            signable: false,
         }
+    }
+
+    /// Opts this argument node into signed-command argument extraction.
+    ///
+    /// This is intentionally opt-in. It is equivalent to marking the node's
+    /// argument type with vanilla 26.2's `SignedArgument` metadata; ordinary
+    /// string and other argument types are not signable by default.
+    #[must_use]
+    pub fn signable(mut self) -> Self {
+        self.signable = true;
+        self
     }
 
     /// Sets the [`SuggestionProvider`] of this builder for the `ArgumentDetachedNode`.
@@ -467,6 +480,7 @@ impl<S: CommandSource> ArgumentBuilder<S, ArgumentDetachedNode<S>> for RequiredA
             self.common.forks,
             self.suggestion_provider,
         );
+        node.meta.signable = self.signable;
         node.children = self.common.arguments;
         node
     }

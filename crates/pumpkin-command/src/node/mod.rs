@@ -210,6 +210,11 @@ pub struct ArgumentNodeMetadata<S: CommandSource = DummySource> {
     pub name: Cow<'static, str>,
     pub argument_type: Arc<dyn AnyArgumentType<S>>,
     pub suggestion_provider: Option<Arc<dyn SuggestionProvider<S>>>,
+    /// Whether this node implements the vanilla 26.2 `SignedArgument` contract.
+    ///
+    /// This is explicit node metadata rather than an inference from the Rust
+    /// argument type. In particular, ordinary string nodes remain non-signable.
+    pub signable: bool,
 }
 
 impl<S: CommandSource> ArgumentNodeMetadata<S> {
@@ -222,6 +227,7 @@ impl<S: CommandSource> ArgumentNodeMetadata<S> {
             name: name.into(),
             argument_type,
             suggestion_provider,
+            signable: false,
         }
     }
 }

@@ -6,7 +6,7 @@ use crate::errors::error_types::{
     DISPATCHER_UNKNOWN_COMMAND, LiteralCommandErrorType,
 };
 use crate::node::Redirection;
-use crate::node::attached::{CommandNodeId, NodeId};
+use crate::node::attached::{AttachedNode, CommandNodeId, NodeId};
 use crate::node::detached::CommandDetachedNode;
 use crate::node::tree::{NodeIdClassification, ROOT_NODE_ID, Tree};
 use crate::source::{CommandSource, DummySource, ReturnValue};
@@ -40,6 +40,77 @@ pub struct ParsingResult<'a, S: CommandSource = DummySource> {
     pub context: CommandContextBuilder<'a, S>,
     pub errors: FxHashMap<NodeId, CommandSyntaxError>,
     pub reader: StringReader<'static>,
+}
+
+/// A parsed argument selected by the vanilla 26.2 signed-command contract.
+///
+/// `value` is a byte range into the original command input. It deliberately
+/// does not contain the typed parser result or a normalized/re-serialized
+/// representation of that result.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SignableArgument {
+    /// The argument node's command-tree name.
+    pub name: String,
+    /// The lossless UTF-8 byte range in the original command input.
+    pub value: crate::context::string_range::StringRange,
+    /// The tree-local identity of the parsed argument node.
+    pub node: NodeId,
+}
+
+impl SignableArgument {
+    /// Returns the raw argument text covered by [`Self::value`].
+    #[must_use]
+    pub fn raw_value<'a>(&self, input: &'a str) -> &'a str {
+        self.value.substring_slice(input)
+    }
+}
+
+impl<'a, S: CommandSource> ParsingResult<'a, S> {
+    /// Extracts signable arguments from a complete parse without normalizing
+    /// their source text.
+    ///
+    /// `None` means that the selected parse did not consume the complete input
+    /// or recorded a parse error. A successful parse with no signable nodes
+    /// returns `Some(Vec::new())`, which is a valid first-class result.
+    #[must_use]
+    pub fn signable_arguments(&self) -> Option<Vec<SignableArgument>> {
+        if self.reader.peek().is_some() || !self.errors.is_empty() {
+            return None;
+        }
+
+        let input = self.reader.string();
+        let mut result = Vec::new();
+        let mut context = Some(&self.context);
+
+        while let Some(current) = context {
+            for parsed_node in &current.nodes {
+                let AttachedNode::Argument(argument_node) =
+                    &current.dispatcher.tree[parsed_node.node]
+                else {
+                    continue;
+                };
+
+                if !argument_node.meta.signable {
+                    continue;
+                }
+                if input
+                    .get(parsed_node.range.start..parsed_node.range.end)
+                    .is_none()
+                {
+                    return None;
+                }
+
+                result.push(SignableArgument {
+                    name: argument_node.meta.name.to_string(),
+                    value: parsed_node.range,
+                    node: parsed_node.node,
+                });
+            }
+            context = current.child.as_deref();
+        }
+
+        Some(result)
+    }
 }
 
 /// Structs implementing this trait are able to execute upon command completion.
@@ -1270,5 +1341,131 @@ mod test {
         assert_eq!(dispatcher.execute_input("//set", &source), Ok(42));
         // Execution via /set alias (as sent by Java client for //set)
         assert_eq!(dispatcher.execute_input("/set", &source), Ok(42));
+    }
+}
+
+#[cfg(test)]
+mod signable_tests {
+    use super::CommandDispatcher;
+    use crate::argument_builder::{ArgumentBuilder, argument, command};
+    use crate::argument_types::core::integer::IntegerArgumentType;
+    use crate::argument_types::core::string::StringArgumentType;
+    use crate::node::Redirection;
+    use crate::source::DummySource;
+
+    #[test]
+    fn ordinary_string_argument_is_not_signable_by_default() {
+        let mut dispatcher = CommandDispatcher::new();
+        dispatcher.register(
+            command("say", "test").then(argument("message", StringArgumentType::SingleWord)),
+        );
+
+        let parsed = dispatcher.parse_input("say hello", &DummySource::dummy());
+        assert_eq!(parsed.signable_arguments(), Some(Vec::new()));
+    }
+
+    #[test]
+    fn quoted_escaped_unicode_argument_keeps_the_original_utf8_range() {
+        let mut dispatcher = CommandDispatcher::new();
+        dispatcher.register(
+            command("say", "test")
+                .then(argument("message", StringArgumentType::QuotablePhrase).signable()),
+        );
+
+        let input = "say \"🎃 \\\"é\\\"\"";
+        let parsed = dispatcher.parse_input(input, &DummySource::dummy());
+        let arguments = parsed.signable_arguments().expect("complete parse");
+        assert_eq!(arguments.len(), 1);
+
+        let argument = &arguments[0];
+        assert_eq!(argument.name, "message");
+        assert_eq!(argument.value.start, 4);
+        assert_eq!(argument.raw_value(input), &input[4..]);
+        assert_eq!(argument.raw_value(input), "\"🎃 \\\"é\\\"\"");
+        assert_eq!(argument.node, parsed.context.nodes[1].node);
+        assert_ne!(
+            argument.value.len(),
+            argument.raw_value(input).encode_utf16().count()
+        );
+    }
+
+    #[test]
+    fn multiple_arguments_preserve_order_and_typed_normalization_is_ignored() {
+        let mut dispatcher = CommandDispatcher::new();
+        dispatcher.register(
+            command("pair", "test").then(
+                argument("number", IntegerArgumentType::any())
+                    .signable()
+                    .then(argument("text", StringArgumentType::QuotablePhrase).signable()),
+            ),
+        );
+
+        let input = "pair 007 \"β\"";
+        let parsed = dispatcher.parse_input(input, &DummySource::dummy());
+        let arguments = parsed.signable_arguments().expect("complete parse");
+
+        assert_eq!(
+            arguments
+                .iter()
+                .map(|argument| (argument.name.as_str(), argument.raw_value(input)))
+                .collect::<Vec<_>>(),
+            vec![("number", "007"), ("text", "\"β\"")]
+        );
+        assert_ne!(arguments[0].node, arguments[1].node);
+    }
+
+    #[test]
+    fn greedy_argument_covers_the_remaining_raw_input() {
+        let mut dispatcher = CommandDispatcher::new();
+        dispatcher.register(
+            command("tell", "test")
+                .then(argument("message", StringArgumentType::GreedyPhrase).signable()),
+        );
+
+        let input = "tell raw  🎃 text";
+        let parsed = dispatcher.parse_input(input, &DummySource::dummy());
+        let arguments = parsed.signable_arguments().expect("complete parse");
+
+        assert_eq!(arguments[0].raw_value(input), "raw  🎃 text");
+        assert_eq!(arguments[0].value.start, 5);
+        assert_eq!(arguments[0].value.end, input.len());
+    }
+
+    #[test]
+    fn redirect_keeps_signable_argument_node_identity_and_path_order() {
+        let mut dispatcher = CommandDispatcher::new();
+        let target = dispatcher.register(
+            command("target", "test")
+                .then(argument("message", StringArgumentType::SingleWord).signable()),
+        );
+        dispatcher.register(command("alias", "test").redirect(Redirection::Local(target.into())));
+
+        let input = "alias hello";
+        let parsed = dispatcher.parse_input(input, &DummySource::dummy());
+        let arguments = parsed.signable_arguments().expect("complete parse");
+
+        assert_eq!(arguments.len(), 1);
+        assert_eq!(arguments[0].name, "message");
+        assert_eq!(arguments[0].raw_value(input), "hello");
+        assert_eq!(
+            parsed.context.child.as_ref().map(|child| child.nodes.len()),
+            Some(1)
+        );
+        assert_eq!(
+            arguments[0].node,
+            parsed.context.child.as_ref().unwrap().nodes[0].node
+        );
+    }
+
+    #[test]
+    fn parse_failure_does_not_expose_partial_signable_ranges() {
+        let mut dispatcher = CommandDispatcher::new();
+        dispatcher.register(
+            command("say", "test")
+                .then(argument("message", StringArgumentType::QuotablePhrase).signable()),
+        );
+
+        let parsed = dispatcher.parse_input("say \"unterminated", &DummySource::dummy());
+        assert_eq!(parsed.signable_arguments(), None);
     }
 }
