@@ -216,7 +216,7 @@ impl JavaClient {
         if !crate::net::chat::state::reset_inbound_state(
             player.gameprofile.id,
             session.session_id,
-            player.chat_owner_generation,
+            &player.chat_owner,
         ) {
             return;
         }

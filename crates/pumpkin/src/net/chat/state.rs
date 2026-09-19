@@ -1,12 +1,13 @@
 //! Transactional state for inbound 26.2 secure-chat messages.
 //!
-//! `ChatSession` currently does not own the inbound chain cursor, and changing
-//! the player entity is outside this task's ownership boundary. This module
-//! therefore keeps the small inbound cursor in a UUID-keyed sidecar. Ack state
+//! `ChatSession` currently does not own the inbound chain cursor, so this module
+//! keeps the small inbound cursor in a UUID-keyed sidecar. Ownership is supplied
+//! by a per-Player capability rather than a historical UUID tombstone. Ack state
 //! is never mutated until canonical signature verification succeeds.
 
 use std::collections::{HashMap, hash_map::Entry};
-use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use pumpkin_protocol::java::server::play::SChatMessage;
 use thiserror::Error;
@@ -14,17 +15,45 @@ use uuid::Uuid;
 
 use crate::entity::player::{LastSeenMessagesValidator, Player};
 
+/// Per-`Player` lifecycle capability used instead of a process-lifetime tombstone.
+///
+/// A disconnected or superseded player can retain an async task, but its token is
+/// permanently inactive. A replacement receives a different token, so rejecting
+/// late work does not require retaining one tombstone for every historical UUID.
+pub(crate) struct ChatOwnerToken {
+    active: AtomicBool,
+}
+
+impl ChatOwnerToken {
+    #[must_use]
+    pub(crate) fn new() -> Arc<Self> {
+        Arc::new(Self {
+            active: AtomicBool::new(true),
+        })
+    }
+
+    pub(crate) fn retire(&self) {
+        self.active.store(false, Ordering::Release);
+    }
+
+    #[must_use]
+    pub(crate) fn is_active(&self) -> bool {
+        self.active.load(Ordering::Acquire)
+    }
+}
+
 use super::signature::{ChatSignatureError, verify_chat_message_signature};
 use super::{SignedMessageBody, SignedMessageLink};
 
 const ACK_UPDATE_LEN: usize = 3;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 struct InboundChatState {
     session_id: Uuid,
-    /// Identity of the Player allocation that most recently committed this
-    /// session. This is a connection generation without changing Player.
-    owner_generation: Option<u64>,
+    /// Weak identity of the live Player owner. The Player token is retired on
+    /// disconnect or duplicate-login supersession, so this state does not keep
+    /// historical owners alive.
+    owner: Weak<ChatOwnerToken>,
     next_index: i32,
     last_timestamp_epoch_millis: Option<i64>,
     broken: bool,
@@ -34,7 +63,7 @@ impl InboundChatState {
     fn new(session_id: Uuid) -> Self {
         Self {
             session_id,
-            owner_generation: None,
+            owner: Weak::new(),
             next_index: 0,
             last_timestamp_epoch_millis: None,
             broken: false,
@@ -104,10 +133,9 @@ pub enum ChatStateError {
 
 #[derive(Default)]
 struct InboundStateStore {
+    /// Only currently installed UUID state is retained. Retired ownership lives
+    /// in the Player token and therefore disappears with that Player/task graph.
     states: HashMap<Uuid, InboundChatState>,
-    /// The highest retired Player generation for each UUID. Keeping this tombstone
-    /// prevents a delayed task from recreating state after disconnect cleanup.
-    retired_generations: HashMap<Uuid, u64>,
 }
 
 static INBOUND_STATE: OnceLock<Mutex<InboundStateStore>> = OnceLock::new();
@@ -118,70 +146,82 @@ fn inbound_state() -> &'static Mutex<InboundStateStore> {
 
 /// Installs the inbound cursor after the existing session certificate checks pass.
 ///
-/// Repeating the exact same session update is deliberately a no-op. The explicit
-/// Player generation is the lifecycle owner; a delayed old connection cannot
+/// Repeating the exact same session update is deliberately a no-op. The
+/// Player token is the lifecycle owner; a delayed old connection cannot
 /// replace a newer owner, and a retired owner cannot recreate a cleared state.
 pub(crate) fn reset_inbound_state(
     player_id: Uuid,
     session_id: Uuid,
-    owner_generation: u64,
+    owner: &Arc<ChatOwnerToken>,
 ) -> bool {
+    if !owner.is_active() {
+        return false;
+    }
     let mut store = inbound_state()
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    if store
-        .retired_generations
+    if !owner.is_active() {
+        return false;
+    }
+    if let Some(current_owner) = store
+        .states
         .get(&player_id)
-        .is_some_and(|retired| owner_generation <= *retired)
+        .and_then(|state| state.owner.upgrade())
+        && !Arc::ptr_eq(&current_owner, owner)
+        && current_owner.is_active()
     {
+        // Server::add_player retires the previous duplicate-UUID owner before
+        // the replacement installs chat state. Refuse an active split-brain
+        // owner as a defensive invariant if that publication is bypassed.
         return false;
     }
     match store.states.entry(player_id) {
         Entry::Occupied(mut entry) => {
             let state = entry.get_mut();
-            if let Some(current_owner) = state.owner_generation
-                && owner_generation < current_owner
+            if state
+                .owner
+                .upgrade()
+                .is_some_and(|current| Arc::ptr_eq(&current, owner))
+                && state.session_id == session_id
             {
-                return false;
-            }
-            if state.owner_generation == Some(owner_generation) && state.session_id == session_id {
                 return true;
             }
             *state = InboundChatState {
                 session_id,
-                owner_generation: Some(owner_generation),
+                owner: Arc::downgrade(owner),
                 ..InboundChatState::new(session_id)
             };
         }
         Entry::Vacant(entry) => {
-            let mut state = InboundChatState::new(session_id);
-            state.owner_generation = Some(owner_generation);
-            entry.insert(state);
+            entry.insert(InboundChatState {
+                session_id,
+                owner: Arc::downgrade(owner),
+                ..InboundChatState::new(session_id)
+            });
         }
     }
     true
 }
 
-/// Retires a disconnect owner and clears only its matching installed session.
+/// Clears only a matching installed session for the supplied owner token.
 ///
-/// The retirement tombstone and removal are one state-store operation. This is
-/// the ABA boundary: after this returns, a late task from this Player generation
-/// cannot recreate or mutate the UUID-keyed sidecar.
+/// The caller retires the token while holding the Player lifecycle lock before
+/// calling this function. That is the ABA boundary: after retirement, a late
+/// task cannot recreate or mutate the UUID-keyed sidecar.
 pub(crate) fn clear_inbound_state(
     player_id: Uuid,
     session_id: Uuid,
-    owner_generation: u64,
+    owner: &Arc<ChatOwnerToken>,
 ) -> bool {
     let mut store = inbound_state()
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    store
-        .retired_generations
-        .entry(player_id)
-        .and_modify(|retired| *retired = (*retired).max(owner_generation))
-        .or_insert(owner_generation);
     if store.states.get(&player_id).is_some_and(|state| {
-        state.session_id == session_id && state.owner_generation == Some(owner_generation)
+        state.session_id == session_id
+            && state
+                .owner
+                .upgrade()
+                .is_some_and(|current| Arc::ptr_eq(&current, owner))
     }) {
         store.states.remove(&player_id);
         true
@@ -217,8 +257,12 @@ pub fn verify_and_commit(
     let Some(mut state) = store.states.get(&player_id).cloned() else {
         return Err(ChatStateError::LifecycleMismatch);
     };
-    if state.owner_generation != Some(player.chat_owner_generation)
+    if !player.chat_owner.is_active()
         || state.session_id != session_id
+        || !state
+            .owner
+            .upgrade()
+            .is_some_and(|owner| Arc::ptr_eq(&owner, &player.chat_owner))
     {
         return Err(ChatStateError::LifecycleMismatch);
     }
@@ -328,17 +372,67 @@ fn java_byte_array_hash(bytes: &[u8]) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::{
-        ChatStateError, InboundChatState, clear_inbound_state, inbound_state, last_seen_checksum,
-        preview_last_seen, reset_inbound_state,
+        ChatOwnerToken, ChatStateError, InboundChatState, clear_inbound_state, inbound_state,
+        last_seen_checksum, preview_last_seen, reset_inbound_state, verify_and_commit,
     };
     use crate::entity::player::{LastSeenMessagesValidator, LastSeenTrackedEntry};
     use crate::net::chat::signature::canonical_bytes;
     use crate::net::chat::{SignedMessageBody, SignedMessageLink};
+    use crate::net::java::JavaClient;
+    use crate::net::java::pending::PendingConnection;
+    use crate::net::{ClientPlatform, GameProfile, PacketRateLimiter, PlayerConfig};
+    use arc_swap::ArcSwap;
+    use pumpkin_config::{AdvancedConfiguration, BasicConfiguration, TelemetryConfig};
+    use pumpkin_data::dimension::Dimension;
+    use pumpkin_protocol::codec::var_int::VarInt;
+    use pumpkin_protocol::java::server::play::SChatMessage;
     use sha2::{Digest, Sha256};
+    use std::net::SocketAddr;
+    use std::sync::Arc;
+    use tempfile::TempDir;
+    use tokio::net::{TcpListener, TcpStream};
     use uuid::Uuid;
 
     fn state() -> InboundChatState {
         InboundChatState::new(Uuid::from_u128(10))
+    }
+
+    fn owner() -> Arc<ChatOwnerToken> {
+        ChatOwnerToken::new()
+    }
+
+    fn test_vanilla_data() -> crate::data::VanillaData {
+        crate::data::VanillaData {
+            banned_ip_list: std::sync::RwLock::new(Default::default()),
+            banned_player_list: std::sync::RwLock::new(Default::default()),
+            operator_config: std::sync::RwLock::new(Default::default()),
+            user_cache: std::sync::RwLock::new(Default::default()),
+            whitelist_config: std::sync::RwLock::new(Default::default()),
+        }
+    }
+
+    async fn runtime_java_client(profile: &GameProfile) -> Arc<ClientPlatform> {
+        let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
+            .await
+            .expect("fixture listener");
+        let address = listener.local_addr().expect("fixture listener address");
+        let connector = tokio::spawn(TcpStream::connect(address));
+        let (server_stream, peer_address) = listener.accept().await.expect("fixture accept");
+        let _peer = connector
+            .await
+            .expect("fixture connector task")
+            .expect("fixture connect");
+        let pending = PendingConnection::new(
+            server_stream,
+            peer_address,
+            1,
+            PacketRateLimiter::new(false, 0.0, 0.0),
+        );
+        Arc::new(ClientPlatform::Java(JavaClient::from_pending(
+            pending,
+            profile.clone(),
+            PlayerConfig::default(),
+        )))
     }
 
     #[test]
@@ -468,7 +562,8 @@ mod tests {
     fn same_session_reset_is_idempotent() {
         let player_id = Uuid::from_u128(0x100);
         let session_id = Uuid::from_u128(0x101);
-        assert!(reset_inbound_state(player_id, session_id, 1));
+        let owner = owner();
+        assert!(reset_inbound_state(player_id, session_id, &owner));
         {
             let mut store = inbound_state()
                 .lock()
@@ -478,7 +573,7 @@ mod tests {
             state.broken = true;
         }
 
-        assert!(reset_inbound_state(player_id, session_id, 1));
+        assert!(reset_inbound_state(player_id, session_id, &owner));
 
         let state = inbound_state()
             .lock()
@@ -490,7 +585,7 @@ mod tests {
         assert_eq!(state.session_id, session_id);
         assert_eq!(state.next_index, 4);
         assert!(state.broken);
-        assert!(clear_inbound_state(player_id, session_id, 1));
+        assert!(clear_inbound_state(player_id, session_id, &owner));
     }
 
     #[test]
@@ -498,10 +593,11 @@ mod tests {
         let player_id = Uuid::from_u128(0x200);
         let old_session = Uuid::from_u128(0x201);
         let new_session = Uuid::from_u128(0x202);
-        assert!(reset_inbound_state(player_id, old_session, 1));
-        assert!(reset_inbound_state(player_id, new_session, 1));
+        let owner = owner();
+        assert!(reset_inbound_state(player_id, old_session, &owner));
+        assert!(reset_inbound_state(player_id, new_session, &owner));
 
-        assert!(!clear_inbound_state(player_id, old_session, 1));
+        assert!(!clear_inbound_state(player_id, old_session, &owner));
         assert_eq!(
             inbound_state()
                 .lock()
@@ -511,46 +607,53 @@ mod tests {
                 .map(|state| state.session_id),
             Some(new_session)
         );
-        assert!(clear_inbound_state(player_id, new_session, 1));
+        assert!(clear_inbound_state(player_id, new_session, &owner));
     }
 
     #[test]
-    fn old_player_generation_cannot_clear_same_session_replacement() {
+    fn old_player_token_cannot_clear_same_session_replacement() {
         let player_id = Uuid::from_u128(0x250);
         let session_id = Uuid::from_u128(0x251);
-        assert!(reset_inbound_state(player_id, session_id, 22));
+        let old_owner = owner();
+        let new_owner = owner();
+        assert!(reset_inbound_state(player_id, session_id, &new_owner));
 
-        assert!(!clear_inbound_state(player_id, session_id, 11));
-        assert!(clear_inbound_state(player_id, session_id, 22));
+        assert!(!clear_inbound_state(player_id, session_id, &old_owner));
+        assert!(clear_inbound_state(player_id, session_id, &new_owner));
     }
 
     #[test]
-    fn newer_player_generation_replaces_old_state() {
+    fn retired_owner_is_replaced_only_after_duplicate_login_publication() {
         let player_id = Uuid::from_u128(0x260);
         let old_session = Uuid::from_u128(0x261);
         let new_session = Uuid::from_u128(0x262);
-        assert!(reset_inbound_state(player_id, old_session, 11));
-        assert!(reset_inbound_state(player_id, new_session, 22));
-        assert!(!clear_inbound_state(player_id, old_session, 11));
+        let old_owner = owner();
+        let new_owner = owner();
+        assert!(reset_inbound_state(player_id, old_session, &old_owner));
+        old_owner.retire();
+        assert!(reset_inbound_state(player_id, new_session, &new_owner));
+        assert!(!clear_inbound_state(player_id, old_session, &old_owner));
         assert_eq!(
             inbound_state()
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .states
                 .get(&player_id)
-                .map(|state| (state.session_id, state.owner_generation)),
-            Some((new_session, Some(22)))
+                .map(|state| state.session_id),
+            Some(new_session)
         );
-        assert!(clear_inbound_state(player_id, new_session, 22));
+        assert!(clear_inbound_state(player_id, new_session, &new_owner));
     }
 
     #[test]
-    fn late_old_generation_cannot_recreate_after_cleanup() {
+    fn late_retired_owner_cannot_recreate_after_cleanup() {
         let player_id = Uuid::from_u128(0x275);
         let session_id = Uuid::from_u128(0x276);
-        assert!(reset_inbound_state(player_id, session_id, 11));
-        assert!(clear_inbound_state(player_id, session_id, 11));
-        assert!(!reset_inbound_state(player_id, session_id, 11));
+        let owner = owner();
+        assert!(reset_inbound_state(player_id, session_id, &owner));
+        owner.retire();
+        assert!(clear_inbound_state(player_id, session_id, &owner));
+        assert!(!reset_inbound_state(player_id, session_id, &owner));
         assert!(
             !inbound_state()
                 .lock()
@@ -560,11 +663,225 @@ mod tests {
         );
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn duplicate_login_runtime_preserves_new_owner_transfer_and_bounded_state() {
+        let temp_world = TempDir::new().expect("temporary runtime world");
+        let mut basic = BasicConfiguration::default();
+        basic.default_level_name = temp_world.path().to_string_lossy().into_owned();
+        basic.allow_nether = true;
+        basic.allow_end = false;
+        basic.allow_chat_reports = false;
+        basic.use_favicon = false;
+
+        let mut advanced = AdvancedConfiguration::default();
+        advanced.logging.enabled = false;
+        advanced.plugins.enabled = false;
+        advanced.commands.use_console = false;
+        advanced.commands.use_tty = false;
+        advanced.networking.java.enabled = false;
+        advanced.networking.bedrock.enabled = false;
+        advanced.networking.query.enabled = false;
+        advanced.networking.lan_broadcast.enabled = false;
+        advanced.networking.rcon.enabled = false;
+        let server = crate::server::Server::new(
+            basic,
+            advanced,
+            TelemetryConfig {
+                enabled: false,
+                ..TelemetryConfig::default()
+            },
+            test_vanilla_data(),
+        )
+        .await;
+
+        let player_id = Uuid::from_u128(0x26_2_0001);
+        let profile = GameProfile {
+            id: player_id,
+            name: "runtime_duplicate".to_string(),
+            properties: ArcSwap::from_pointee(Vec::new()),
+            profile_actions: None,
+        };
+        let client = runtime_java_client(&profile).await;
+        let listed_config = PlayerConfig {
+            server_listing: true,
+            ..PlayerConfig::default()
+        };
+        let (old, old_world) = server
+            .add_player(client.clone(), profile.clone(), Some(listed_config.clone()))
+            .expect("old runtime player published");
+        let old_session = Uuid::from_u128(0x26_2_0002);
+        assert!(reset_inbound_state(player_id, old_session, &old.chat_owner));
+        old.chat_session
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .session_id = old_session;
+
+        // This is the production Server::add_player -> World::add_player path,
+        // not a pure state helper. Publication retires the old Player token.
+        let (new, _new_world) = server
+            .add_player(client, profile, Some(listed_config))
+            .expect("new duplicate runtime player published");
+        assert!(!old.chat_owner.is_active());
+        let new_session = Uuid::from_u128(0x26_2_0003);
+        assert!(reset_inbound_state(player_id, new_session, &new.chat_owner));
+        new.chat_session
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .session_id = new_session;
+        assert!(!reset_inbound_state(
+            player_id,
+            old_session,
+            &old.chat_owner
+        ));
+
+        let signature = [0_u8; 256];
+        let late_message = SChatMessage {
+            message: "late",
+            timestamp: 1,
+            salt: 0,
+            signature: Some(&signature),
+            message_count: VarInt(0),
+            acknowledged: &[],
+            checksum: 0,
+        };
+        assert_eq!(
+            verify_and_commit(&old, old_session, &[], &late_message),
+            Err(ChatStateError::LifecycleMismatch)
+        );
+        assert_eq!(
+            inbound_state()
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .states
+                .get(&player_id)
+                .map(|state| state.session_id),
+            Some(new_session)
+        );
+
+        let overworld = server.get_world_from_dimension(&Dimension::OVERWORLD);
+        let nether = server.get_world_from_dimension(&Dimension::THE_NETHER);
+        // Exercise the same production detach/re-publish boundary used by
+        // Player::teleport_world without waiting for a fake socket's chunk ACKs.
+        let current_world = new.world();
+        current_world
+            .remove_player(&new, crate::world::PlayerRemovalReason::DimensionTransfer)
+            .await
+            .expect("new player detached for transfer");
+        new.change_world_chunks(&current_world.level, &nether);
+        new.living_entity.entity.set_world(nether.clone());
+        nether.players.rcu(|current_list| {
+            let mut new_list = (**current_list).clone();
+            new_list.push(new.clone());
+            new_list
+        });
+        assert!(Arc::ptr_eq(&new.world(), &nether));
+        assert!(reset_inbound_state(player_id, new_session, &new.chat_owner));
+        assert!(
+            nether
+                .players
+                .load()
+                .iter()
+                .any(|candidate| Arc::ptr_eq(candidate, &new))
+        );
+
+        old_world
+            .remove_player(&old, crate::world::PlayerRemovalReason::Disconnect)
+            .await;
+        server.remove_player(&old);
+        assert!(
+            nether
+                .players
+                .load()
+                .iter()
+                .any(|candidate| Arc::ptr_eq(candidate, &new))
+        );
+        assert!(
+            overworld
+                .entity_tracker
+                .entity_map
+                .get(&old.entity_id())
+                .is_none()
+        );
+        let listed_after_old_disconnect = server
+            .get_status()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .status_response
+            .players
+            .as_ref()
+            .expect("status players")
+            .online;
+        assert_eq!(listed_after_old_disconnect, 1);
+
+        let new_world = new.world();
+        new_world
+            .remove_player(&new, crate::world::PlayerRemovalReason::Disconnect)
+            .await;
+        server.remove_player(&new);
+        assert!(
+            !inbound_state()
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .states
+                .contains_key(&player_id)
+        );
+        let listed_after_new_disconnect = server
+            .get_status()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .status_response
+            .players
+            .as_ref()
+            .expect("status players")
+            .online;
+        assert_eq!(listed_after_new_disconnect, 0);
+
+        // Repeated real Player/World/CachedStatus publication and disconnect
+        // must not leave one retired entry per connection in the global store.
+        for _ in 0..32 {
+            let profile = GameProfile {
+                id: player_id,
+                name: "runtime_duplicate".to_string(),
+                properties: ArcSwap::from_pointee(Vec::new()),
+                profile_actions: None,
+            };
+            let (cycle, cycle_world) = server
+                .add_player(
+                    runtime_java_client(&profile).await,
+                    profile,
+                    Some(PlayerConfig {
+                        server_listing: true,
+                        ..PlayerConfig::default()
+                    }),
+                )
+                .expect("bounded-cycle player published");
+            let session = Uuid::new_v4();
+            assert!(reset_inbound_state(player_id, session, &cycle.chat_owner));
+            cycle
+                .chat_session
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .session_id = session;
+            cycle_world
+                .remove_player(&cycle, crate::world::PlayerRemovalReason::Disconnect)
+                .await;
+            server.remove_player(&cycle);
+            assert!(
+                !inbound_state()
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .states
+                    .contains_key(&player_id)
+            );
+        }
+    }
+
     #[test]
     fn broken_chain_is_removed_by_matching_disconnect_cleanup() {
         let player_id = Uuid::from_u128(0x300);
         let session_id = Uuid::from_u128(0x301);
-        assert!(reset_inbound_state(player_id, session_id, 1));
+        let owner = owner();
+        assert!(reset_inbound_state(player_id, session_id, &owner));
         inbound_state()
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -573,7 +890,7 @@ mod tests {
             .expect("installed state")
             .broken = true;
 
-        assert!(clear_inbound_state(player_id, session_id, 1));
+        assert!(clear_inbound_state(player_id, session_id, &owner));
         assert!(
             !inbound_state()
                 .lock()

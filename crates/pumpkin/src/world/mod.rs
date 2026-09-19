@@ -5221,16 +5221,16 @@ impl World {
                     .chat_lifecycle
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner);
+                // Retire before taking the state-store lock. Any delayed
+                // session update/verify using this Player then fails without a
+                // historical UUID tombstone.
+                player.chat_owner.retire();
                 let session_id = player
                     .chat_session
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
                     .session_id;
-                crate::net::chat::state::clear_inbound_state(
-                    uuid,
-                    session_id,
-                    player.chat_owner_generation,
-                );
+                crate::net::chat::state::clear_inbound_state(uuid, session_id, &player.chat_owner);
             }
 
             if replacement_is_present {

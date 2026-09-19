@@ -703,6 +703,10 @@ impl Server {
             'after: {
                 player.screen_handler_sync_handler.store_player(player.clone());
                 world.add_player(&player).is_ok().then(|| {
+                    // Publish the new owner before any delayed session task can
+                    // install state for it. Old duplicate-UUID tasks retain
+                    // their Player but their capability is now inactive.
+                    self.retire_duplicate_chat_owners(&player);
                     {
                         let mut user_cache = self
                             .data
@@ -732,6 +736,21 @@ impl Server {
                 None
             }
         }}
+    }
+
+    fn retire_duplicate_chat_owners(&self, replacement: &Arc<Player>) {
+        let uuid = replacement.gameprofile.id;
+        for world in self.worlds.load().iter() {
+            for candidate in world.players.load().iter() {
+                if candidate.gameprofile.id == uuid && !Arc::ptr_eq(candidate, replacement) {
+                    let _chat_lifecycle = candidate
+                        .chat_lifecycle
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    candidate.chat_owner.retire();
+                }
+            }
+        }
     }
 
     fn has_player_replacement(&self, player: &Player) -> bool {

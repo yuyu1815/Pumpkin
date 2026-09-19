@@ -6,9 +6,7 @@ use std::collections::{HashMap, VecDeque};
 use std::f64::consts::TAU;
 use std::num::NonZero;
 use std::str::FromStr;
-use std::sync::atomic::{
-    AtomicBool, AtomicI8, AtomicI32, AtomicU8, AtomicU32, AtomicU64, Ordering,
-};
+use std::sync::atomic::{AtomicBool, AtomicI8, AtomicI32, AtomicU8, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 
@@ -400,8 +398,6 @@ pub enum SpamType {
     Command,
 }
 
-static NEXT_CHAT_OWNER_GENERATION: AtomicU64 = AtomicU64::new(1);
-
 pub struct Player {
     /// The underlying living entity object that represents the player.
     pub living_entity: LivingEntity,
@@ -508,8 +504,8 @@ pub struct Player {
     pub chat_session: Arc<Mutex<ChatSession>>,
     /// Serializes chat session installation, secure-message verification, and disconnect retirement.
     pub(crate) chat_lifecycle: Mutex<()>,
-    /// Monotonic connection owner token; unlike an allocation address it cannot ABA-reuse.
-    pub(crate) chat_owner_generation: u64,
+    /// Per-connection capability retired on disconnect or duplicate-login supersession.
+    pub(crate) chat_owner: Arc<crate::net::chat::state::ChatOwnerToken>,
     pub signature_cache: Mutex<MessageCache>,
     pub player_screen_handler: Arc<std::sync::Mutex<PlayerScreenHandler>>,
     pub current_screen_handler: std::sync::Mutex<Arc<std::sync::Mutex<dyn ScreenHandler>>>,
@@ -813,7 +809,7 @@ impl Player {
             root_vehicle_uuid: AtomicCell::new(None),
             chat_session: Arc::new(Mutex::new(ChatSession::default())), // Placeholder value until the player actually sets their session id
             chat_lifecycle: Mutex::new(()),
-            chat_owner_generation: NEXT_CHAT_OWNER_GENERATION.fetch_add(1, Ordering::Relaxed),
+            chat_owner: crate::net::chat::state::ChatOwnerToken::new(),
             signature_cache: Mutex::new(MessageCache::default()),
             player_screen_handler: player_screen_handler.clone(),
             current_screen_handler: std::sync::Mutex::new(player_screen_handler),
