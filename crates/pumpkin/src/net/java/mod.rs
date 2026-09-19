@@ -344,9 +344,11 @@ enum OutgoingPacketOrigin {
     Raw,
 }
 
+type EgressCompletion = Result<(), ()>;
+
 struct OutgoingPacket {
     data: Bytes,
-    completion: Option<oneshot::Sender<()>>,
+    completion: Option<oneshot::Sender<EgressCompletion>>,
     pending_bytes: Arc<AtomicUsize>,
     version: JavaMinecraftVersion,
     connection_state: ConnectionState,
@@ -356,10 +358,18 @@ struct OutgoingPacket {
     kind: OutgoingPacketKind,
 }
 
+impl OutgoingPacket {
+    fn complete_success(mut self) {
+        if let Some(completion) = self.completion.take() {
+            let _ = completion.send(Ok(()));
+        }
+    }
+}
+
 impl Drop for OutgoingPacket {
     fn drop(&mut self) {
         if let Some(completion) = self.completion.take() {
-            let _ = completion.send(());
+            let _ = completion.send(Err(()));
         }
         release_pending_bytes(&self.pending_bytes, self.data.len());
     }
@@ -372,9 +382,9 @@ struct EgressGate {
 fn try_reserve_pending_bytes(pending_bytes: &AtomicUsize, bytes: usize) -> Result<usize, usize> {
     let mut current = pending_bytes.load(Ordering::Acquire);
     loop {
-        let next = current
-            .checked_add(bytes)
-            .expect("pending egress byte counter overflow");
+        let Some(next) = current.checked_add(bytes) else {
+            return Err(usize::MAX);
+        };
         if next > MAX_PENDING_BYTES {
             return Err(next);
         }
@@ -445,7 +455,7 @@ fn trace_egress(
 impl OutgoingPacket {
     fn new(
         data: Bytes,
-        completion: Option<oneshot::Sender<()>>,
+        completion: Option<oneshot::Sender<EgressCompletion>>,
         version: JavaMinecraftVersion,
         connection_state: ConnectionState,
         configuration_phase: ConfigurationPhase,
@@ -549,7 +559,7 @@ impl JavaClient {
     fn enqueue_encoded(
         &self,
         data: Bytes,
-        completion: Option<oneshot::Sender<()>>,
+        completion: Option<oneshot::Sender<EgressCompletion>>,
         forced_phase: Option<ConfigurationPhase>,
         kind: OutgoingPacketKind,
         origin: OutgoingPacketOrigin,
@@ -637,7 +647,7 @@ impl JavaClient {
         kind: OutgoingPacketKind,
         origin: OutgoingPacketOrigin,
         force_main_queue: bool,
-    ) -> Option<oneshot::Receiver<()>> {
+    ) -> Option<oneshot::Receiver<EgressCompletion>> {
         let (completion_tx, completion_rx) = oneshot::channel();
         if !self.enqueue_encoded(
             data,
@@ -667,7 +677,10 @@ impl JavaClient {
 
         let data = match self.serialize_packet(&CStartConfiguration) {
             Ok(data) => data,
-            Err(_) => return false,
+            Err(_) => {
+                self.close();
+                return false;
+            }
         };
         let (completion_tx, completion_rx) = oneshot::channel();
         {
@@ -721,7 +734,7 @@ impl JavaClient {
             }
         }
 
-        if completion_rx.await.is_err() {
+        if !matches!(completion_rx.await, Ok(Ok(()))) {
             trace_egress(
                 &self.egress_trace_file,
                 &self.egress_trace_lock,
@@ -1265,18 +1278,31 @@ impl JavaClient {
         };
 
         if let Some(data) = serialized {
-            let _ = self.enqueue_encoded(
+            if let Some(completion) = self.enqueue_encoded_wait(
                 data,
-                None,
                 None,
                 OutgoingPacketKind::Data,
                 OutgoingPacketOrigin::Typed,
                 true,
-            );
+            ) {
+                let close_token = self.close_token.clone();
+                if self
+                    .spawn_task(async move {
+                        let _ = completion.await;
+                        close_token.cancel();
+                    })
+                    .is_none()
+                {
+                    self.close();
+                }
+            } else {
+                self.close();
+            }
+        } else {
+            self.close();
         }
         let reason_text = reason.clone().get_text();
         warn!("Closing connection for {}: {reason_text}", self.id);
-        self.close();
     }
 
     pub async fn kick(&self, reason: TextComponent) {
@@ -1311,24 +1337,32 @@ impl JavaClient {
     }
 
     pub async fn send_packet_now_data(&self, packet: Bytes) {
-        self.send_packet_now_data_inner(packet, OutgoingPacketOrigin::Raw)
+        let _ = self
+            .send_packet_now_data_inner(packet, OutgoingPacketOrigin::Raw)
             .await;
     }
 
     pub(crate) async fn send_packet_now_data_typed(&self, packet: Bytes) {
-        self.send_packet_now_data_inner(packet, OutgoingPacketOrigin::Typed)
+        let _ = self
+            .send_packet_now_data_inner(packet, OutgoingPacketOrigin::Typed)
             .await;
     }
 
-    async fn send_packet_now_data_inner(&self, packet: Bytes, origin: OutgoingPacketOrigin) {
+    async fn send_packet_now_data_inner(
+        &self,
+        packet: Bytes,
+        origin: OutgoingPacketOrigin,
+    ) -> EgressCompletion {
         let Some(completion_rx) =
             self.enqueue_encoded_wait(packet, None, OutgoingPacketKind::Data, origin, false)
         else {
-            return;
+            return Err(());
         };
-        if completion_rx.await.is_err() && !self.close_token.is_cancelled() {
+        let result = completion_rx.await.unwrap_or(Err(()));
+        if result.is_err() && !self.close_token.is_cancelled() {
             self.close();
         }
+        result
     }
 
     pub fn write_packet_for_version<P: ClientPacket>(
@@ -1365,7 +1399,8 @@ impl JavaClient {
 
     pub async fn send_packet<P: ClientPacket>(&self, packet: &P) {
         if let Ok(data) = self.serialize_packet(packet) {
-            self.send_packet_now_data_inner(data, OutgoingPacketOrigin::Typed)
+            let _ = self
+                .send_packet_now_data_inner(data, OutgoingPacketOrigin::Typed)
                 .await;
         }
     }
@@ -1408,6 +1443,7 @@ impl JavaClient {
             return;
         };
         let close_token = self.close_token.clone();
+        let egress_gate = self.egress_gate.clone();
         let trace_file = self.egress_trace_file.clone();
         let trace_lock = self.egress_trace_lock.clone();
         let writer_version = self.version.load();
@@ -1429,10 +1465,17 @@ impl JavaClient {
             let mut writer_epoch = 0u64;
             let mut reconfiguration_started = false;
             let mut finish_sent = false;
+            let clear_deferred = || {
+                egress_gate
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .deferred_play
+                    .clear();
+            };
             loop {
                 let recv_result = tokio::select! {
                     res = packet_receiver.recv() => res,
-                    () = close_token.cancelled() => packet_receiver.try_recv().ok(),
+                    () = close_token.cancelled() => None,
                 };
 
                 let Some(packet_data) = recv_result else {
@@ -1519,6 +1562,7 @@ impl JavaClient {
                     trace_egress(&trace_file, &trace_lock, format_args!("FIRST {reason}"));
                     drop(packet_batch);
                     close_token.cancel();
+                    clear_deferred();
                     return;
                 }
 
@@ -1536,6 +1580,7 @@ impl JavaClient {
                                     warn!("Packet framing task failed for client {id}: {err}");
                                 }
                                 close_token.cancel();
+                                clear_deferred();
                                 return;
                             }
                         };
@@ -1591,11 +1636,15 @@ impl JavaClient {
                 if send_failed {
                     // We now need to close the connection to the client since the stream is in an unknown state.
                     close_token.cancel();
+                    clear_deferred();
                     break;
                 }
 
-                drop(written_packets);
+                for packet in written_packets {
+                    packet.complete_success();
+                }
             }
+            clear_deferred();
         });
     }
 
@@ -1677,16 +1726,9 @@ impl JavaClient {
                 let signed = SChatCommandSigned::read(&mut payload, &version)?;
                 require_empty_body(&payload, "signed chat command")?;
                 let signed = SignedCommandPacket::from(&signed);
-                let client_platform = player.client.clone();
-                let player_c = player.clone();
-                let server_c = server.clone();
-                server.spawn_task(async move {
-                    if let ClientPlatform::Java(client) = client_platform.as_ref() {
-                        client
-                            .handle_signed_chat_command(&player_c, &server_c, signed)
-                            .await;
-                    }
-                });
+                if let ClientPlatform::Java(client) = player.client.as_ref() {
+                    client.handle_signed_chat_command(player, server, signed);
+                }
             }
             id if id == SChatMessage::to_id(version) => {
                 let packet = SChatMessage::read(&mut payload, &version)?;
@@ -2119,15 +2161,20 @@ impl JavaClient {
 
 #[cfg(test)]
 mod egress_accounting_tests {
-    use super::{ConfigurationPhase, JavaClient};
+    use super::{ConfigurationPhase, JavaClient, OutgoingPacketOrigin};
     use crate::net::java::pending::PendingConnection;
     use crate::net::{GameProfile, PacketRateLimiter, PlayerConfig};
     use arc_swap::ArcSwap;
     use bytes::Bytes;
-    use pumpkin_protocol::ConnectionState;
+    use pumpkin_protocol::{ConnectionState, java::client::play::CPlayDisconnect};
+    use pumpkin_util::{text::TextComponent, version::JavaMinecraftVersion};
     use std::net::SocketAddr;
-    use std::sync::{Arc, atomic::Ordering};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
     use std::time::Duration;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::{TcpListener, TcpStream};
     use tokio::sync::Barrier;
     use tokio::time::timeout;
@@ -2175,6 +2222,60 @@ mod egress_accounting_tests {
     }
 
     #[tokio::test]
+    async fn successful_flush_notifies_completion_and_writes_on_actual_tcp_path() {
+        let (mut java, mut peer) = fixture().await;
+        java.connection_state.store(ConnectionState::Play);
+        java.start_outgoing_packet_task();
+
+        assert_eq!(
+            java.send_packet_now_data_inner(Bytes::from_static(&[0]), OutgoingPacketOrigin::Raw,)
+                .await,
+            Ok(())
+        );
+        let mut frame = [0; 8];
+        let read = timeout(Duration::from_secs(1), peer.read(&mut frame))
+            .await
+            .expect("successful flush did not reach the TCP peer")
+            .expect("TCP peer read failed");
+        assert!(read > 0, "successful flush wrote no frame");
+        assert!(!java.is_closed());
+        assert_eq!(java.pending_bytes.load(Ordering::Acquire), 0);
+
+        java.close();
+        java.await_tasks().await;
+    }
+
+    #[tokio::test]
+    async fn try_kick_flushes_disconnect_frame_before_close() {
+        let (mut java, mut peer) = fixture().await;
+        java.connection_state.store(ConnectionState::Play);
+        let expected = java
+            .serialize_packet(&CPlayDisconnect::new(&TextComponent::text("egress test")))
+            .expect("disconnect packet serialization");
+        java.start_outgoing_packet_task();
+
+        java.try_kick(&TextComponent::text("egress test"));
+        let mut frame = [0; 64];
+        let read = timeout(Duration::from_secs(1), peer.read(&mut frame))
+            .await
+            .expect("disconnect packet did not reach the TCP peer")
+            .expect("TCP peer read failed");
+        assert!(read > 0, "disconnect packet was not written");
+        assert!(
+            frame[..read]
+                .windows(expected.len())
+                .any(|window| window == expected.as_ref())
+        );
+        assert!(
+            timeout(Duration::from_secs(1), java.await_close_interrupt())
+                .await
+                .is_ok()
+        );
+        assert_eq!(java.pending_bytes.load(Ordering::Acquire), 0);
+        java.await_tasks().await;
+    }
+
+    #[tokio::test]
     async fn deferred_close_releases_bytes_and_unblocks_send_packet_now() {
         let (java, _peer) = fixture().await;
         java.connection_state.store(ConnectionState::Play);
@@ -2184,17 +2285,21 @@ mod egress_accounting_tests {
         let waiter_java = java.clone();
         let waiter = tokio::spawn(async move {
             waiter_java
-                .send_packet_now_data(Bytes::from_static(&[0]))
-                .await;
+                .send_packet_now_data_inner(Bytes::from_static(&[0]), OutgoingPacketOrigin::Raw)
+                .await
         });
         wait_for_pending(&java).await;
         for _ in 0..8 {
             java.close();
         }
-        timeout(Duration::from_secs(1), waiter)
-            .await
-            .expect("deferred send waiter remained pending")
-            .expect("deferred send waiter task panicked");
+        assert_eq!(
+            timeout(Duration::from_secs(1), waiter)
+                .await
+                .expect("deferred send waiter remained pending")
+                .expect("deferred send waiter task panicked"),
+            Err(())
+        );
+        assert!(java.is_closed());
         assert_eq!(java.pending_bytes.load(Ordering::Acquire), 0);
     }
 
@@ -2228,18 +2333,39 @@ mod egress_accounting_tests {
     }
 
     #[tokio::test]
+    async fn start_reconfiguration_sender_close_is_failure_and_releases_bytes() {
+        let (mut java, _peer) = fixture().await;
+        java.version.store(JavaMinecraftVersion::V_26_2);
+        java.connection_state.store(ConnectionState::Play);
+        java.configuration_phase.store(ConfigurationPhase::Play);
+        java.outgoing_packet_recv
+            .take()
+            .expect("fixture receiver must exist");
+
+        assert!(!java.start_reconfiguration().await);
+        assert!(java.is_closed());
+        assert_eq!(java.pending_bytes.load(Ordering::Acquire), 0);
+    }
+
+    #[tokio::test]
     async fn sender_closed_releases_packet_and_unblocks_waiter() {
         let (mut java, _peer) = fixture().await;
         java.outgoing_packet_recv
             .take()
             .expect("fixture receiver must exist");
         let java = Arc::new(java);
-        timeout(
-            Duration::from_secs(1),
-            java.send_packet_now_data(Bytes::from_static(&[0])),
-        )
-        .await
-        .expect("sender-closed waiter remained pending");
+        assert_eq!(
+            timeout(
+                Duration::from_secs(1),
+                java.send_packet_now_data_inner(
+                    Bytes::from_static(&[0]),
+                    OutgoingPacketOrigin::Raw,
+                ),
+            )
+            .await
+            .expect("sender-closed waiter remained pending"),
+            Err(())
+        );
         assert!(java.is_closed());
         assert_eq!(java.pending_bytes.load(Ordering::Acquire), 0);
     }
@@ -2250,12 +2376,49 @@ mod egress_accounting_tests {
         java.start_outgoing_packet_task();
         let java = Arc::new(java);
         let oversized = Bytes::from(vec![0; pumpkin_protocol::MAX_PACKET_DATA_SIZE + 1]);
-        timeout(Duration::from_secs(2), java.send_packet_now_data(oversized))
+        assert_eq!(
+            timeout(
+                Duration::from_secs(2),
+                java.send_packet_now_data_inner(oversized, OutgoingPacketOrigin::Raw),
+            )
             .await
-            .expect("writer-error waiter remained pending");
+            .expect("writer-error waiter remained pending"),
+            Err(())
+        );
         assert!(java.is_closed());
         assert_eq!(java.pending_bytes.load(Ordering::Acquire), 0);
         java.await_tasks().await;
+    }
+
+    #[tokio::test]
+    async fn closed_peer_reports_writer_failure_and_releases_bytes() {
+        let (mut java, mut peer) = fixture().await;
+        java.start_outgoing_packet_task();
+        peer.shutdown().await.expect("fixture peer shutdown");
+        drop(peer);
+
+        assert_eq!(
+            timeout(
+                Duration::from_secs(2),
+                java.send_packet_now_data_inner(
+                    Bytes::from(vec![0; pumpkin_protocol::MAX_PACKET_DATA_SIZE]),
+                    OutgoingPacketOrigin::Raw,
+                ),
+            )
+            .await
+            .expect("writer failure waiter remained pending"),
+            Err(())
+        );
+        assert!(java.is_closed());
+        assert_eq!(java.pending_bytes.load(Ordering::Acquire), 0);
+        java.await_tasks().await;
+    }
+
+    #[test]
+    fn pending_reservation_overflow_is_rejected_without_wrapping() {
+        let pending = AtomicUsize::new(usize::MAX);
+        assert!(super::try_reserve_pending_bytes(&pending, 1).is_err());
+        assert_eq!(pending.load(Ordering::Acquire), usize::MAX);
     }
 }
 
