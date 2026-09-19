@@ -182,6 +182,28 @@ class StructureTests(unittest.TestCase):
         h.verify_critical_mapping(mapping)
         self.assertEqual(h.packet_id(mapping, "status", "clientbound", "status_response"), 0)
         self.assertEqual(h.packet_id(mapping, "play", "clientbound", "keep_alive"), 44)
+        self.assertEqual(h.packet_id(mapping, "play", "clientbound", "start_configuration"), 118)
+        self.assertEqual(h.packet_id(mapping, "play", "serverbound", "configuration_acknowledged"), 16)
+
+    def test_reconfiguration_position_comparison_is_exactly_bounded(self):
+        position = {
+            "x": 1.0,
+            "y": 64.0,
+            "z": -2.0,
+            "delta_x": 0.0,
+            "delta_y": 0.0,
+            "delta_z": 0.0,
+            "yaw": 90.0,
+            "pitch": 0.0,
+            "relatives": 0,
+        }
+        same = dict(position)
+        same["x"] += 1e-10
+        changed = dict(position)
+        changed["x"] += 1e-6
+        self.assertTrue(h._positions_equal(position, same))
+        self.assertFalse(h._positions_equal(position, changed))
+        self.assertFalse(h._positions_equal(position, None))
 
     def test_status_payload_requires_protocol_776(self):
         payload = h.put_string('{"version":{"name":"26.2","protocol":776}}')

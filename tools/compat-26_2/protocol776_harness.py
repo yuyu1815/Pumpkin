@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Small, dependency-free protocol 776 status/login smoke harness.
+"""Small, dependency-free protocol 776 status/login/reconfiguration harness.
 
-This is deliberately not a Minecraft client.  It validates framing and the
+This is deliberately not a Minecraft client. It validates framing and the
 small set of packet structures it actually consumes; all other known packets
 are retained as opaque payloads and are never treated as evidence of client
-compatibility.
+compatibility. Reconfiguration mode is opt-in and waits for a server-owned
+Rust trigger; it never exposes or sends a public server command.
 """
 from __future__ import annotations
 
@@ -238,6 +239,8 @@ def verify_critical_mapping(mapping: dict[str, dict[str, dict[str, int]]]) -> No
         ("configuration", "clientbound", "finish_configuration"): 3,
         ("configuration", "clientbound", "keep_alive"): 4,
         ("configuration", "clientbound", "ping"): 5,
+        ("play", "serverbound", "configuration_acknowledged"): 16,
+        ("play", "clientbound", "start_configuration"): 118,
         ("play", "serverbound", "keep_alive"): 28,
         ("play", "serverbound", "pong"): 45,
         ("play", "serverbound", "accept_teleportation"): 0,
@@ -738,6 +741,7 @@ class StrictPlayTracker:
     ids: dict[str, int]
     known_ids: set[int]
     join_game: dict[str, Any] | None = None
+    position: dict[str, Any] | None = None
     position_syncs: int = 0
     teleport_confirms: list[int] | None = None
     first_chunk: dict[str, Any] | None = None
@@ -764,6 +768,7 @@ class StrictPlayTracker:
             if self.join_game is None:
                 raise HarnessError("invalid play state: position sync before Join Game")
             parsed = parse_player_position(frame.payload)
+            self.position = parsed
             self.position_syncs += 1
             return "teleport_confirm", parsed["teleport_id"]
         if frame.packet_id == self.ids["level_chunk_with_light"]:
@@ -1364,9 +1369,349 @@ def run_strict_play(
         }
 
 
+def _positions_equal(left: dict[str, Any] | None, right: dict[str, Any] | None) -> bool:
+    if left is None or right is None:
+        return left is right
+    return all(
+        math.isclose(float(left[name]), float(right[name]), rel_tol=0.0, abs_tol=1e-9)
+        for name in ("x", "y", "z", "delta_x", "delta_y", "delta_z", "yaw", "pitch")
+    ) and left["relatives"] == right["relatives"]
+
+
+def run_reconfiguration(
+    host: str,
+    port: int,
+    timeout: float,
+    username: str,
+    mapping: dict[str, dict[str, dict[str, int]]],
+    cycles: int = 2,
+    known_packs_case: str = "empty",
+    case: str = "normal",
+) -> dict[str, Any]:
+    """Wait for a server-owned Play reconfiguration trigger and validate its wire loop.
+
+    This is opt-in and intentionally never triggers the server. A Rust integration test must
+    call ``JavaClient::start_reconfiguration`` for each requested cycle after the baseline
+    Play state is established. The harness only proves a synthetic peer exchanged bounded,
+    state-correct packets; it does not prove vanilla-client acceptance.
+    """
+    cases = {
+        "normal", "duplicate_ack", "unsolicited_ack", "trailing_ack",
+        "early_finish", "duplicate_finish", "disconnect_during_config",
+    }
+    if case not in cases:
+        raise HarnessError(f"unsupported reconfiguration case: {case}")
+    if not 1 <= cycles <= 2:
+        raise HarnessError("reconfiguration cycles must be 1 or 2")
+    if known_packs_case not in ("empty", "legal_subset", "unknown", "exact"):
+        raise HarnessError(f"unsupported Known Packs response case: {known_packs_case}")
+    if not 1 <= len(username) <= 16 or not username.isascii() or not username.replace("_", "").isalnum():
+        raise HarnessError("username must be 1..16 ASCII alphanumeric/underscore characters")
+
+    clientbound, serverbound, known_config_clientbound = _configuration_ids(mapping)
+    play_ids = {
+        name: packet_id(mapping, "play", "clientbound", name)
+        for name in ("disconnect", "keep_alive", "ping", "login", "level_chunk_with_light", "player_position", "start_configuration")
+    }
+    play_server = {
+        name: packet_id(mapping, "play", "serverbound", name)
+        for name in ("configuration_acknowledged", "keep_alive", "pong", "accept_teleportation")
+    }
+    known_play_clientbound = set(mapping["play"]["clientbound"].values())
+    events: list[dict[str, Any]] = []
+
+    def record(direction: str, state: str, frame: Frame, event: str) -> None:
+        events.append({
+            "direction": direction,
+            "state": state,
+            "event": event,
+            "packet_id": frame.packet_id,
+            "payload_bytes": len(frame.payload),
+            "framed_length": frame.framed_length,
+            "compressed": frame.compressed,
+        })
+
+    def record_send(state: str, event: str, packet_id_value: int, payload: bytes) -> None:
+        events.append({
+            "direction": "serverbound",
+            "state": state,
+            "event": event,
+            "packet_id": packet_id_value,
+            "payload_bytes": len(payload),
+            "body_is_empty": not payload,
+        })
+
+    with socket.create_connection((host, port), timeout=timeout) as stream:
+        stream.settimeout(timeout)
+        compression, login_success, _, config_serverbound, _ = _login_to_configuration(
+            stream, timeout, username, mapping
+        )
+
+        # Initial Login -> Configuration -> Play has its own codecs and IDs. Do not reuse
+        # reconfiguration packet IDs as evidence for this first transition.
+        while True:
+            frame = read_frame(stream, compression)
+            if frame.packet_id not in known_config_clientbound:
+                raise HarnessError(f"unknown initial configuration packet id {frame.packet_id}")
+            if frame.packet_id == clientbound["disconnect"]:
+                raise HarnessError(f"server initial configuration disconnect: {parse_disconnect_reason(frame.payload, 'initial configuration disconnect')}")
+            if frame.packet_id == clientbound["select_known_packs"]:
+                request = parse_known_packs(frame.payload)
+                response = make_known_packs_response(request, known_packs_case)
+                payload = encode_known_packs(response)
+                write_packet(stream, config_serverbound["select_known_packs"], payload, compression)
+            elif frame.packet_id == clientbound["finish_configuration"]:
+                payload = b""
+                write_packet(stream, config_serverbound["finish_configuration"], payload, compression)
+                break
+            elif frame.packet_id == clientbound["keep_alive"]:
+                value = parse_i64(frame.payload, "initial configuration keep-alive")
+                payload = struct.pack(">q", value)
+                write_packet(stream, config_serverbound["keep_alive"], payload, compression)
+            elif frame.packet_id == clientbound["ping"]:
+                value = parse_i32(frame.payload, "initial configuration ping")
+                payload = struct.pack(">i", value)
+                write_packet(stream, config_serverbound["pong"], payload, compression)
+
+        tracker = StrictPlayTracker(
+            {name: value for name, value in play_ids.items() if name != "start_configuration"},
+            known_play_clientbound,
+        )
+        play_packets = 0
+
+        def consume_play(frame: Frame) -> str:
+            nonlocal play_packets
+            play_packets += 1
+            if frame.packet_id == play_ids["start_configuration"]:
+                require_end(frame.payload, 0, "start configuration")
+                record("clientbound", "play", frame, "start_configuration")
+                return "start_configuration"
+            before_position = tracker.position
+            action, value = tracker.accept(frame)
+            record("clientbound", "play", frame, action)
+            if action == "teleport_confirm":
+                assert value is not None
+                payload = encode_varint(value)
+                write_packet(stream, play_server["accept_teleportation"], payload, compression)
+                tracker.record_teleport_confirmation(value)
+                if before_position is not None and not _positions_equal(before_position, tracker.position):
+                    raise HarnessError("player position changed during reconfiguration")
+            elif action == "keep_alive":
+                assert value is not None
+                payload = struct.pack(">q", value)
+                write_packet(stream, play_server["keep_alive"], payload, compression)
+                tracker.record_keepalive_reply()
+            elif action == "ping":
+                assert value is not None
+                payload = struct.pack(">i", value)
+                write_packet(stream, play_server["pong"], payload, compression)
+            return action
+
+        # Establish a strict initial Play baseline before waiting for the server-owned seam.
+        while True:
+            frame = read_frame(stream, compression)
+            action = consume_play(frame)
+            if action == "start_configuration":
+                raise HarnessError("reconfiguration trigger arrived before initial Play baseline")
+            if tracker.join_game is not None and tracker.position_syncs and tracker.first_chunk is not None:
+                if tracker.keepalives_replied:
+                    tracker.require_complete()
+                    break
+        baseline_entity_id = tracker.join_game["entity_id"] if tracker.join_game else None
+        baseline_position = tracker.position
+
+        def wait_for_play_disconnect() -> str:
+            for _ in range(512):
+                frame = read_frame(stream, compression)
+                if frame.packet_id not in known_play_clientbound:
+                    raise HarnessError(f"unknown play packet during negative probe: {frame.packet_id}")
+                if frame.packet_id == play_ids["disconnect"]:
+                    reason = parse_disconnect_reason(frame.payload, "play disconnect")
+                    record("clientbound", "play", frame, "disconnect")
+                    return reason
+                action = consume_play(frame)
+                if action == "start_configuration":
+                    raise HarnessError("server started configuration during unsolicited/trailing negative probe")
+            raise HarnessError("negative Play probe exceeded 512 packets without disconnect")
+
+        def wait_for_config_disconnect() -> str:
+            for _ in range(512):
+                frame = read_frame(stream, compression)
+                if frame.packet_id not in known_config_clientbound:
+                    raise HarnessError(f"unknown configuration packet during negative probe: {frame.packet_id}")
+                if frame.packet_id == clientbound["disconnect"]:
+                    reason = parse_disconnect_reason(frame.payload, "configuration disconnect")
+                    record("clientbound", "configuration", frame, "disconnect")
+                    return reason
+                if frame.packet_id == clientbound["keep_alive"]:
+                    value = parse_i64(frame.payload, "configuration keep-alive")
+                    payload = struct.pack(">q", value)
+                    write_packet(stream, config_serverbound["keep_alive"], payload, compression)
+                    record("clientbound", "configuration", frame, "keep_alive")
+                    record_send("configuration", "keep_alive", config_serverbound["keep_alive"], payload)
+                elif frame.packet_id == clientbound["ping"]:
+                    value = parse_i32(frame.payload, "configuration ping")
+                    payload = struct.pack(">i", value)
+                    write_packet(stream, config_serverbound["pong"], payload, compression)
+                    record("clientbound", "configuration", frame, "ping")
+                    record_send("configuration", "pong", config_serverbound["pong"], payload)
+                else:
+                    record("clientbound", "configuration", frame, "opaque_configuration")
+            raise HarnessError("negative Configuration probe exceeded 512 packets without disconnect")
+
+        def wait_for_start_configuration() -> None:
+            for _ in range(2048):
+                frame = read_frame(stream, compression)
+                action = consume_play(frame)
+                if action == "start_configuration":
+                    return
+            raise HarnessError("server-owned reconfiguration trigger was not observed within 2048 Play packets")
+
+        if case == "unsolicited_ack":
+            payload = b""
+            write_packet(stream, play_server["configuration_acknowledged"], payload, compression)
+            record_send("play", "unsolicited_configuration_acknowledged", play_server["configuration_acknowledged"], payload)
+            reason = wait_for_play_disconnect()
+            return {
+                "mode": "reconfiguration", "case": case, "protocol": PROTOCOL,
+                "login_success": login_success, "baseline_entity_id": baseline_entity_id,
+                "baseline_position": baseline_position, "server_disconnect": True,
+                "disconnect_reason": reason, "result": "expected_unsolicited_ack_disconnect",
+                "real_client_compatibility": "not_claimed",
+            }
+
+        completed = 0
+        post_reconfiguration_keepalives = 0
+        for cycle in range(cycles):
+            wait_for_start_configuration()
+            payload = b""
+            write_packet(stream, play_server["configuration_acknowledged"], payload, compression)
+            record_send("play", "configuration_acknowledged", play_server["configuration_acknowledged"], payload)
+
+            if case == "duplicate_ack":
+                write_packet(stream, play_server["configuration_acknowledged"], payload, compression)
+                record_send("configuration", "duplicate_configuration_acknowledged", play_server["configuration_acknowledged"], payload)
+                reason = wait_for_config_disconnect()
+                return {
+                    "mode": "reconfiguration", "case": case, "protocol": PROTOCOL,
+                    "login_success": login_success, "baseline_entity_id": baseline_entity_id,
+                    "baseline_position": baseline_position, "server_disconnect": True,
+                    "disconnect_reason": reason, "result": "expected_duplicate_ack_disconnect",
+                    "real_client_compatibility": "not_claimed",
+                }
+            if case == "trailing_ack":
+                payload = b"\x00"
+                write_packet(stream, play_server["configuration_acknowledged"], payload, compression)
+                record_send("play", "trailing_configuration_acknowledged", play_server["configuration_acknowledged"], payload)
+                reason = wait_for_play_disconnect()
+                return {
+                    "mode": "reconfiguration", "case": case, "protocol": PROTOCOL,
+                    "login_success": login_success, "baseline_entity_id": baseline_entity_id,
+                    "baseline_position": baseline_position, "server_disconnect": True,
+                    "disconnect_reason": reason, "result": "expected_trailing_ack_disconnect",
+                    "real_client_compatibility": "not_claimed",
+                }
+            if case == "disconnect_during_config":
+                stream.shutdown(socket.SHUT_RDWR)
+                return {
+                    "mode": "reconfiguration", "case": case, "protocol": PROTOCOL,
+                    "login_success": login_success, "baseline_entity_id": baseline_entity_id,
+                    "baseline_position": baseline_position, "server_disconnect": "client_eof",
+                    "result": "client_disconnected_during_configuration",
+                    "real_client_compatibility": "not_claimed",
+                }
+
+            finish_seen = False
+            while True:
+                frame = read_frame(stream, compression)
+                if frame.packet_id not in known_config_clientbound:
+                    raise HarnessError(f"unknown reconfiguration packet id {frame.packet_id}")
+                if frame.packet_id == clientbound["disconnect"]:
+                    raise HarnessError(f"server reconfiguration disconnect: {parse_disconnect_reason(frame.payload, 'reconfiguration disconnect')}")
+                if frame.packet_id == clientbound["select_known_packs"]:
+                    request = parse_known_packs(frame.payload)
+                    response = make_known_packs_response(request, known_packs_case)
+                    payload = encode_known_packs(response)
+                    write_packet(stream, config_serverbound["select_known_packs"], payload, compression)
+                    record("clientbound", "configuration", frame, "select_known_packs")
+                    record_send("configuration", "select_known_packs", config_serverbound["select_known_packs"], payload)
+                    if case == "early_finish":
+                        payload = b""
+                        write_packet(stream, config_serverbound["finish_configuration"], payload, compression)
+                        record_send("configuration", "early_finish_configuration", config_serverbound["finish_configuration"], payload)
+                        reason = wait_for_config_disconnect()
+                        return {
+                            "mode": "reconfiguration", "case": case, "protocol": PROTOCOL,
+                            "login_success": login_success, "baseline_entity_id": baseline_entity_id,
+                            "baseline_position": baseline_position, "server_disconnect": True,
+                            "disconnect_reason": reason, "result": "expected_early_finish_disconnect",
+                            "real_client_compatibility": "not_claimed",
+                        }
+                elif frame.packet_id == clientbound["finish_configuration"]:
+                    record("clientbound", "configuration", frame, "finish_configuration")
+                    payload = b""
+                    write_packet(stream, config_serverbound["finish_configuration"], payload, compression)
+                    record_send("configuration", "finish_configuration", config_serverbound["finish_configuration"], payload)
+                    finish_seen = True
+                    if case == "duplicate_finish":
+                        write_packet(stream, config_serverbound["finish_configuration"], payload, compression)
+                        record_send("play", "duplicate_finish_configuration", config_serverbound["finish_configuration"], payload)
+                    break
+                elif frame.packet_id == clientbound["keep_alive"]:
+                    value = parse_i64(frame.payload, "reconfiguration keep-alive")
+                    payload = struct.pack(">q", value)
+                    write_packet(stream, config_serverbound["keep_alive"], payload, compression)
+                    record("clientbound", "configuration", frame, "keep_alive")
+                    record_send("configuration", "keep_alive", config_serverbound["keep_alive"], payload)
+                elif frame.packet_id == clientbound["ping"]:
+                    value = parse_i32(frame.payload, "reconfiguration ping")
+                    payload = struct.pack(">i", value)
+                    write_packet(stream, config_serverbound["pong"], payload, compression)
+                    record("clientbound", "configuration", frame, "ping")
+                    record_send("configuration", "pong", config_serverbound["pong"], payload)
+                else:
+                    record("clientbound", "configuration", frame, "opaque_configuration")
+            if not finish_seen:
+                raise HarnessError("reconfiguration ended without Finish Configuration")
+
+            # The Finish ack must return to the same Play connection. A Join Game is
+            # forbidden here; any later position packet must equal the baseline exactly.
+            for _ in range(2048):
+                frame = read_frame(stream, compression)
+                action = consume_play(frame)
+                if action == "start_configuration":
+                    raise HarnessError("second configuration trigger arrived before Play keep-alive")
+                if action == "keep_alive":
+                    post_reconfiguration_keepalives += 1
+                    completed += 1
+                    break
+            else:
+                raise HarnessError("no Play keep-alive observed after reconfiguration Finish ack")
+
+        if tracker.join_game is None or tracker.join_game["entity_id"] != baseline_entity_id:
+            raise HarnessError("player/entity identity was not preserved across reconfiguration")
+        if not _positions_equal(baseline_position, tracker.position):
+            raise HarnessError("player position was not preserved across reconfiguration")
+        return {
+            "mode": "reconfiguration", "case": case, "protocol": PROTOCOL,
+            "login_success": login_success, "compression_threshold": compression,
+            "cycles_requested": cycles, "cycles_completed": completed,
+            "baseline_entity_id": baseline_entity_id, "baseline_position": baseline_position,
+            "same_entity": True, "same_position": True,
+            "post_reconfiguration_play_keepalives": post_reconfiguration_keepalives,
+            "events": events, "known_packs_case": known_packs_case,
+            "result": (
+                "duplicate_finish_no_second_transition"
+                if case == "duplicate_finish"
+                else "stateful_reconfiguration_pass"
+            ),
+            "real_client_compatibility": "not_claimed",
+        }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("status", "login", "config-regression"), default="status")
+    parser.add_argument("--mode", choices=("status", "login", "config-regression", "reconfiguration"), default="status")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=25565)
     parser.add_argument("--timeout", type=float, default=10.0, help="per socket read/connect timeout")
@@ -1383,16 +1728,42 @@ def main(argv: list[str] | None = None) -> int:
         help="opt-in first-playable validation: Join Game, position/teleport confirm, first chunk envelope, keep-alive",
     )
     parser.add_argument(
+        "--reconfiguration-case",
+        choices=("normal", "duplicate_ack", "unsolicited_ack", "trailing_ack", "early_finish", "duplicate_finish", "disconnect_during_config"),
+        default="normal",
+        help="opt-in stateful reconfiguration probe; the server-owned Rust seam must trigger it",
+    )
+    parser.add_argument(
+        "--reconfiguration-cycles",
+        type=int,
+        choices=(1, 2),
+        default=2,
+        help="number of server-owned Play -> Configuration -> Play cycles to await",
+    )
+    parser.add_argument(
         "--known-packs-case",
         choices=("empty", "legal_subset", "unknown", "exact"),
         default="empty",
-        help="wire-valid Known Packs response fixture used by --strict-play",
+        help="wire-valid Known Packs response fixture used by --strict-play or --mode reconfiguration",
     )
     args = parser.parse_args(argv)
     try:
         mapping = _asset_packet_ids()
         verify_critical_mapping(mapping)
-        if args.strict_play:
+        if args.mode == "reconfiguration":
+            if args.strict_play or args.wait_for_keepalive:
+                raise HarnessError("--mode reconfiguration owns its strict Play baseline; do not combine --strict-play or --wait-for-keepalive")
+            result = run_reconfiguration(
+                args.host,
+                args.port,
+                args.timeout,
+                args.username,
+                mapping,
+                args.reconfiguration_cycles,
+                args.known_packs_case,
+                args.reconfiguration_case,
+            )
+        elif args.strict_play:
             if args.mode != "login":
                 raise HarnessError("--strict-play requires --mode login")
             result = run_strict_play(
