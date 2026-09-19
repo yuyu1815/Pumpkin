@@ -236,10 +236,30 @@ async fn wait_for_state(
     .unwrap_or_else(|_| panic!("timed out waiting for Java connection state {state:?}"));
 }
 
-async fn wait_for_play_baseline(java: &pumpkin::net::java::JavaClient) {
+async fn wait_for_play_baseline(
+    java: &pumpkin::net::java::JavaClient,
+    mut child: Option<&mut HarnessChild>,
+) {
     let before_play_packets = java.last_packet_time.load();
     timeout(Duration::from_secs(20), async {
         loop {
+            if let Some(child) = child.as_deref_mut()
+                && let Ok(Some(status)) = child.try_wait()
+            {
+                let mut stdout = Vec::new();
+                let mut stderr = Vec::new();
+                if let Some(mut stream) = child.stdout.take() {
+                    let _ = stream.read_to_end(&mut stdout);
+                }
+                if let Some(mut stream) = child.stderr.take() {
+                    let _ = stream.read_to_end(&mut stderr);
+                }
+                panic!(
+                    "protocol harness exited during Play baseline: {status}; stdout={}; stderr={}",
+                    String::from_utf8_lossy(&stdout),
+                    String::from_utf8_lossy(&stderr)
+                );
+            }
             if java.connection_state.load() == ConnectionState::Play
                 && java.last_packet_time.load() != before_play_packets
                 && java.pending_bytes.load(Ordering::Acquire) == 0
@@ -258,7 +278,15 @@ async fn wait_for_play_baseline(java: &pumpkin::net::java::JavaClient) {
         }
     })
     .await
-    .expect("timed out waiting for the strict Play baseline to drain");
+    .unwrap_or_else(|error| {
+        panic!(
+            "timed out waiting for the strict Play baseline to drain: {error:?}; state={:?}, last_packet_time={:?}, pending_bytes={}, closed={}",
+            java.connection_state.load(),
+            java.last_packet_time.load(),
+            java.pending_bytes.load(Ordering::Acquire),
+            java.is_closed(),
+        )
+    });
 }
 
 fn inventory_snapshot(player: &pumpkin::entity::player::Player) -> Vec<(u16, u8)> {
@@ -326,7 +354,7 @@ async fn java_reconfiguration_over_real_tcp_preserves_player_state() {
     wait_for_state(java, ConnectionState::Play, Some(&mut normal_harness)).await;
     // Wait until the real server has drained Join Game/chunks and the harness has
     // completed its strict baseline, rather than relying on a synthetic trigger delay.
-    wait_for_play_baseline(java).await;
+    wait_for_play_baseline(java, Some(&mut normal_harness)).await;
 
     let baseline_entity_id = player.entity_id();
     let baseline_position = player.position();
@@ -356,7 +384,7 @@ async fn java_reconfiguration_over_real_tcp_preserves_player_state() {
     .expect("timed out waiting for the first returned Play keep-alive");
     // The state flips to Play while processing the Finish ack. Wait for a fresh
     // one-second Play keep-alive and a drained outbound queue before cycle two.
-    wait_for_play_baseline(java).await;
+    wait_for_play_baseline(java, Some(&mut normal_harness)).await;
     assert!(Arc::ptr_eq(
         &player,
         &pumpkin_server
@@ -441,7 +469,7 @@ async fn java_reconfiguration_over_real_tcp_preserves_player_state() {
         .java()
         .expect("EOF probe player must be Java");
     wait_for_state(eof_java, ConnectionState::Play, Some(&mut eof_harness)).await;
-    wait_for_play_baseline(eof_java).await;
+    wait_for_play_baseline(eof_java, Some(&mut eof_harness)).await;
     assert!(
         eof_java.start_reconfiguration().await,
         "EOF probe trigger was rejected"
