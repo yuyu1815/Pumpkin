@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 pub mod signature;
+pub mod state;
 
 use pumpkin_protocol::bedrock::server::text::SText;
 use pumpkin_protocol::codec::bit_set::BitSet;

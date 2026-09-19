@@ -1,6 +1,7 @@
 #[allow(clippy::wildcard_imports)]
 use super::*;
 use crate::net::chat::signature::CHAT_SIGNATURE_LEN;
+use crate::net::chat::state::{ChatStateError, verify_and_commit};
 use pumpkin_data::world::RAW;
 
 impl JavaClient {
@@ -127,63 +128,49 @@ impl JavaClient {
                 return Err(ChatError::OutOfOrderChat);
             }
 
-            // Verify session expiry
-            if player
-                .chat_session
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .expires_at
-                < now
-            {
-                return Err(ChatError::ExpiredPublicKey);
-            }
-
             let offset = chat_message.message_count.0;
             if offset < 0 {
                 return Err(ChatError::ChatValidationFailed);
             }
 
+            // Keep the installed session stable through preview, verification,
+            // and commit. A concurrent session replacement must not rebind a
+            // successful packet after its signature was checked.
+            let chat_session = player
+                .chat_session
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let session_id = chat_session.session_id;
+            let expires_at = chat_session.expires_at;
+            let public_key = chat_session.public_key.clone();
+
+            // A secure message needs the validated profile session installed by
+            // SPlayerSession. Do not treat an absent/default session as a
+            // cryptographic identity, even when the packet has 256 bytes.
+            if session_id == uuid::Uuid::nil()
+                || public_key.is_empty()
+                || chat_session.signature.is_empty()
             {
-                let mut cache = player
-                    .signature_cache
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
-                if !chat_message.acknowledged.is_empty() {
-                    if cache
-                        .last_seen_validator
-                        .apply_update(offset as usize, chat_message.acknowledged)
-                        .is_err()
-                    {
-                        return Err(ChatError::ChatValidationFailed);
-                    }
-                } else if cache
-                    .last_seen_validator
-                    .apply_offset(offset as usize)
-                    .is_err()
-                {
-                    return Err(ChatError::ChatValidationFailed);
-                }
-
-                if cache.last_seen_validator.tracked_messages_count() > 4096 {
-                    return Err(ChatError::TooManyPendingChats);
-                }
+                return Err(ChatError::UnsignedChat);
             }
 
-            // Validate previous signature checksum (new in 1.21.5)
-            // The client can bypass this check by sending 0
-            if chat_message.checksum != 0 {
-                let checksum = polynomial_rolling_hash(
-                    player
-                        .signature_cache
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner)
-                        .last_seen
-                        .as_ref(),
-                );
-                if checksum != chat_message.checksum {
-                    return Err(ChatError::ChatValidationFailed);
-                }
+            if expires_at < now {
+                return Err(ChatError::ExpiredPublicKey);
             }
+
+            verify_and_commit(player, session_id, &public_key, chat_message).map_err(|err| {
+                match err {
+                    ChatStateError::Replay { .. }
+                    | ChatStateError::OutOfOrderTimestamp
+                    | ChatStateError::ChainBroken => ChatError::OutOfOrderChat,
+                    ChatStateError::TooManyPendingChats => ChatError::TooManyPendingChats,
+                    ChatStateError::SessionMismatch
+                    | ChatStateError::AckValidation
+                    | ChatStateError::ChecksumMismatch { .. }
+                    | ChatStateError::IndexOverflow
+                    | ChatStateError::Signature(_) => ChatError::ChatValidationFailed,
+                }
+            })?;
         }
         Ok(())
     }
@@ -215,16 +202,27 @@ impl JavaClient {
             return;
         }
 
-        // Update the chat session fields
-        *player
+        // A retransmitted identical profile-key packet is an idempotent update;
+        // resetting the inbound chain here would make an index-0 replay valid.
+        let mut chat_session = player
             .chat_session
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = ChatSession::new(
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if chat_session.session_id == session.session_id
+            && chat_session.expires_at == session.expires_at
+            && chat_session.public_key == session.public_key
+            && chat_session.signature == session.key_signature
+        {
+            return;
+        }
+        *chat_session = ChatSession::new(
             session.session_id,
             session.expires_at,
             session.public_key.clone(),
             session.key_signature.clone(),
         );
+        drop(chat_session);
+        crate::net::chat::state::reset_inbound_state(player.gameprofile.id, session.session_id);
 
         server.broadcast_packet_all(&CPlayerInfoUpdate::new(
             PlayerInfoFlags::INITIALIZE_CHAT.bits(),
