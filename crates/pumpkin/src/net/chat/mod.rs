@@ -1,6 +1,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+pub mod signature;
+
 use pumpkin_protocol::bedrock::server::text::SText;
 use pumpkin_protocol::codec::bit_set::BitSet;
 use pumpkin_protocol::codec::var_int::VarInt;

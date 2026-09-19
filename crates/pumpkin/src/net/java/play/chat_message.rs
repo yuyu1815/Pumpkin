@@ -1,5 +1,6 @@
 #[allow(clippy::wildcard_imports)]
 use super::*;
+use crate::net::chat::signature::CHAT_SIGNATURE_LEN;
 use pumpkin_data::world::RAW;
 
 impl JavaClient {
@@ -108,7 +109,7 @@ impl JavaClient {
         if server.basic_config.allow_chat_reports {
             // Check for unsigned chat
             if let Some(signature) = &chat_message.signature {
-                if signature.len() != 256 {
+                if signature.len() != CHAT_SIGNATURE_LEN {
                     return Err(ChatError::UnsignedChat); // Signature is the wrong length
                 }
             } else {
