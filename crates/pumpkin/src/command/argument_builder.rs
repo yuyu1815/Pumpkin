@@ -83,6 +83,12 @@ pub trait ArgumentBuilder: Sized {
 }
 
 impl RequiredArgumentBuilder {
+    /// Opts this argument into signed-command argument extraction.
+    #[must_use]
+    pub fn signable(self) -> Self {
+        Self(self.0.signable())
+    }
+
     #[must_use]
     pub fn suggests(self, provider: impl SuggestionProvider + 'static) -> Self {
         Self(self.0.suggests(SuggestionProviderAdapter(provider)))

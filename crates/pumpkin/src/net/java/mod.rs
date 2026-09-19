@@ -75,6 +75,7 @@ use arc_swap::ArcSwap;
 use pending::PendingConnection;
 
 use crate::entity::player::Player;
+use crate::net::java::play::chat_command::SignedCommandPacket;
 use crate::net::{
     ClientPlatform, GameProfile, MAX_PENDING_BYTES, PacketHandlerResult, PacketRateLimiter,
     PlayerConfig, decrement_pending_bytes,
@@ -1598,23 +1599,16 @@ impl JavaClient {
                 });
             }
             id if id == SChatCommandSigned::to_id(version) => {
-                let mut signed_payload = payload;
-                let cmd =
-                    if let Ok(signed) = SChatCommandSigned::read(&mut signed_payload, &version) {
-                        signed.command.to_string()
-                    } else {
-                        SChatCommand::read(&mut payload, &version)?
-                            .command
-                            .to_string()
-                    };
+                let signed = SChatCommandSigned::read(&mut payload, &version)?;
+                require_empty_body(&payload, "signed chat command")?;
+                let signed = SignedCommandPacket::from(&signed);
                 let client_platform = player.client.clone();
                 let player_c = player.clone();
                 let server_c = server.clone();
                 server.spawn_task(async move {
                     if let ClientPlatform::Java(client) = client_platform.as_ref() {
-                        let packet = SChatCommand { command: &cmd };
                         client
-                            .handle_chat_command(&player_c, &server_c, &packet)
+                            .handle_signed_chat_command(&player_c, &server_c, signed)
                             .await;
                     }
                 });

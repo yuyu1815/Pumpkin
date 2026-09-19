@@ -39,8 +39,10 @@ pub fn register(dispatcher: &mut CommandDispatcher, registry: &PermissionRegistr
     ));
 
     dispatcher.register(
-        command("me", DESCRIPTION)
-            .requires(PERMISSION)
-            .then(argument("action", StringArgumentType::GreedyPhrase).executes(MeExecutor)),
+        command("me", DESCRIPTION).requires(PERMISSION).then(
+            argument("action", StringArgumentType::GreedyPhrase)
+                .signable()
+                .executes(MeExecutor),
+        ),
     );
 }

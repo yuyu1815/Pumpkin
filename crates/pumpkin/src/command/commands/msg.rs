@@ -66,7 +66,9 @@ pub fn register(dispatcher: &mut CommandDispatcher, registry: &PermissionRegistr
         dispatcher.register(
             command(name, DESCRIPTION).requires(PERMISSION).then(
                 argument("targets", EntityArgumentType::Players).then(
-                    argument("message", StringArgumentType::GreedyPhrase).executes(MsgExecutor),
+                    argument("message", StringArgumentType::GreedyPhrase)
+                        .signable()
+                        .executes(MsgExecutor),
                 ),
             ),
         );

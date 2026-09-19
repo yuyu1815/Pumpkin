@@ -24,6 +24,7 @@ pub struct SChatCommandSigned<'a> {
     pub checksum: u8,
 }
 
+pub const MAX_ARGUMENT_SIGNATURES: usize = 8;
 const MIN_ARGUMENT_SIGNATURE_WIRE_BYTES: usize = 1 + 256;
 
 impl<'a> ServerPacket<'a> for SChatCommandSigned<'a> {
@@ -33,6 +34,11 @@ impl<'a> ServerPacket<'a> for SChatCommandSigned<'a> {
         let salt = read.get_i64_be()?;
         let arg_count = usize::try_from(read.get_var_int()?.0)
             .map_err(|_| ReadingError::Message("Negative argument signature count".into()))?;
+        if arg_count > MAX_ARGUMENT_SIGNATURES {
+            return Err(ReadingError::TooLarge(format!(
+                "argument signature count {arg_count} exceeds official maximum {MAX_ARGUMENT_SIGNATURES}"
+            )));
+        }
         let remaining = (*read).len();
         if arg_count > remaining / MIN_ARGUMENT_SIGNATURE_WIRE_BYTES {
             return Err(ReadingError::TooLarge(format!(
@@ -74,6 +80,12 @@ impl ClientPacket for SChatCommandSigned<'_> {
         write.write_string(self.command)?;
         write.write_i64_be(self.timestamp)?;
         write.write_i64_be(self.salt)?;
+        if self.argument_signatures.len() > MAX_ARGUMENT_SIGNATURES {
+            return Err(WritingError::Message(format!(
+                "argument signature count {} exceeds official maximum {MAX_ARGUMENT_SIGNATURES}",
+                self.argument_signatures.len()
+            )));
+        }
         write.write_var_int(&VarInt(self.argument_signatures.len() as i32))?;
         for arg in &self.argument_signatures {
             write.write_string(arg.name)?;
@@ -114,6 +126,24 @@ mod tests {
     #[test]
     fn rejects_signed_command_count_that_cannot_fit_payload() {
         let bytes = signed_command_prefix(i32::MAX);
+        let result =
+            SChatCommandSigned::read(&mut bytes.as_slice(), &JavaMinecraftVersion::V_1_21_5);
+
+        assert!(matches!(result, Err(ReadingError::TooLarge(_))));
+    }
+
+    #[test]
+    fn rejects_signed_command_argument_count_above_official_maximum() {
+        let signature = [7u8; 256];
+        let mut bytes = signed_command_prefix((MAX_ARGUMENT_SIGNATURES + 1) as i32);
+        for _ in 0..=MAX_ARGUMENT_SIGNATURES {
+            bytes.write_string("target").expect("argument name");
+            bytes.write_slice(&signature).expect("argument signature");
+        }
+        bytes.write_var_int(&VarInt(0)).expect("message count");
+        bytes.extend_from_slice(&[0; 3]);
+        bytes.push(0);
+
         let result =
             SChatCommandSigned::read(&mut bytes.as_slice(), &JavaMinecraftVersion::V_1_21_5);
 

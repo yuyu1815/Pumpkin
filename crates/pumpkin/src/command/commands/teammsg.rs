@@ -91,12 +91,20 @@ pub fn register(dispatcher: &mut CommandDispatcher, registry: &PermissionRegistr
     ));
 
     // Register /teammsg <message>
-    dispatcher.register(command("teammsg", DESCRIPTION).requires(PERMISSION).then(
-        argument(ARG_MESSAGE, StringArgumentType::GreedyPhrase).executes(TeamMsgCommandExecutor),
-    ));
+    dispatcher.register(
+        command("teammsg", DESCRIPTION).requires(PERMISSION).then(
+            argument(ARG_MESSAGE, StringArgumentType::GreedyPhrase)
+                .signable()
+                .executes(TeamMsgCommandExecutor),
+        ),
+    );
 
     // Register alias /tm <message>
-    dispatcher.register(command("tm", DESCRIPTION).requires(PERMISSION).then(
-        argument(ARG_MESSAGE, StringArgumentType::GreedyPhrase).executes(TeamMsgCommandExecutor),
-    ));
+    dispatcher.register(
+        command("tm", DESCRIPTION).requires(PERMISSION).then(
+            argument(ARG_MESSAGE, StringArgumentType::GreedyPhrase)
+                .signable()
+                .executes(TeamMsgCommandExecutor),
+        ),
+    );
 }
