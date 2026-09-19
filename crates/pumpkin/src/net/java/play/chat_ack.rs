@@ -4,6 +4,10 @@ use pumpkin_protocol::java::server::play::SChatAck;
 
 impl JavaClient {
     pub fn handle_chat_ack(&self, player: &Arc<Player>, packet: &SChatAck) {
+        let _chat_lifecycle = player
+            .chat_lifecycle
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let offset = packet.offset.0;
         if offset < 0 {
             warn!(

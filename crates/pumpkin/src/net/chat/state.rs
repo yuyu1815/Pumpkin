@@ -55,7 +55,7 @@ struct InboundChatState {
     /// historical owners alive.
     owner: Weak<ChatOwnerToken>,
     next_index: i32,
-    last_timestamp_epoch_millis: Option<i64>,
+    last_timestamp_epoch_second: Option<i64>,
     broken: bool,
 }
 
@@ -65,7 +65,7 @@ impl InboundChatState {
             session_id,
             owner: Weak::new(),
             next_index: 0,
-            last_timestamp_epoch_millis: None,
+            last_timestamp_epoch_second: None,
             broken: false,
         }
     }
@@ -89,7 +89,7 @@ impl InboundChatState {
             });
         }
         if self
-            .last_timestamp_epoch_millis
+            .last_timestamp_epoch_second
             .is_some_and(|last| timestamp_epoch_second < last)
         {
             return Err(ChatStateError::OutOfOrderTimestamp);
@@ -102,7 +102,7 @@ impl InboundChatState {
             .next_index
             .checked_add(1)
             .ok_or(ChatStateError::IndexOverflow)?;
-        self.last_timestamp_epoch_millis = Some(timestamp_epoch_second);
+        self.last_timestamp_epoch_second = Some(timestamp_epoch_second);
         Ok(())
     }
 }
@@ -203,6 +203,29 @@ pub(crate) fn reset_inbound_state(
     true
 }
 
+/// Marks the current player's inbound signed chain broken after a signed
+/// command name-set mismatch. The lifecycle owner prevents stale players from
+/// breaking a replacement session.
+pub fn break_inbound_chain(player: &Player) -> bool {
+    let player_id = player.gameprofile.id;
+    let mut store = inbound_state()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let Some(state) = store.states.get_mut(&player_id) else {
+        return false;
+    };
+    if !player.chat_owner.is_active()
+        || !state
+            .owner
+            .upgrade()
+            .is_some_and(|owner| Arc::ptr_eq(&owner, &player.chat_owner))
+    {
+        return false;
+    }
+    state.broken = true;
+    true
+}
+
 /// Clears only a matching installed session for the supplied owner token.
 ///
 /// The caller retires the token while holding the Player lifecycle lock before
@@ -242,19 +265,78 @@ pub fn verify_and_commit(
     public_key: &[u8],
     chat_message: &SChatMessage<'_>,
 ) -> Result<(), ChatStateError> {
-    let player_id = player.gameprofile.id;
-    let timestamp_epoch_millis = chat_message.timestamp;
     let signature = chat_message
         .signature
         .ok_or(ChatSignatureError::InvalidSignatureLength {
             length: 0,
             expected: super::signature::CHAT_SIGNATURE_LEN,
         })?;
+    let contents = [chat_message.message];
+    let signatures = [signature];
+    verify_and_commit_entries(
+        player,
+        session_id,
+        public_key,
+        chat_message.timestamp,
+        chat_message.salt,
+        chat_message.message_count.0,
+        chat_message.acknowledged,
+        (chat_message.checksum != 0).then_some(chat_message.checksum),
+        &contents,
+        &signatures,
+    )
+}
 
+/// Verifies all signed command arguments against one cloned ACK window and
+/// commits the chain cursor and ACK window only after every argument succeeds.
+pub fn verify_signed_command_and_commit(
+    player: &Player,
+    session_id: Uuid,
+    public_key: &[u8],
+    timestamp: i64,
+    salt: i64,
+    message_count: i32,
+    acknowledged: &[u8],
+    checksum: u8,
+    contents: &[&str],
+    signatures: &[&[u8]],
+) -> Result<(), ChatStateError> {
+    verify_and_commit_entries(
+        player,
+        session_id,
+        public_key,
+        timestamp,
+        salt,
+        message_count,
+        acknowledged,
+        (checksum != 0).then_some(checksum),
+        contents,
+        signatures,
+    )
+}
+
+fn verify_and_commit_entries(
+    player: &Player,
+    session_id: Uuid,
+    public_key: &[u8],
+    timestamp: i64,
+    salt: i64,
+    message_count: i32,
+    acknowledged: &[u8],
+    checksum: Option<u8>,
+    contents: &[&str],
+    signatures: &[&[u8]],
+) -> Result<(), ChatStateError> {
+    if contents.len() != signatures.len() {
+        return Err(ChatStateError::AckValidation);
+    }
+
+    let player_id = player.gameprofile.id;
+    let timestamp_epoch_second = timestamp.div_euclid(1_000);
     let mut store = inbound_state()
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let Some(mut state) = store.states.get(&player_id).cloned() else {
+    let Some(state) = store.states.get(&player_id).cloned() else {
         return Err(ChatStateError::LifecycleMismatch);
     };
     if !player.chat_owner.is_active()
@@ -266,59 +348,55 @@ pub fn verify_and_commit(
     {
         return Err(ChatStateError::LifecycleMismatch);
     }
-    if let Err(error) = state.check_link(session_id, state.next_index, timestamp_epoch_millis) {
-        if matches!(
-            &error,
-            ChatStateError::Replay { .. }
-                | ChatStateError::OutOfOrderTimestamp
-                | ChatStateError::SessionMismatch
-        ) {
-            state.broken = true;
-            store.states.insert(player_id, state);
-        }
-        return Err(error);
-    }
 
     let mut cache = player
         .signature_cache
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let (validator, acknowledged) = preview_last_seen(
-        &cache.last_seen_validator,
-        chat_message.message_count.0,
-        chat_message.acknowledged,
-    )?;
-
+    let (validator, last_seen) =
+        preview_last_seen(&cache.last_seen_validator, message_count, acknowledged)?;
     if validator.tracked_messages_count() > 4096 {
         return Err(ChatStateError::TooManyPendingChats);
     }
-
-    if chat_message.checksum != 0 {
-        let expected = last_seen_checksum(&acknowledged);
-        if expected != chat_message.checksum {
-            return Err(ChatStateError::ChecksumMismatch {
-                expected,
-                received: chat_message.checksum,
-            });
+    if let Some(received) = checksum {
+        let expected = last_seen_checksum(&last_seen);
+        if expected != received {
+            return Err(ChatStateError::ChecksumMismatch { expected, received });
         }
     }
 
-    let link = SignedMessageLink::new(state.next_index, player_id, session_id);
-    let body = SignedMessageBody::new(
-        chat_message.message.to_string(),
-        chat_message.timestamp,
-        chat_message.salt,
-        acknowledged,
-    );
-    if let Err(error) = verify_chat_message_signature(public_key, &link, &body, signature) {
-        state.broken = true;
-        store.states.insert(player_id, state);
-        return Err(error.into());
+    let mut candidate = state.clone();
+    for (content, signature) in contents.iter().zip(signatures) {
+        if let Err(error) =
+            candidate.check_link(session_id, candidate.next_index, timestamp_epoch_second)
+        {
+            if matches!(
+                &error,
+                ChatStateError::Replay { .. }
+                    | ChatStateError::OutOfOrderTimestamp
+                    | ChatStateError::SessionMismatch
+            ) {
+                let mut broken = state.clone();
+                broken.broken = true;
+                store.states.insert(player_id, broken);
+            }
+            return Err(error);
+        }
+
+        let link = SignedMessageLink::new(candidate.next_index, player_id, session_id);
+        let body =
+            SignedMessageBody::new((*content).to_string(), timestamp, salt, last_seen.clone());
+        if let Err(error) = verify_chat_message_signature(public_key, &link, &body, signature) {
+            let mut broken = state.clone();
+            broken.broken = true;
+            store.states.insert(player_id, broken);
+            return Err(error.into());
+        }
+        candidate.advance(timestamp_epoch_second)?;
     }
 
-    state.advance(timestamp_epoch_millis)?;
     cache.last_seen_validator = validator;
-    store.states.insert(player_id, state);
+    store.states.insert(player_id, candidate);
     Ok(())
 }
 
@@ -374,8 +452,9 @@ mod tests {
     use super::{
         ChatOwnerToken, ChatStateError, InboundChatState, clear_inbound_state, inbound_state,
         last_seen_checksum, preview_last_seen, reset_inbound_state, verify_and_commit,
+        verify_signed_command_and_commit,
     };
-    use crate::entity::player::{LastSeenMessagesValidator, LastSeenTrackedEntry};
+    use crate::entity::player::{ChatSession, LastSeenMessagesValidator, LastSeenTrackedEntry};
     use crate::net::chat::signature::canonical_bytes;
     use crate::net::chat::{SignedMessageBody, SignedMessageLink};
     use crate::net::java::JavaClient;
@@ -386,6 +465,7 @@ mod tests {
     use pumpkin_data::dimension::Dimension;
     use pumpkin_protocol::codec::var_int::VarInt;
     use pumpkin_protocol::java::server::play::SChatMessage;
+    use serde_json::Value;
     use sha2::{Digest, Sha256};
     use std::net::SocketAddr;
     use std::sync::Arc;
@@ -409,6 +489,10 @@ mod tests {
             user_cache: std::sync::RwLock::new(Default::default()),
             whitelist_config: std::sync::RwLock::new(Default::default()),
         }
+    }
+
+    fn fixture_bytes(value: &str) -> Vec<u8> {
+        hex::decode(value).expect("fixture hex")
     }
 
     async fn runtime_java_client(profile: &GameProfile) -> Arc<ClientPlatform> {
@@ -441,7 +525,7 @@ mod tests {
         assert_eq!(state.check_link(Uuid::from_u128(10), 0, 1), Ok(()));
         state.advance(1).expect("root commit");
         assert_eq!(state.next_index, 1);
-        assert_eq!(state.last_timestamp_epoch_millis, Some(1));
+        assert_eq!(state.last_timestamp_epoch_second, Some(1));
         assert_eq!(
             state.check_link(Uuid::from_u128(10), 0, 2),
             Err(ChatStateError::Replay {
@@ -450,7 +534,18 @@ mod tests {
             })
         );
         assert_eq!(state.next_index, 1);
-        assert_eq!(state.last_timestamp_epoch_millis, Some(1));
+        assert_eq!(state.last_timestamp_epoch_second, Some(1));
+    }
+
+    #[test]
+    fn n_argument_chain_links_consume_sequential_indices() {
+        let mut state = state();
+        for index in 0..3 {
+            assert_eq!(state.check_link(Uuid::from_u128(10), index, 100), Ok(()));
+            state.advance(100).expect("argument link commit");
+        }
+        assert_eq!(state.next_index, 3);
+        assert_eq!(state.last_timestamp_epoch_second, Some(100));
     }
 
     #[test]
@@ -462,7 +557,7 @@ mod tests {
             Err(ChatStateError::OutOfOrderTimestamp)
         );
         assert_eq!(state.next_index, 1);
-        assert_eq!(state.last_timestamp_epoch_millis, Some(1_000));
+        assert_eq!(state.last_timestamp_epoch_second, Some(1_000));
     }
 
     #[test]
@@ -874,6 +969,257 @@ mod tests {
                     .contains_key(&player_id)
             );
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn signed_command_fixture_exercises_n2_atomicity_and_no_signable_ack() {
+        const FIXTURE: &str = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tools/compat-26_2/chat-fixtures/signed-command-independent.json"
+        ));
+        let fixture: Value = serde_json::from_str(FIXTURE).expect("fixture JSON");
+        let public_key = fixture_bytes(
+            fixture["crypto"]["public_key_der_hex"]
+                .as_str()
+                .expect("fixture public key"),
+        );
+        let vector = fixture["vectors"]
+            .as_array()
+            .expect("fixture vectors")
+            .iter()
+            .find(|vector| vector["n"].as_u64() == Some(2))
+            .expect("N=2 fixture");
+        let packet = &vector["packet"];
+        let arguments = vector["arguments"].as_array().expect("fixture arguments");
+        let contents = arguments
+            .iter()
+            .map(|argument| {
+                argument["raw_value_text"]
+                    .as_str()
+                    .expect("fixture raw value")
+                    .to_owned()
+            })
+            .collect::<Vec<_>>();
+        let signatures = arguments
+            .iter()
+            .map(|argument| {
+                fixture_bytes(
+                    argument["signature_hex"]
+                        .as_str()
+                        .expect("fixture signature"),
+                )
+            })
+            .collect::<Vec<_>>();
+        let signature_refs = signatures.iter().map(Vec::as_slice).collect::<Vec<_>>();
+        let content_refs = contents.iter().map(String::as_str).collect::<Vec<_>>();
+        let acknowledged = [0x05, 0, 0];
+        let session_id = Uuid::from_u128(2);
+        let player_id = Uuid::from_u128(1);
+
+        let temp_world = TempDir::new().expect("temporary runtime world");
+        let mut basic = BasicConfiguration::default();
+        basic.default_level_name = temp_world.path().to_string_lossy().into_owned();
+        basic.allow_nether = true;
+        basic.allow_end = false;
+        basic.allow_chat_reports = false;
+        basic.use_favicon = false;
+        let mut advanced = AdvancedConfiguration::default();
+        advanced.logging.enabled = false;
+        advanced.plugins.enabled = false;
+        advanced.commands.use_console = false;
+        advanced.commands.use_tty = false;
+        advanced.networking.java.enabled = false;
+        advanced.networking.bedrock.enabled = false;
+        advanced.networking.query.enabled = false;
+        advanced.networking.lan_broadcast.enabled = false;
+        let server = crate::server::Server::new(
+            basic,
+            advanced,
+            TelemetryConfig {
+                enabled: false,
+                ..TelemetryConfig::default()
+            },
+            test_vanilla_data(),
+        )
+        .await;
+        let profile = GameProfile {
+            id: player_id,
+            name: "signed_command_fixture".to_owned(),
+            properties: ArcSwap::from_pointee(Vec::new()),
+            profile_actions: None,
+        };
+        let (player, world) = server
+            .add_player(
+                runtime_java_client(&profile).await,
+                profile,
+                Some(PlayerConfig::default()),
+            )
+            .expect("fixture player published");
+        *player
+            .chat_session
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = ChatSession::new(
+            session_id,
+            i64::MAX,
+            public_key.clone().into_boxed_slice(),
+            vec![1].into_boxed_slice(),
+        );
+        assert!(reset_inbound_state(
+            player_id,
+            session_id,
+            &player.chat_owner
+        ));
+        {
+            let mut store = inbound_state()
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            store
+                .states
+                .get_mut(&player_id)
+                .expect("fixture state")
+                .next_index = 41;
+        }
+
+        let zero = vec![0_u8; 256].into_boxed_slice();
+        let eighty = vec![0x80_u8; 256].into_boxed_slice();
+        let mut cache = player
+            .signature_cache
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        cache.last_seen_validator = LastSeenMessagesValidator::new(3);
+        cache.last_seen_validator.tracked_messages = [
+            Some(LastSeenTrackedEntry {
+                signature: zero,
+                pending: true,
+            }),
+            Some(LastSeenTrackedEntry {
+                signature: vec![1_u8; 256].into_boxed_slice(),
+                pending: true,
+            }),
+            Some(LastSeenTrackedEntry {
+                signature: eighty,
+                pending: true,
+            }),
+        ]
+        .into_iter()
+        .collect();
+        drop(cache);
+
+        let timestamp = packet["timestamp_epoch_second"]
+            .as_i64()
+            .expect("fixture timestamp")
+            * 1_000;
+        let salt = i64::from_str_radix(
+            packet["salt_i64"]
+                .as_str()
+                .expect("fixture salt")
+                .trim_start_matches("0x"),
+            16,
+        )
+        .expect("fixture salt hex");
+        assert_eq!(
+            verify_signed_command_and_commit(
+                &player,
+                session_id,
+                &public_key,
+                timestamp,
+                salt,
+                0,
+                &acknowledged,
+                0,
+                &content_refs,
+                &signature_refs,
+            ),
+            Ok(())
+        );
+        assert_eq!(
+            inbound_state()
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .states
+                .get(&player_id)
+                .expect("committed state")
+                .next_index,
+            43
+        );
+
+        {
+            let mut store = inbound_state()
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let state = store.states.get_mut(&player_id).expect("fixture state");
+            state.next_index = 41;
+            state.broken = false;
+        }
+        let mut invalid_signatures = signatures.clone();
+        invalid_signatures[1][0] ^= 1;
+        let invalid_refs = invalid_signatures
+            .iter()
+            .map(Vec::as_slice)
+            .collect::<Vec<_>>();
+        assert!(matches!(
+            verify_signed_command_and_commit(
+                &player,
+                session_id,
+                &public_key,
+                timestamp,
+                salt,
+                0,
+                &acknowledged,
+                0,
+                &content_refs,
+                &invalid_refs,
+            ),
+            Err(ChatStateError::Signature(_))
+        ));
+        let state = inbound_state()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .states
+            .get(&player_id)
+            .cloned()
+            .expect("failed state");
+        assert_eq!(state.next_index, 41);
+        assert!(state.broken);
+
+        {
+            let mut store = inbound_state()
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let state = store.states.get_mut(&player_id).expect("fixture state");
+            state.next_index = 41;
+            state.broken = false;
+        }
+        assert_eq!(
+            verify_signed_command_and_commit(
+                &player,
+                session_id,
+                &public_key,
+                timestamp,
+                salt,
+                0,
+                &acknowledged,
+                0,
+                &[],
+                &[],
+            ),
+            Ok(())
+        );
+        assert_eq!(
+            inbound_state()
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .states
+                .get(&player_id)
+                .expect("ack-only state")
+                .next_index,
+            41
+        );
+
+        world
+            .remove_player(&player, crate::world::PlayerRemovalReason::Disconnect)
+            .await;
+        server.remove_player(&player);
     }
 
     #[test]

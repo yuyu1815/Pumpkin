@@ -77,6 +77,11 @@ impl ClientPacket for SChatCommandSigned<'_> {
         mut write: impl std::io::Write,
         version: &JavaMinecraftVersion,
     ) -> Result<(), WritingError> {
+        if self.command.encode_utf16().nth(256).is_some() {
+            return Err(WritingError::Message(
+                "command has too many UTF-16 characters (more than 256)".into(),
+            ));
+        }
         write.write_string(self.command)?;
         write.write_i64_be(self.timestamp)?;
         write.write_i64_be(self.salt)?;
@@ -88,8 +93,25 @@ impl ClientPacket for SChatCommandSigned<'_> {
         }
         write.write_var_int(&VarInt(self.argument_signatures.len() as i32))?;
         for arg in &self.argument_signatures {
+            if arg.name.encode_utf16().nth(16).is_some() {
+                return Err(WritingError::Message(
+                    "argument name has too many UTF-16 characters (more than 16)".into(),
+                ));
+            }
+            if arg.signature.len() != 256 {
+                return Err(WritingError::Message(format!(
+                    "argument signature has {} bytes, expected 256",
+                    arg.signature.len()
+                )));
+            }
             write.write_string(arg.name)?;
             write.write_slice(arg.signature)?;
+        }
+        if self.acknowledged.len() != 3 {
+            return Err(WritingError::Message(format!(
+                "acknowledged has {} bytes, expected 3",
+                self.acknowledged.len()
+            )));
         }
         write.write_var_int(&self.message_count)?;
         write.write_slice(self.acknowledged)?;
@@ -148,6 +170,69 @@ mod tests {
             SChatCommandSigned::read(&mut bytes.as_slice(), &JavaMinecraftVersion::V_1_21_5);
 
         assert!(matches!(result, Err(ReadingError::TooLarge(_))));
+    }
+
+    #[test]
+    fn enforces_utf16_name_boundaries_and_fixed_signature_wire_shape() {
+        let signature = [7u8; 256];
+        let acknowledged = [0u8; 3];
+        let version = JavaMinecraftVersion::V_1_21_5;
+        for name in ["1234567890123456", "😀😀😀😀😀😀😀😀"] {
+            let packet = SChatCommandSigned {
+                command: "say hello",
+                timestamp: 1,
+                salt: 2,
+                argument_signatures: vec![ArgumentSignature {
+                    name,
+                    signature: &signature,
+                }],
+                message_count: VarInt(0),
+                acknowledged: &acknowledged,
+                checksum: 0,
+            };
+            let mut bytes = Vec::new();
+            packet
+                .write_packet_data(&mut bytes, &version)
+                .expect("valid UTF-16 boundary");
+            SChatCommandSigned::read(&mut bytes.as_slice(), &version)
+                .expect("valid UTF-16 boundary decode");
+        }
+
+        let too_long_name = SChatCommandSigned {
+            command: "say hello",
+            timestamp: 1,
+            salt: 2,
+            argument_signatures: vec![ArgumentSignature {
+                name: "😀😀😀😀😀😀😀😀😀",
+                signature: &signature,
+            }],
+            message_count: VarInt(0),
+            acknowledged: &acknowledged,
+            checksum: 0,
+        };
+        assert!(
+            too_long_name
+                .write_packet_data(Vec::new(), &version)
+                .is_err()
+        );
+
+        let bad_signature = SChatCommandSigned {
+            command: "say hello",
+            timestamp: 1,
+            salt: 2,
+            argument_signatures: vec![ArgumentSignature {
+                name: "target",
+                signature: &[7u8; 255],
+            }],
+            message_count: VarInt(0),
+            acknowledged: &acknowledged,
+            checksum: 0,
+        };
+        assert!(
+            bad_signature
+                .write_packet_data(Vec::new(), &version)
+                .is_err()
+        );
     }
 
     #[test]

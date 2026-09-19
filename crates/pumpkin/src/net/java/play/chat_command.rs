@@ -1,8 +1,10 @@
 #[allow(clippy::wildcard_imports)]
 use super::*;
-use pumpkin_command::node::dispatcher::SignableArgument;
+use crate::command::{CommandSource, dispatcher::CommandDispatcher};
+use pumpkin_command::node::dispatcher::{ParsingResult, SignableArgument};
 use pumpkin_protocol::java::server::play::SChatCommandSigned;
 use std::collections::HashSet;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone)]
 pub struct SignedCommandArgument {
@@ -53,6 +55,10 @@ enum SignedCommandArgumentError {
     Missing(String),
 }
 
+fn signed_command_event_matches(expected: &str, actual: &str) -> bool {
+    expected == actual
+}
+
 fn validate_signed_command_arguments(
     parsed: Option<&[SignableArgument]>,
     signatures: &[SignedCommandArgument],
@@ -96,6 +102,30 @@ impl JavaClient {
         server: &Arc<Server>,
         command: &SChatCommand<'_>,
     ) {
+        if server.basic_config.allow_chat_reports {
+            let source = player.get_command_source(server);
+            let dispatcher = server.command_dispatcher.load();
+            if dispatcher
+                .parse_input(command.command, &source)
+                .signable_arguments()
+                .is_some_and(|arguments| !arguments.is_empty())
+            {
+                warn!(
+                    player = %player.gameprofile.name,
+                    "Rejected unsigned command with signable arguments"
+                );
+                return;
+            }
+        }
+        self.execute_chat_command(player, server, command).await;
+    }
+
+    async fn execute_chat_command(
+        &self,
+        player: &Arc<Player>,
+        server: &Arc<Server>,
+        command: &SChatCommand<'_>,
+    ) {
         player.update_last_action_time();
         if player.check_chat_spam(server, crate::entity::player::SpamType::Command) {
             return;
@@ -128,19 +158,67 @@ impl JavaClient {
         }}
     }
 
-    pub async fn handle_signed_chat_command(
+    fn execute_authenticated_chat_command<'a>(
+        &self,
+        player: &Arc<Player>,
+        server: &Arc<Server>,
+        command: &str,
+        dispatcher: &'a CommandDispatcher,
+        parsed: ParsingResult<'a, CommandSource>,
+    ) {
+        player.update_last_action_time();
+        if player.check_chat_spam(server, crate::entity::player::SpamType::Command) {
+            return;
+        }
+        let expected = command.strip_prefix('/').unwrap_or(command);
+        let mut event = PlayerCommandSendEvent::new(player.clone(), expected.to_owned());
+        server.plugin_manager.fire_blocking(server, &mut event);
+        if event.cancelled {
+            return;
+        }
+        if !signed_command_event_matches(expected, &event.command) {
+            warn!(
+                player = %player.gameprofile.name,
+                original = %expected,
+                mutated = %event.command,
+                "Rejected signed command after command event mutation"
+            );
+            return;
+        }
+
+        let command = event.command;
+        if let Err(error) = dispatcher.execute(parsed) {
+            CommandDispatcher::send_error_to_source(
+                &player.get_command_source(server),
+                error,
+                &command,
+            );
+        }
+        if server.advanced_config.commands.log_console {
+            info!(
+                "Player ({}): executed command /{}",
+                player.gameprofile.name, command
+            );
+        }
+    }
+
+    pub fn handle_signed_chat_command(
         &self,
         player: &Arc<Player>,
         server: &Arc<Server>,
         packet: SignedCommandPacket,
     ) {
+        let _chat_lifecycle = player
+            .chat_lifecycle
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let source = player.get_command_source(server);
         let dispatcher = server.command_dispatcher.load();
         let parsed = dispatcher.parse_input(&packet.command, &source);
         let signable = parsed.signable_arguments();
 
-        // Only a complete parse with no opt-in arguments is an unsigned seam.
-        // Decode/parse failure never falls back to the ordinary command path.
+        // A signed packet must parse completely; decode/parse failure never
+        // falls back to the ordinary unsigned command path.
         let Some(signable) = signable else {
             warn!(
                 player = %player.gameprofile.name,
@@ -149,17 +227,10 @@ impl JavaClient {
             return;
         };
 
-        if signable.is_empty() && packet.argument_signatures.is_empty() {
-            let command = SChatCommand {
-                command: &packet.command,
-            };
-            self.handle_chat_command(player, server, &command).await;
-            return;
-        }
-
         if let Err(error) =
             validate_signed_command_arguments(Some(&signable), &packet.argument_signatures)
         {
+            crate::net::chat::state::break_inbound_chain(player);
             warn!(
                 player = %player.gameprofile.name,
                 ?error,
@@ -168,11 +239,69 @@ impl JavaClient {
             return;
         }
 
-        // The raw ranges and packet names are retained above, but RSA,
-        // session, last-seen, and chain verification are not connected yet.
-        warn!(
-            player = %player.gameprofile.name,
-            "Rejected signable command until its signature chain is verified"
+        let mut contents = Vec::with_capacity(packet.argument_signatures.len());
+        let mut signatures = Vec::with_capacity(packet.argument_signatures.len());
+        for entry in &packet.argument_signatures {
+            let Some(argument) = signable.iter().find(|argument| argument.name == entry.name)
+            else {
+                crate::net::chat::state::break_inbound_chain(player);
+                return;
+            };
+            contents.push(argument.raw_value(&packet.command));
+            signatures.push(entry.signature.as_slice());
+        }
+
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+        let (session_id, public_key) = {
+            let chat_session = player
+                .chat_session
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if chat_session.session_id == uuid::Uuid::nil()
+                || chat_session.public_key.is_empty()
+                || chat_session.signature.is_empty()
+                || chat_session.expires_at < now
+            {
+                warn!(
+                    player = %player.gameprofile.name,
+                    "Rejected signed command without a valid chat session"
+                );
+                return;
+            }
+            (chat_session.session_id, chat_session.public_key.clone())
+        };
+
+        if let Err(error) = crate::net::chat::state::verify_signed_command_and_commit(
+            player,
+            session_id,
+            &public_key,
+            packet.timestamp,
+            packet.salt,
+            packet.message_count,
+            &packet.acknowledged,
+            packet.checksum,
+            &contents,
+            &signatures,
+        ) {
+            warn!(
+                player = %player.gameprofile.name,
+                ?error,
+                "Rejected signed command authentication"
+            );
+            return;
+        }
+
+        // Execute the exact parse result that was authenticated. The event may
+        // observe the command, but cannot replace it with an unauthenticated one.
+        self.execute_authenticated_chat_command(
+            player,
+            server,
+            &packet.command,
+            &dispatcher,
+            parsed,
         );
     }
 }
@@ -180,7 +309,8 @@ impl JavaClient {
 #[cfg(test)]
 mod tests {
     use super::{
-        SignedCommandArgument, SignedCommandArgumentError, validate_signed_command_arguments,
+        SignedCommandArgument, SignedCommandArgumentError, signed_command_event_matches,
+        validate_signed_command_arguments,
     };
     use pumpkin_command::context::string_range::StringRange;
     use pumpkin_command::node::attached::NodeId;
@@ -200,6 +330,12 @@ mod tests {
             name: name.to_owned(),
             signature: vec![0; 256],
         }
+    }
+
+    #[test]
+    fn signed_event_cannot_replace_authenticated_command() {
+        assert!(signed_command_event_matches("demo safe", "demo safe"));
+        assert!(!signed_command_event_matches("demo safe", "op"));
     }
 
     #[test]

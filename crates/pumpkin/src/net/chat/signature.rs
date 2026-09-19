@@ -138,8 +138,14 @@ mod tests {
         CHAT_SIGNATURE_LEN, ChatSignatureError, canonical_bytes, verify_chat_message_signature,
     };
     use crate::net::chat::{SignedMessageBody, SignedMessageLink};
+    use serde_json::Value;
     use sha2::{Digest, Sha256};
     use uuid::Uuid;
+
+    const INDEPENDENT_FIXTURE: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../tools/compat-26_2/chat-fixtures/signed-command-independent.json"
+    ));
 
     const CANONICAL_HEX: &str = "000000010000000000000000000000000000000100000000000000000000000000000002000000000102030405060708000000006553f10000000002686900000000";
     const CANONICAL_SHA256_HEX: &str =
@@ -163,6 +169,166 @@ mod tests {
 
     fn fixture_bytes(hex_value: &str) -> Vec<u8> {
         hex::decode(hex_value).unwrap_or_default()
+    }
+
+    fn independent_body(
+        packet: &Value,
+        argument: &Value,
+    ) -> (SignedMessageLink, SignedMessageBody) {
+        let link = &argument["link"];
+        let sender = Uuid::parse_str(link["sender_uuid"].as_str().expect("sender UUID"))
+            .expect("sender UUID is valid");
+        let session = Uuid::parse_str(link["session_uuid"].as_str().expect("session UUID"))
+            .expect("session UUID is valid");
+        let salt = i64::from_str_radix(
+            packet["salt_i64"]
+                .as_str()
+                .expect("salt is a hexadecimal string")
+                .trim_start_matches("0x"),
+            16,
+        )
+        .expect("salt is valid hexadecimal");
+        let last_seen = packet["last_seen_signature_hex"]
+            .as_array()
+            .expect("last-seen signatures")
+            .iter()
+            .map(|signature| {
+                fixture_bytes(signature.as_str().expect("last-seen signature hex"))
+                    .into_boxed_slice()
+            })
+            .collect();
+        let raw_value = fixture_bytes(
+            argument["raw_value_utf8_hex"]
+                .as_str()
+                .expect("raw argument UTF-8"),
+        );
+        assert_eq!(
+            String::from_utf8(raw_value.clone()).expect("raw argument is UTF-8"),
+            argument["raw_value_text"]
+                .as_str()
+                .expect("raw argument value")
+        );
+        (
+            SignedMessageLink::new(
+                link["index"].as_i64().expect("link index") as i32,
+                sender,
+                session,
+            ),
+            SignedMessageBody::new(
+                String::from_utf8(raw_value).expect("raw argument is UTF-8"),
+                packet["timestamp_epoch_second"]
+                    .as_i64()
+                    .expect("timestamp")
+                    * 1_000,
+                salt,
+                last_seen,
+            ),
+        )
+    }
+
+    #[test]
+    fn independent_signed_command_fixture_verifies_positive_and_negative_cases() {
+        let fixture: Value = serde_json::from_str(INDEPENDENT_FIXTURE).expect("fixture JSON");
+        let public_key = fixture_bytes(
+            fixture["crypto"]["public_key_der_hex"]
+                .as_str()
+                .expect("public key DER"),
+        );
+        let vectors = fixture["vectors"].as_array().expect("fixture vectors");
+        assert_eq!(vectors.len(), 5);
+        let mut argument_count = 0;
+
+        for vector in vectors {
+            let packet = &vector["packet"];
+            for argument in vector["arguments"].as_array().expect("fixture arguments") {
+                argument_count += 1;
+                let (link, body) = independent_body(packet, argument);
+                let expected_canonical =
+                    fixture_bytes(argument["canonical_hex"].as_str().expect("canonical bytes"));
+                let canonical = canonical_bytes(&link, &body).expect("canonical bytes build");
+                assert_eq!(
+                    canonical.len(),
+                    argument["canonical_length"].as_u64().unwrap() as usize
+                );
+                assert_eq!(canonical, expected_canonical);
+                assert_eq!(
+                    hex::encode(Sha256::digest(&canonical)),
+                    argument["canonical_sha256"].as_str().unwrap()
+                );
+                assert_eq!(
+                    verify_chat_message_signature(
+                        &public_key,
+                        &link,
+                        &body,
+                        &fixture_bytes(argument["signature_hex"].as_str().unwrap()),
+                    ),
+                    Ok(())
+                );
+
+                let mut tampered_body = body.clone();
+                tampered_body.content.push('!');
+                assert_eq!(
+                    verify_chat_message_signature(
+                        &public_key,
+                        &link,
+                        &tampered_body,
+                        &fixture_bytes(argument["signature_hex"].as_str().unwrap()),
+                    ),
+                    Err(ChatSignatureError::SignatureMismatch)
+                );
+
+                let tampered_link =
+                    SignedMessageLink::new(link.index + 1, link.sender, link.session_id);
+                assert_eq!(
+                    verify_chat_message_signature(
+                        &public_key,
+                        &tampered_link,
+                        &body,
+                        &fixture_bytes(argument["signature_hex"].as_str().unwrap()),
+                    ),
+                    Err(ChatSignatureError::SignatureMismatch)
+                );
+            }
+        }
+        assert_eq!(argument_count, 6);
+
+        let n2 = vectors
+            .iter()
+            .find(|vector| vector["n"].as_u64() == Some(2))
+            .expect("N=2 vector");
+        let args = n2["arguments"].as_array().expect("N=2 arguments");
+        let (first_link, _) = independent_body(&n2["packet"], &args[0]);
+        let (_, second_body) = independent_body(&n2["packet"], &args[1]);
+        assert_eq!(n2["entry_order"][0].as_str(), Some("first"));
+        assert_eq!(n2["entry_order"][1].as_str(), Some("rest"));
+        let reordered_link =
+            SignedMessageLink::new(first_link.index, first_link.sender, first_link.session_id);
+        assert_eq!(
+            verify_chat_message_signature(
+                &public_key,
+                &reordered_link,
+                &second_body,
+                &fixture_bytes(args[1]["signature_hex"].as_str().unwrap()),
+            ),
+            Err(ChatSignatureError::SignatureMismatch)
+        );
+
+        let mut wrong_key = public_key.clone();
+        wrong_key[30] ^= 1;
+        let (link, body) = independent_body(&vectors[0]["packet"], &vectors[0]["arguments"][0]);
+        assert!(matches!(
+            verify_chat_message_signature(
+                &wrong_key,
+                &link,
+                &body,
+                &fixture_bytes(
+                    vectors[0]["arguments"][0]["signature_hex"]
+                        .as_str()
+                        .unwrap()
+                ),
+            ),
+            Err(ChatSignatureError::InvalidPublicKey | ChatSignatureError::SignatureMismatch)
+        ));
     }
 
     #[test]
