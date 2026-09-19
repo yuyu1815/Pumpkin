@@ -791,6 +791,20 @@ impl Level {
         entity_uuid: uuid::Uuid,
         nbt: pumpkin_nbt::compound::NbtCompound,
     ) -> Result<(), String> {
+        self.save_entity_nbt_with_stale_chunk(pos, entity_uuid, nbt, None)
+            .await
+    }
+
+    /// Saves a live entity and optionally removes its previous disk snapshot.
+    /// The stale chunk is loaded even when it is not resident, closing the
+    /// boundary where a moved entity could otherwise retain an old NBT record.
+    pub async fn save_entity_nbt_with_stale_chunk(
+        &self,
+        pos: Vector2<i32>,
+        entity_uuid: uuid::Uuid,
+        nbt: pumpkin_nbt::compound::NbtCompound,
+        stale_pos: Option<Vector2<i32>>,
+    ) -> Result<(), String> {
         let _save_guard = self.entity_save_lock.lock().await;
         let chunk = match self.load_entity_chunk_for_save_unlocked(pos).await? {
             EntityChunkLoad::Loaded(chunk) => chunk,
@@ -805,18 +819,72 @@ impl Level {
                 .data
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if let Some(existing) = data
-                .iter_mut()
-                .find(|existing| existing.get_uuid("UUID") == Some(entity_uuid))
-            {
-                *existing = nbt;
-            } else {
+            let mut live_nbt = Some(nbt);
+            data.retain_mut(|existing| {
+                if existing.get_uuid("UUID") != Some(entity_uuid) {
+                    return true;
+                }
+                live_nbt.take().is_some_and(|replacement| {
+                    *existing = replacement;
+                    true
+                })
+            });
+            if let Some(nbt) = live_nbt {
                 data.push(nbt);
             }
         }
         chunk.mark_dirty(true);
+
+        // A live entity can have been saved once in its old chunk before it
+        // crosses a boundary. Remove that stale snapshot from every other
+        // cached entity chunk before publishing the new destination snapshot;
+        // otherwise reopen would resurrect a duplicate at the old position.
+        let mut chunks_to_write = vec![(pos, chunk)];
+        let cached_chunks = self
+            .loaded_entity_chunks
+            .iter()
+            .filter(|entry| *entry.key() != pos)
+            .map(|entry| (*entry.key(), entry.value().clone()))
+            .collect::<Vec<_>>();
+        for (cached_pos, cached_chunk) in cached_chunks {
+            let removed = {
+                let mut data = cached_chunk
+                    .data
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let original_len = data.len();
+                data.retain(|existing| existing.get_uuid("UUID") != Some(entity_uuid));
+                data.len() != original_len
+            };
+            if removed {
+                cached_chunk.mark_dirty(true);
+                chunks_to_write.push((cached_pos, cached_chunk));
+            }
+        }
+
+        if let Some(stale_pos) = stale_pos
+            && stale_pos != pos
+            && self.loaded_entity_chunks.get(&stale_pos).is_none()
+            && let EntityChunkLoad::Loaded(stale_chunk) =
+                self.load_entity_chunk_for_save_unlocked(stale_pos).await?
+        {
+            let removed = {
+                let mut data = stale_chunk
+                    .data
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let original_len = data.len();
+                data.retain(|existing| existing.get_uuid("UUID") != Some(entity_uuid));
+                data.len() != original_len
+            };
+            if removed {
+                stale_chunk.mark_dirty(true);
+                chunks_to_write.push((stale_pos, stale_chunk));
+            }
+        }
+
         self.entity_saver
-            .save_chunks(&self.level_folder, vec![(pos, chunk)])
+            .save_chunks(&self.level_folder, chunks_to_write)
             .await
             .map_err(|error| format!("failed to persist entity chunk {pos:?}: {error}"))
     }
@@ -1407,6 +1475,81 @@ mod tests {
             );
         };
         level.shutdown().await.expect("test level shutdown");
+    }
+
+    #[tokio::test]
+    async fn disk_only_stale_entity_snapshot_is_removed_on_boundary_save() {
+        let temp_dir = TempDir::new().unwrap();
+        let config = LevelConfig::default();
+        let old_pos = Vector2::new(0, 0);
+        let new_pos = Vector2::new(2, 0);
+        let entity_uuid = uuid::Uuid::from_u128(4);
+        let level = Level::from_root_folder(
+            &config,
+            temp_dir.path().to_path_buf(),
+            0,
+            Dimension::OVERWORLD,
+        );
+
+        let mut old_nbt = NbtCompound::new();
+        old_nbt.put_string("id", "minecraft:item".to_string());
+        old_nbt.put_uuid("UUID", entity_uuid);
+        old_nbt.put_string("TestMarker", "old".to_string());
+        level
+            .save_entity_nbt(old_pos, entity_uuid, old_nbt)
+            .await
+            .expect("old snapshot save");
+        level
+            .clean_entity_chunks([old_pos])
+            .await
+            .expect("old chunk eviction");
+
+        let mut new_nbt = NbtCompound::new();
+        new_nbt.put_string("id", "minecraft:item".to_string());
+        new_nbt.put_uuid("UUID", entity_uuid);
+        new_nbt.put_string("TestMarker", "new".to_string());
+        level
+            .save_entity_nbt_with_stale_chunk(new_pos, entity_uuid, new_nbt, Some(old_pos))
+            .await
+            .expect("boundary save with disk-only stale chunk");
+        level.shutdown().await.expect("test level shutdown");
+
+        let reopened = Level::from_root_folder(
+            &config,
+            temp_dir.path().to_path_buf(),
+            0,
+            Dimension::OVERWORLD,
+        );
+        let EntityChunkLoad::Loaded(old_chunk) = reopened
+            .load_entity_chunk_for_save(old_pos)
+            .await
+            .expect("old chunk reopen")
+        else {
+            panic!("old chunk missing after stale cleanup");
+        };
+        assert!(old_chunk
+            .data
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .is_empty());
+        let EntityChunkLoad::Loaded(new_chunk) = reopened
+            .load_entity_chunk_for_save(new_pos)
+            .await
+            .expect("new chunk reopen")
+        else {
+            panic!("new chunk missing after boundary save");
+        };
+        assert_eq!(
+            new_chunk
+                .data
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .iter()
+                .filter(|entity| entity.get_uuid("UUID") == Some(entity_uuid))
+                .count(),
+            1
+        );
+        reopened.shutdown().await.expect("reopened level shutdown");
     }
 
     #[tokio::test]

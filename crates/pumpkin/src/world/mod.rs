@@ -640,8 +640,20 @@ impl World {
         // introduce a generation fallback.
         let level = self.level.clone();
         let entity_uuid = base_entity.entity_uuid;
+        let previous_chunk = base_entity.last_pos.load();
+        let previous_chunk = Vector2::new(
+            (previous_chunk.x.floor() as i32) >> 4,
+            (previous_chunk.z.floor() as i32) >> 4,
+        );
+        let stale_chunk = (previous_chunk != current_chunk).then_some(previous_chunk);
         let save_result = tokio::spawn(async move {
-            Box::pin(level.save_entity_nbt(current_chunk, entity_uuid, nbt)).await
+            Box::pin(level.save_entity_nbt_with_stale_chunk(
+                current_chunk,
+                entity_uuid,
+                nbt,
+                stale_chunk,
+            ))
+            .await
         })
         .await
         .map_err(|error| format!("entity save task failed: {error}"))?;
@@ -4821,6 +4833,13 @@ impl World {
             if entity.get_entity().entity_id == id {
                 return Some(entity.clone());
             }
+            if let Some(dragon) = entity
+                .cast_any()
+                .downcast_ref::<crate::entity::boss::ender_dragon::EnderDragonEntity>(
+            ) && let Some(part) = dragon.parts.iter().find(|part| part.entity.entity_id == id)
+            {
+                return Some(part.clone() as Arc<dyn EntityBase>);
+            }
         }
         for player in self.players.load().iter() {
             if player.get_entity().entity_id == id {
@@ -7744,14 +7763,159 @@ pub fn calculate_celestial_angle(time_of_day: i64) -> f32 {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+    use std::sync::{Arc, Weak};
+
+    use arc_swap::ArcSwap;
+    use pumpkin_config::world::LevelConfig;
     use pumpkin_data::{
         Block,
         block_properties::{ChestLikeProperties, ChestType, HorizontalFacing, WaterLikeProperties},
+        dimension::Dimension,
+        entity::EntityType,
         fluid::Fluid,
     };
-    use pumpkin_util::math::position::BlockPos;
+    use pumpkin_nbt::compound::NbtCompound;
+    use pumpkin_util::math::{position::BlockPos, vector2::Vector2, vector3::Vector3};
+    use pumpkin_util::world_seed::Seed;
+    use pumpkin_world::level::Level;
+    use pumpkin_world::world_info::LevelData;
+    use tempfile::TempDir;
+    use tokio::time::{Duration, timeout};
+    use uuid::Uuid;
 
     use super::{World, bedrock_block_breaking_rate, bedrock_chest_block_actor};
+
+    fn test_world(root: &Path) -> Arc<World> {
+        let config = LevelConfig {
+            autosave_ticks: 0,
+            ..LevelConfig::default()
+        };
+        let level = Level::from_root_folder(&config, root.to_path_buf(), 0, Dimension::OVERWORLD);
+        Arc::new(World::load(
+            level,
+            Arc::new(ArcSwap::new(Arc::new(LevelData::default(Seed(0))))),
+            Dimension::OVERWORLD,
+            crate::block::registry::default_registry(),
+            Weak::new(),
+        ))
+    }
+
+    fn set_persistence_marker(entity: &Arc<dyn crate::entity::EntityBase>, marker: &str) {
+        let mut custom_data = entity
+            .get_entity()
+            .custom_data
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        custom_data.put_string("marker", marker.to_owned());
+    }
+
+    async fn reopened_entity_chunk(world: &Arc<World>, pos: Vector2<i32>) -> Vec<NbtCompound> {
+        let mut receiver = world.level.receive_entity_chunks(vec![pos]);
+        let (chunk, _) = timeout(Duration::from_secs(5), receiver.recv())
+            .await
+            .expect("reopened entity chunk notification timed out")
+            .expect("reopened entity chunk notification missing");
+        let chunk = chunk.upgrade().expect("reopened entity chunk dropped");
+        chunk
+            .data
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn world_entity_persistence_e2e_spawn_move_stop_reopen() {
+        let temp_dir = TempDir::new().expect("entity persistence tempdir");
+        let world = test_world(temp_dir.path());
+        let moved_uuid = Uuid::from_u128(0x262);
+        let new_uuid = Uuid::from_u128(0x2622);
+        let source_chunk = Vector2::new(0, 0);
+        let moved_chunk = Vector2::new(2, 0);
+        let new_spawn_chunk = Vector2::new(5, 0);
+
+        // Use the normal concrete entity factory and live world index. The first
+        // save deliberately leaves an old cached snapshot so a boundary move
+        // must remove it rather than resurrecting a duplicate on reopen.
+        let moved = crate::entity::r#type::from_type(
+            &EntityType::ARMOR_STAND,
+            Vector3::new(15.5, 64.0, 0.5),
+            &world,
+            moved_uuid,
+        );
+        world.spawn_entity_non_save(moved.clone());
+        set_persistence_marker(&moved, "spawned");
+        world.save().await.expect("initial live entity save");
+
+        moved.get_entity().set_pos(Vector3::new(32.5, 65.0, 0.5));
+        set_persistence_marker(&moved, "moved-live");
+
+        // This entity is a new spawn with no earlier entity-file snapshot and
+        // is saved directly to a non-resident destination chunk.
+        let new_spawn = crate::entity::r#type::from_type(
+            &EntityType::ARMOR_STAND,
+            Vector3::new(80.5, 70.0, 0.5),
+            &world,
+            new_uuid,
+        );
+        world.spawn_entity_non_save(new_spawn.clone());
+        set_persistence_marker(&new_spawn, "new-spawn-live");
+
+        world.save().await.expect("boundary and new-spawn save");
+        world.shutdown().await.expect("world stop persistence");
+
+        // Reopen through a separate World/Level instance and inspect the
+        // actual entity storage path, not a low-level synthetic fixture.
+        let reopened = test_world(temp_dir.path());
+        let old_entities = reopened_entity_chunk(&reopened, source_chunk).await;
+        let moved_entities = reopened_entity_chunk(&reopened, moved_chunk).await;
+        let new_entities = reopened_entity_chunk(&reopened, new_spawn_chunk).await;
+
+        assert!(old_entities.is_empty(), "old chunk retained a moved entity");
+        assert_eq!(moved_entities.len(), 1, "moved chunk entity count");
+        assert_eq!(new_entities.len(), 1, "new-spawn chunk entity count");
+
+        let moved_nbt = &moved_entities[0];
+        assert_eq!(moved_nbt.get_uuid("UUID"), Some(moved_uuid));
+        assert_eq!(moved_nbt.get_string("id"), Some("minecraft:armor_stand"));
+        let moved_pos = moved_nbt.get_list("Pos").expect("moved Pos");
+        assert_eq!(moved_pos[0].extract_double(), Some(32.5));
+        assert_eq!(moved_pos[1].extract_double(), Some(65.0));
+        assert_eq!(moved_pos[2].extract_double(), Some(0.5));
+        assert_eq!(
+            moved_nbt
+                .get_compound("PumpkinCustomData")
+                .and_then(|data| data.get_string("marker")),
+            Some("moved-live")
+        );
+
+        let new_nbt = &new_entities[0];
+        assert_eq!(new_nbt.get_uuid("UUID"), Some(new_uuid));
+        assert_eq!(new_nbt.get_string("id"), Some("minecraft:armor_stand"));
+        let new_pos = new_nbt.get_list("Pos").expect("new-spawn Pos");
+        assert_eq!(new_pos[0].extract_double(), Some(80.5));
+        assert_eq!(new_pos[1].extract_double(), Some(70.0));
+        assert_eq!(new_pos[2].extract_double(), Some(0.5));
+        assert_eq!(
+            new_nbt
+                .get_compound("PumpkinCustomData")
+                .and_then(|data| data.get_string("marker")),
+            Some("new-spawn-live")
+        );
+
+        let all_entities = moved_entities
+            .iter()
+            .chain(new_entities.iter())
+            .collect::<Vec<_>>();
+        let uuids = all_entities
+            .iter()
+            .map(|entity| entity.get_uuid("UUID").expect("entity UUID"))
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(uuids.len(), all_entities.len(), "reopened UUID duplicate");
+
+        reopened.shutdown().await.expect("reopened world shutdown");
+    }
 
     #[test]
     fn liquid_block_states_preserve_source_flow_and_falling_depths() {
