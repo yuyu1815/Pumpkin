@@ -365,6 +365,10 @@ pub const DATA_VERSION: i32 = 4903; // 26.2
 /// must apply the same gating.
 pub const MINE_BLOCK_EXHAUSTION: f32 = 0.005; // Vanilla: 0.005F
 
+const fn hand_swap_inventory_slots(selected_slot: u8) -> [usize; 2] {
+    [selected_slot as usize, PlayerInventory::OFF_HAND_SLOT]
+}
+
 const fn bedrock_inventory_slot(player_screen_slot: i16) -> Option<u32> {
     match player_screen_slot {
         9..=35 => Some(player_screen_slot as u32),
@@ -4992,10 +4996,26 @@ impl Player {
         }
         let (main_hand_item, off_hand_item) = self.inventory.swap_item();
         let equipment = &[
-            (EquipmentSlot::MAIN_HAND, main_hand_item),
-            (EquipmentSlot::OFF_HAND, off_hand_item),
+            (EquipmentSlot::MAIN_HAND, main_hand_item.clone()),
+            (EquipmentSlot::OFF_HAND, off_hand_item.clone()),
         ];
         self.living_entity.send_equipment_changes(equipment);
+
+        // PlayerInventory::swap_item updates the backing inventory directly, so
+        // no screen-handler listener observes either changed slot. Send both
+        // inventory slots explicitly before the full handler diff; otherwise a
+        // Java client can keep the pre-swap contents in its inventory UI.
+        let [main_slot, off_hand_slot] =
+            hand_swap_inventory_slots(self.inventory.get_selected_slot());
+        self.try_send_slot_set_packet(&CSetPlayerInventory::new(
+            (main_slot as i32).into(),
+            &ItemStackSerializer::from(main_hand_item),
+        ));
+        self.try_send_slot_set_packet(&CSetPlayerInventory::new(
+            (off_hand_slot as i32).into(),
+            &ItemStackSerializer::from(off_hand_item),
+        ));
+        self.sync_inventory_to_client();
         // todo this.player.stopUsingItem();
     }
 
@@ -7851,9 +7871,42 @@ impl InventoryPlayer for Player {
 
 #[cfg(test)]
 mod tests {
-    use super::{bedrock_inventory_slot, read_root_vehicle, write_root_vehicle};
+    use super::{
+        bedrock_inventory_slot, hand_swap_inventory_slots, read_root_vehicle, write_root_vehicle,
+    };
     use pumpkin_nbt::{compound::NbtCompound, tag::NbtTag};
     use uuid::Uuid;
+
+    #[test]
+    fn hand_swap_sync_covers_selected_and_off_hand_slots() {
+        assert_eq!(hand_swap_inventory_slots(3), [3, 40]);
+        assert_eq!(hand_swap_inventory_slots(8), [8, 40]);
+    }
+
+    #[test]
+    fn player_inventory_swap_changes_the_two_synced_slots() {
+        use pumpkin_data::item::Item;
+        use pumpkin_data::item_stack::ItemStack;
+        use pumpkin_inventory::entity_equipment::EntityEquipment;
+        use pumpkin_inventory::{Inventory, build_equipment_slots};
+        use std::sync::{Arc, Mutex};
+
+        let inventory = pumpkin_inventory::player::player_inventory::PlayerInventory::new(
+            Arc::new(Mutex::new(EntityEquipment::new())),
+            Arc::new(build_equipment_slots()),
+        );
+        inventory.set_selected_slot(3);
+        inventory.set_stack(3, ItemStack::new(2, &Item::DIAMOND));
+        inventory.set_stack(40, ItemStack::new(1, &Item::GOLD_INGOT));
+
+        let (main_hand, off_hand) = inventory.swap_item();
+
+        assert_eq!(inventory.get_stack(3).item, main_hand.item);
+        assert_eq!(inventory.get_stack(3).item_count, 1);
+        assert_eq!(inventory.get_stack(40).item, off_hand.item);
+        assert_eq!(inventory.get_stack(40).item_count, 2);
+        assert_eq!(hand_swap_inventory_slots(3), [3, 40]);
+    }
 
     #[test]
     fn player_screen_slots_map_to_bedrock_inventory() {
