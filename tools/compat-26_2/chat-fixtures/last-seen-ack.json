@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "fixture_id": "last-seen-ack",
+  "fixture_kind": "last_seen_preview_order_checksum_and_atomic_reject",
+  "evidence": {
+    "wire": "official_26_2_static_bytecode",
+    "ack_width_bits": 20,
+    "ack_wire_length_bytes": 3,
+    "checksum_algorithm": "static interpretation recorded in 26.2-chat-auth-plan.md; recheck in implementation",
+    "runtime_vanilla_verified": false
+  },
+  "signature_descriptors": {
+    "sig-A": {"length": 256, "fill_hex": "00"},
+    "sig-B": {"length": 256, "fill_hex": "01"},
+    "sig-C": {"length": 256, "fill_hex": "80"},
+    "sig-D": {"length": 256, "fill_hex": "ff"}
+  },
+  "cases": [
+    {
+      "id": "ack_bits_are_little_bit_indexed_within_bytes",
+      "tracked_window_before": ["sig-A", "sig-B", "sig-C", "sig-D"],
+      "offset": 0,
+      "ack_hex": "050000",
+      "expected": {"decision": "accept", "acknowledged_order": ["sig-A", "sig-C"], "canonical_last_seen_order": ["sig-A", "sig-C"], "reject_reason": null}
+    },
+    {
+      "id": "offset_precedes_bitset",
+      "tracked_window_before": ["sig-A", "sig-B", "sig-C", "sig-D"],
+      "offset": 2,
+      "ack_hex": "010000",
+      "expected": {"decision": "accept", "acknowledged_order": ["sig-C"], "remaining_window_prefix": ["sig-C", "sig-D"], "reject_reason": null}
+    },
+    {
+      "id": "unknown_ack_slot_rejects_without_commit",
+      "tracked_window_before": ["sig-A"],
+      "offset": 0,
+      "ack_hex": "020000",
+      "expected": {"decision": "reject", "reject_reason": "ack_unknown_entry", "state_unchanged": true}
+    },
+    {
+      "id": "ignored_previously_acknowledged_entry_rejects_without_commit",
+      "tracked_window_before": [{"signature": "sig-A", "pending": false}],
+      "offset": 0,
+      "ack_hex": "000000",
+      "expected": {"decision": "reject", "reject_reason": "ack_repeated_entry", "state_unchanged": true}
+    },
+    {
+      "id": "checksum_zero_is_official_bypass",
+      "tracked_window_before": ["sig-A", "sig-C"],
+      "offset": 0,
+      "ack_hex": "050000",
+      "checksum_u8": "0x00",
+      "expected": {"decision": "accept", "checksum_checked": false, "reject_reason": null, "signature_verification_still_required": true}
+    },
+    {
+      "id": "checksum_nonzero_matches_ordered_list",
+      "tracked_window_before": ["sig-A", "sig-C"],
+      "offset": 0,
+      "ack_hex": "050000",
+      "checksum_u8": "0xe1",
+      "expected": {"decision": "accept", "checksum_checked": true, "acknowledged_order": ["sig-A", "sig-C"], "reject_reason": null}
+    },
+    {
+      "id": "checksum_mismatch_rejects_without_commit",
+      "tracked_window_before": ["sig-A", "sig-C"],
+      "offset": 0,
+      "ack_hex": "050000",
+      "checksum_u8": "0xe2",
+      "expected": {"decision": "reject", "reject_reason": "checksum_mismatch", "state_unchanged": true}
+    },
+    {
+      "id": "nonempty_last_seen_canonical_hash",
+      "canonical_input": {"sender_uuid": "00000000-0000-0000-0000-000000000001", "session_uuid": "00000000-0000-0000-0000-000000000002", "link_index": 0, "salt_i64": "0x0102030405060708", "wire_timestamp_ms": 1700000000000, "content_utf8_hex": "6869", "last_seen": ["sig-A", "sig-C"]},
+      "expected": {"decision": "accept", "canonical_length": 578, "canonical_sha256": "988d6b4bf2a1c50a991d285197ba0eb2c3f7300142262f3f20b35241259e3992"}
+    }
+  ],
+  "checksum_reference": {
+    "sig-A": "0xe87de001",
+    "sig-B": "0x125ff001",
+    "sig-C": "0xf775e001",
+    "sig-D": "0xbe9bd001",
+    "ordered_sig_A_sig_C_expected_u8": "0xe1",
+    "note": "Values use Java signed-byte Arrays.hashCode-style interpretation as recorded by the static investigation; confirm against official bytecode before treating as acceptance proof."
+  }
+}

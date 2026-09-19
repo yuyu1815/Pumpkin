@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "fixture_id": "canonical-empty-last-seen",
+  "fixture_kind": "stateless_canonical_and_rsa_known_answer",
+  "evidence": {
+    "layout": "official_26_2_static_bytecode",
+    "classes": [
+      "net.minecraft.network.chat.PlayerChatMessage",
+      "net.minecraft.network.chat.SignedMessageLink",
+      "net.minecraft.network.chat.SignedMessageBody",
+      "net.minecraft.network.chat.LastSeenMessages"
+    ],
+    "signature": "independent_test_only_openssl_3.2.2",
+    "official_fixture": false,
+    "runtime_vanilla_verified": false
+  },
+  "input": {
+    "sender_uuid": "00000000-0000-0000-0000-000000000001",
+    "session_uuid": "00000000-0000-0000-0000-000000000002",
+    "link_index": 0,
+    "salt_i64": "0x0102030405060708",
+    "wire_timestamp_ms": 1700000000000,
+    "signed_timestamp_epoch_second": 1700000000,
+    "content_utf8_hex": "6869",
+    "content_text": "hi",
+    "last_seen": []
+  },
+  "expected": {
+    "decision": "accept",
+    "canonical_length": 66,
+    "canonical_hex": "000000010000000000000000000000000000000100000000000000000000000000000002000000000102030405060708000000006553f10000000002686900000000",
+    "canonical_sha256": "6ca6cc185f024bc125cd5beec691bf4541541dfc73c6d8322801276a01387d10",
+    "rsa_signature_length": 256,
+    "reject_reason": null
+  },
+  "rsa_test_only": {
+    "public_key_der_hex": "30820122300d06092a864886f70d01010105000382010f003082010a0282010100b9b2ca105b54d49dfa23a4080ade76d0328e24c4aa216acdd7a19d57812718d88876afa7a8aadef958c3e0408cc665f21fedf43eb02f860aa0c5820b1920b36735a72940c9dd48ac44f4f27f5031993cec9a3d014ce07123fd4c99a3d21642c34167b062e495a537d41bafce23cfea9f411be4cc0aa1fd49dc6ea49fc2331d26203368baa3c47ca808b1a83b07bf87d60e2240e51235cdafd18fc84b631cafc4010fb2725fceedcb8b25b04cdf103f9414c187b4e6e3885050da998d81b3fdd8559d2caeb8360059552203f956cea3e5e858bcf869ebac3b3fc3d54c9a99c4ea2d7582976bc10a01de952cbede994254b7d7e4fb343143d9336cca80f71fba610203010001",
+    "signature_hex": "111e5237ce289b06afef21993b38f67e5ec9155e927cfb0b68b78edd518bfad4649c7b05d9fd5120c6abb0b8753293dce79f22743ef91acf293a4b46eb31568fdf9fb8de8e6eea8b0a6e3b90c79897625d8c458aa9d89aadd6113f4a066d02f011cbb89e4238a24bace081f94e6c4d15679dcdf4512bf82f65a6f3546164442639a979bac23470dd2780ab5c512215d016a0b9da65edbc2bf267b9e5ef27679381b1f025d64c1d44c55b26d74787e03003ec5e41fe3032953890886aa47786fbd9c6641cbdd954826cc9f71daee64f3312a49bcd47653306c8b4ba37ae94121b9bc350246ac590f0fb675c7f117212dd69af74dd8361881219ca1365906c8ab0"
+  },
+  "negative_mutations": [
+    {"id": "content_changed", "expected_reject_reason": "signature_mismatch"},
+    {"id": "salt_changed", "expected_reject_reason": "signature_mismatch"},
+    {"id": "timestamp_changed", "expected_reject_reason": "signature_mismatch"},
+    {"id": "session_changed", "expected_reject_reason": "signature_mismatch"},
+    {"id": "index_changed", "expected_reject_reason": "signature_mismatch"},
+    {"id": "last_seen_changed", "expected_reject_reason": "signature_mismatch"},
+    {"id": "wrong_key", "expected_reject_reason": "signature_mismatch_or_invalid_key"},
+    {"id": "zero_signature", "expected_reject_reason": "signature_mismatch"},
+    {"id": "signature_length_255", "expected_reject_reason": "signature_length"},
+    {"id": "signature_length_257", "expected_reject_reason": "signature_length"}
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "fixture_id": "chain-state",
+  "fixture_kind": "stateful_message_index_session_replay_timestamp",
+  "evidence": {
+    "chain_order": "official_26_2_static_bytecode",
+    "acceptance_runtime_verified": false,
+    "signature_values": "symbolic_labels_only"
+  },
+  "initial_state": {
+    "session_uuid": "00000000-0000-0000-0000-00000000000a",
+    "next_index": 0,
+    "last_timestamp_epoch_second": null,
+    "broken": false
+  },
+  "cases": [
+    {
+      "id": "accept_root_index_0",
+      "input": {"session_uuid": "00000000-0000-0000-0000-00000000000a", "link_index": 0, "timestamp_epoch_second": 1700000000, "signature_verification": "valid"},
+      "expected": {"decision": "accept", "commit": {"next_index": 1, "last_timestamp_epoch_second": 1700000000, "broken": false}, "reject_reason": null}
+    },
+    {
+      "id": "accept_next_index_1",
+      "precondition": {"next_index": 1, "last_timestamp_epoch_second": 1700000000, "broken": false},
+      "input": {"session_uuid": "00000000-0000-0000-0000-00000000000a", "link_index": 1, "timestamp_epoch_second": 1700000001, "signature_verification": "valid"},
+      "expected": {"decision": "accept", "commit": {"next_index": 2, "last_timestamp_epoch_second": 1700000001, "broken": false}, "reject_reason": null}
+    },
+    {
+      "id": "replay_index_0_after_commit",
+      "precondition": {"next_index": 2, "last_timestamp_epoch_second": 1700000001, "broken": false},
+      "input": {"session_uuid": "00000000-0000-0000-0000-00000000000a", "link_index": 0, "timestamp_epoch_second": 1700000000, "signature_verification": "valid"},
+      "expected": {"decision": "reject", "reject_reason": "index_not_next", "state_unchanged": true}
+    },
+    {
+      "id": "older_timestamp_is_separate_from_replay",
+      "precondition": {"next_index": 2, "last_timestamp_epoch_second": 1700000001, "broken": false},
+      "input": {"session_uuid": "00000000-0000-0000-0000-00000000000a", "link_index": 2, "timestamp_epoch_second": 1700000000, "signature_verification": "valid"},
+      "expected": {"decision": "reject", "reject_reason": "out_of_order_timestamp", "commit": {"broken": true}, "index_advance": false}
+    },
+    {
+      "id": "signature_failure_does_not_advance",
+      "precondition": {"next_index": 0, "last_timestamp_epoch_second": null, "broken": false},
+      "input": {"session_uuid": "00000000-0000-0000-0000-00000000000a", "link_index": 0, "timestamp_epoch_second": 1700000000, "signature_verification": "invalid"},
+      "expected": {"decision": "reject", "reject_reason": "signature_mismatch", "state_unchanged": true, "broken_transition": "implementation_must_confirm_official_chain_policy"}
+    },
+    {
+      "id": "equal_timestamp_comparison_only",
+      "precondition": {"next_index": 1, "last_timestamp_epoch_second": 1700000000, "broken": false},
+      "input": {"session_uuid": "00000000-0000-0000-0000-00000000000a", "link_index": 1, "timestamp_epoch_second": 1700000000, "signature_verification": "valid"},
+      "expected": {"decision": "defer", "reason": "static comparison uses isBefore; runtime vanilla acceptance is not proven"}
+    },
+    {
+      "id": "invalid_session_replacement_keeps_old_state",
+      "precondition": {"session_uuid": "00000000-0000-0000-0000-00000000000a", "next_index": 2},
+      "input": {"new_session_uuid": "00000000-0000-0000-0000-00000000000b", "certificate": "invalid"},
+      "expected": {"decision": "reject", "reject_reason": "invalid_session_certificate", "state_unchanged": true}
+    },
+    {
+      "id": "valid_session_replacement_rebinds_chain",
+      "precondition": {"session_uuid": "00000000-0000-0000-0000-00000000000a", "next_index": 2},
+      "input": {"new_session_uuid": "00000000-0000-0000-0000-00000000000b", "certificate": "valid", "new_key": "test-only-key-reference"},
+      "expected": {"decision": "accept", "commit": {"session_uuid": "00000000-0000-0000-0000-00000000000b", "next_index": 0, "last_timestamp_epoch_second": null}, "reject_reason": null, "ack_window_policy": "defer_until_official_state_transition_is_confirmed"}
+    },
+    {
+      "id": "old_session_after_replacement",
+      "precondition": {"session_uuid": "00000000-0000-0000-0000-00000000000b", "next_index": 0},
+      "input": {"session_uuid": "00000000-0000-0000-0000-00000000000a", "link_index": 2, "timestamp_epoch_second": 1700000002, "signature_verification": "valid_for_old_key"},
+      "expected": {"decision": "reject", "reject_reason": "session_mismatch", "state_unchanged": true}
+    }
+  ]
+}

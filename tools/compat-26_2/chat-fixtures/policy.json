@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "fixture_id": "policy",
+  "fixture_kind": "offline_unsigned_and_secure_session_gate",
+  "evidence": {
+    "current_pumpkin_policy": "chat_message.rs validate_chat_message and allow_chat_reports branch",
+    "vanilla_runtime_verified": false
+  },
+  "cases": [
+    {
+      "id": "offline_reports_disabled_unsigned_chat",
+      "config": {"online_mode": false, "allow_chat_reports": false},
+      "input": {"chat_signature": null, "session": null},
+      "expected": {"decision": "accept_as_unsigned_system_or_disguised_chat", "secure_attribution": false, "reject_reason": null}
+    },
+    {
+      "id": "online_reports_disabled_is_still_not_secure_attribution",
+      "config": {"online_mode": true, "allow_chat_reports": false},
+      "input": {"chat_signature": null, "session": null},
+      "expected": {"decision": "accept_as_unsigned_policy_path", "secure_attribution": false, "identity_proof": false, "reject_reason": null}
+    },
+    {
+      "id": "secure_reports_enabled_requires_session_and_signature",
+      "config": {"allow_chat_reports": true},
+      "input": {"chat_signature": null, "session": null},
+      "expected": {"decision": "reject", "reject_reason": "secure_session_required", "execute_or_broadcast_securely": false}
+    },
+    {
+      "id": "secure_reports_enabled_expired_session",
+      "config": {"allow_chat_reports": true},
+      "input": {"chat_signature": "256-byte", "session": {"certificate": "valid", "expires_at": "before_now"}},
+      "expected": {"decision": "reject", "reject_reason": "expired_public_key", "state_advance": false}
+    },
+    {
+      "id": "offline_mode_does_not_create_identity_proof",
+      "config": {"online_mode": false, "allow_chat_reports": true},
+      "input": {"chat_signature": "missing", "session": "missing"},
+      "expected": {"decision": "reject", "reject_reason": "secure_session_required", "note": "offline mode alone is not a secure-chat exemption when reports are enabled"}
+    }
+  ]
+}

@@ -294,6 +294,62 @@ def parse_status(payload: bytes) -> dict[str, Any]:
     return status
 
 
+def parse_known_packs(payload: bytes) -> list[dict[str, str]]:
+    """Decode the bounded Known Packs envelope without assigning registry meaning."""
+    count, offset = decode_varint(payload)
+    if count < 0 or count > 64:
+        raise HarnessError(f"Known Packs count outside 0..64: {count}")
+    packs: list[dict[str, str]] = []
+    for _ in range(count):
+        namespace, offset = get_string(payload, offset, 32767)
+        pack_id, offset = get_string(payload, offset, 32767)
+        version, offset = get_string(payload, offset, 32767)
+        packs.append({"namespace": namespace, "id": pack_id, "version": version})
+    require_end(payload, offset, "Known Packs")
+    return packs
+
+
+def encode_known_packs(packs: list[dict[str, str]]) -> bytes:
+    if len(packs) > 64:
+        raise HarnessError(f"Known Packs response count outside 0..64: {len(packs)}")
+    payload = bytearray(encode_varint(len(packs)))
+    for pack in packs:
+        for key in ("namespace", "id", "version"):
+            payload.extend(put_string(pack[key], 32767))
+    return bytes(payload)
+
+
+def make_known_packs_response(requested: list[dict[str, str]], case: str) -> list[dict[str, str]]:
+    """Build only wire-valid selection fixtures; server semantics remain observed."""
+    if case == "empty":
+        return []
+    if case == "legal_subset":
+        # An empty list is a legal proper subset for a one-pack request.
+        return requested[:-1]
+    if case == "unknown":
+        return requested + [{"namespace": "example", "id": "unknown", "version": "1"}]
+    if case == "exact":
+        return list(requested)
+    raise HarnessError(f"unsupported Known Packs response case: {case}")
+
+
+def synthetic_resource_pack_ack_fixture(pack_uuid: uuid.UUID, result: int) -> bytes:
+    """Encode a local-only status fixture; this never downloads a resource pack."""
+    if result < 0:
+        raise HarnessError(f"resource-pack result must be non-negative: {result}")
+    return pack_uuid.bytes + encode_varint(result)
+
+
+def parse_resource_pack_ack_fixture(payload: bytes) -> dict[str, Any]:
+    """Validate the config response envelope, not client download/installation."""
+    if len(payload) < 16:
+        raise HarnessError("resource-pack ack fixture is shorter than UUID")
+    pack_uuid = str(uuid.UUID(bytes=payload[:16]))
+    result, offset = decode_varint(payload, 16)
+    require_end(payload, offset, "resource-pack ack fixture")
+    return {"uuid": pack_uuid, "result": result, "download_observed": False}
+
+
 def parse_i64(payload: bytes, context: str) -> int:
     if len(payload) != 8:
         raise HarnessError(f"{context} must contain exactly 8 bytes")
@@ -1165,8 +1221,11 @@ def run_strict_play(
     timeout: float,
     username: str,
     mapping: dict[str, dict[str, dict[str, int]]],
+    known_packs_case: str = "empty",
 ) -> dict[str, Any]:
-    """Run the opt-in first-playable longitudinal validation."""
+    """Run first-playable validation with one explicit Known Packs response fixture."""
+    if known_packs_case not in ("empty", "legal_subset", "unknown", "exact"):
+        raise HarnessError(f"unsupported Known Packs response case: {known_packs_case}")
     if not 1 <= len(username) <= 16 or not username.isascii() or not username.replace("_", "").isalnum():
         raise HarnessError("username must be 1..16 ASCII alphanumeric/underscore characters")
     clientbound = {
@@ -1214,6 +1273,8 @@ def run_strict_play(
 
         config_packets = 0
         known_pack_reply = False
+        known_packs_request: list[dict[str, str]] | None = None
+        known_packs_response: list[dict[str, str]] | None = None
         config_finished = False
         known_config_clientbound = set(mapping["configuration"]["clientbound"].values())
         while True:
@@ -1226,8 +1287,14 @@ def run_strict_play(
                 require_end(frame.payload, offset, "configuration disconnect")
                 raise HarnessError(f"server configuration disconnect: {reason}")
             if frame.packet_id == clientbound["select_known_packs"]:
-                # The empty response is deliberate: no pack registry identity is guessed.
-                write_packet(stream, serverbound_config["select_known_packs"], encode_varint(0), compression)
+                known_packs_request = parse_known_packs(frame.payload)
+                known_packs_response = make_known_packs_response(known_packs_request, known_packs_case)
+                write_packet(
+                    stream,
+                    serverbound_config["select_known_packs"],
+                    encode_known_packs(known_packs_response),
+                    compression,
+                )
                 known_pack_reply = True
             elif frame.packet_id == clientbound["finish_configuration"]:
                 write_packet(stream, serverbound_config["finish_configuration"], b"", compression)
@@ -1280,6 +1347,10 @@ def run_strict_play(
             "login_packets": login_packets,
             "configuration_packets": config_packets,
             "known_pack_reply": known_pack_reply,
+            "known_packs_case": known_packs_case,
+            "known_packs_request": known_packs_request,
+            "known_packs_response": known_packs_response,
+            "known_packs_expected_selection": "exact" if known_packs_case == "exact" else "fallback",
             "play_packets": play_packets,
             "join_game": tracker.join_game,
             "position_syncs": tracker.position_syncs,
@@ -1311,6 +1382,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="opt-in first-playable validation: Join Game, position/teleport confirm, first chunk envelope, keep-alive",
     )
+    parser.add_argument(
+        "--known-packs-case",
+        choices=("empty", "legal_subset", "unknown", "exact"),
+        default="empty",
+        help="wire-valid Known Packs response fixture used by --strict-play",
+    )
     args = parser.parse_args(argv)
     try:
         mapping = _asset_packet_ids()
@@ -1318,7 +1395,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.strict_play:
             if args.mode != "login":
                 raise HarnessError("--strict-play requires --mode login")
-            result = run_strict_play(args.host, args.port, args.timeout, args.username, mapping)
+            result = run_strict_play(
+                args.host, args.port, args.timeout, args.username, mapping, args.known_packs_case
+            )
         elif args.mode == "config-regression":
             if args.case is None:
                 raise HarnessError("--mode config-regression requires --case")

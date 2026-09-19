@@ -1,6 +1,7 @@
 import socket
 import struct
 import unittest
+import uuid
 import zlib
 from unittest.mock import patch
 
@@ -188,6 +189,40 @@ class StructureTests(unittest.TestCase):
         bad = h.put_string('{"version":{"name":"26.1","protocol":775}}')
         with self.assertRaises(h.HarnessError):
             h.parse_status(bad)
+
+    def test_known_packs_wire_fixtures_preserve_exact_and_fallback_shapes(self):
+        requested = [
+            {"namespace": "minecraft", "id": "core", "version": "26.2"},
+            {"namespace": "minecraft", "id": "bundle", "version": "26.2"},
+        ]
+        self.assertEqual(h.parse_known_packs(h.encode_known_packs(requested)), requested)
+        subset = h.make_known_packs_response(requested, "legal_subset")
+        self.assertEqual(subset, requested[:1])
+        self.assertEqual(h.parse_known_packs(h.encode_known_packs(subset)), subset)
+        unknown = h.make_known_packs_response(requested, "unknown")
+        self.assertEqual(unknown[-1]["namespace"], "example")
+        self.assertEqual(h.parse_known_packs(h.encode_known_packs(unknown)), unknown)
+        self.assertEqual(h.make_known_packs_response(requested, "empty"), [])
+        self.assertEqual(h.make_known_packs_response(requested, "exact"), requested)
+
+    def test_known_packs_wire_parser_keeps_count_and_trailing_bounds(self):
+        with self.assertRaisesRegex(h.HarnessError, "outside 0..64"):
+            h.parse_known_packs(h.encode_varint(65))
+        with self.assertRaisesRegex(h.HarnessError, "trailing bytes"):
+            h.parse_known_packs(h.encode_known_packs([]) + b"x")
+
+    def test_resource_pack_ack_fixture_is_local_structure_only(self):
+        pack_uuid = uuid.UUID("12345678-1234-5678-1234-567812345678")
+        for result in (0, 3, 4, 7, 99):
+            fixture = h.synthetic_resource_pack_ack_fixture(pack_uuid, result)
+            self.assertEqual(
+                h.parse_resource_pack_ack_fixture(fixture),
+                {"uuid": str(pack_uuid), "result": result, "download_observed": False},
+            )
+        with self.assertRaisesRegex(h.HarnessError, "trailing bytes"):
+            h.parse_resource_pack_ack_fixture(
+                h.synthetic_resource_pack_ack_fixture(pack_uuid, 0) + b"x"
+            )
 
     def test_configuration_regression_tracker_decodes_disconnect_and_order(self):
         ids = {"disconnect": 0, "keep_alive": 4, "ping": 5, "select_known_packs": 14, "finish_configuration": 3}

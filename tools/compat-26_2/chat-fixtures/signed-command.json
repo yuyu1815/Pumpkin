@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "fixture_id": "signed-command",
+  "fixture_kind": "separate_signed_command_policy_and_parser_contract",
+  "evidence": {
+    "wire_fields": "official_26_2_protocol_layout_and_current_protocol_source",
+    "argument_canonicalization": "unknown",
+    "runtime_vanilla_verified": false
+  },
+  "cases": [
+    {
+      "id": "reports_disabled_unsigned_command_is_legal_policy_boundary",
+      "config": {"allow_chat_reports": false, "online_mode": false},
+      "input": {"packet_kind": "ordinary_command", "command": "/say hi", "signature": null},
+      "expected": {"decision": "accept_as_unsigned_command", "secure_attribution": false, "reject_reason": null}
+    },
+    {
+      "id": "secure_command_requires_session",
+      "config": {"allow_chat_reports": true, "online_mode": true},
+      "input": {"packet_kind": "signed_command", "command": "/say hi", "argument_signatures": [], "session": "missing"},
+      "expected": {"decision": "reject", "reject_reason": "secure_session_required", "execute_command": false}
+    },
+    {
+      "id": "argument_count_over_official_bound_is_rejected",
+      "config": {"allow_chat_reports": true},
+      "input": {"packet_kind": "signed_command", "command": "/test", "argument_signature_count": 9, "argument_name_max_length": 16, "signature_length": 256},
+      "expected": {"decision": "reject", "reject_reason": "argument_count_exceeds_8", "execute_command": false, "note": "Current parser's remaining-byte guard is not the official semantic max-count proof."}
+    },
+    {
+      "id": "malformed_signed_packet_must_not_fallback_to_unsigned_command",
+      "config": {"allow_chat_reports": true},
+      "input": {"packet_kind": "signed_command", "wire_decode": "malformed", "fallback_text": "/op victim"},
+      "expected": {"decision": "reject", "reject_reason": "signed_decode_failed_no_fallback", "execute_command": false}
+    },
+    {
+      "id": "argument_signature_value_canonicalization_is_deferred",
+      "config": {"allow_chat_reports": true},
+      "input": {"packet_kind": "signed_command", "command": "/msg @s hi", "timestamp_ms": 1700000000000, "salt_i64": "0x0102030405060708", "argument_signatures": [{"name": "target", "signature": "test-only-256-byte-label"}], "session": "valid"},
+      "expected": {"decision": "defer", "reason": "official argument signed-byte construction not yet independently confirmed", "do_not_infer_from_chat_message_canonical_bytes": true}
+    }
+  ]
+}
