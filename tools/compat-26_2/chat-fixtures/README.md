@@ -25,6 +25,13 @@ canonical known-answer は単一 `input`/`expected` と `negative_mutations` を
 `expected.decision` は `accept`、`reject`、`defer` のいずれかである。`reject_reason`
 は vanilla の表示文言ではなく、owner 間で安定させる fixture ID である。
 
+`signed-command-independent.json` は signed-command argument 用の独立 known-answer で
+ある。N=1 の plain/quoted/greedy/Unicode raw substring と N=2 の quoted+greedy を含み、
+各 argument の canonical bytes、SHA-256、256-byte RSA/SHA-256 signature、test-only
+SPKI public DER を固定する。canonical body は official chat body layout を使うが、鍵と
+signature は OpenSSL 3.2.2 で生成した自作 fixture であり、Mojang/vanilla capture では
+ない。`last-seen-ack.json` の invalid ACK は署名 fixture とは別の reject contract である。
+
 ## Secret and rights policy
 
 ここに公式 JAR、Mojang public/private key、session private key、実ユーザー token、
