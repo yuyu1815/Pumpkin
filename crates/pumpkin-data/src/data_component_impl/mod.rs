@@ -178,6 +178,21 @@ pub fn get_idor(nbt: &NbtCompound, key: &str, default: Sound) -> IdOr<basic::Sou
     }
 }
 
+pub fn get_idor_strict(nbt: &NbtCompound, key: &str) -> Option<IdOr<basic::SoundEvent>> {
+    if let Some(sound) = nbt.get_string(key) {
+        let sound = sound.strip_prefix("minecraft:").unwrap_or(sound);
+        Some(IdOr::Id(Sound::from_name(sound)?))
+    } else if let Some(sound_compound) = nbt.get_compound(key) {
+        let sound_name = sound_compound.get_string("sound_id")?;
+        Some(IdOr::Value(basic::SoundEvent {
+            sound_name: sound_name.to_string(),
+            range: sound_compound.get_float("range"),
+        }))
+    } else {
+        None
+    }
+}
+
 pub fn get_idset_hash<T: IDSetContent>(val: &IDSet<T>) -> u32 {
     let mut digest = Digest::new(Crc32Iscsi);
     match val {
@@ -257,14 +272,13 @@ impl<T: IDSetContent + 'static> IDSet<T> {
                 }
             }
             NbtTag::List(nbt_tags) => {
-                let mut ids = Vec::<&T>::new();
-                for nbt in nbt_tags {
-                    if let NbtTag::String(id) = nbt
-                        && let Some(instance) = T::from_str(id.as_ref())
-                    {
-                        ids.push(instance);
-                    }
-                }
+                let ids = nbt_tags
+                    .into_iter()
+                    .map(|nbt| match nbt {
+                        NbtTag::String(id) => T::from_str(id.as_ref()),
+                        _ => None,
+                    })
+                    .collect::<Option<Vec<_>>>()?;
                 Some(Self::IDs(Cow::Owned(ids)))
             }
             _ => None,

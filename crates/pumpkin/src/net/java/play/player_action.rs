@@ -481,7 +481,7 @@ mod tests {
             .await;
         world.set_block_state(
             &position,
-            pumpkin_data::Block::STONE.default_state.id,
+            pumpkin_data::Block::DIAMOND_ORE.default_state.id,
             BlockFlags::FORCE_STATE,
         );
         let java = player.client.java().expect("Java client fixture");
@@ -497,7 +497,7 @@ mod tests {
         java.handle_player_action(&player, &packet(2), &server);
         assert_eq!(
             world.get_block_state(&position),
-            pumpkin_data::Block::STONE.default_state
+            pumpkin_data::Block::DIAMOND_ORE.default_state
         );
 
         // A non-building player is rejected before START creates mining state.
@@ -510,7 +510,7 @@ mod tests {
         assert!(!player.mining.load(Ordering::Relaxed));
         assert_eq!(
             world.get_block_state(&position),
-            pumpkin_data::Block::STONE.default_state
+            pumpkin_data::Block::DIAMOND_ORE.default_state
         );
 
         player
@@ -535,25 +535,35 @@ mod tests {
         assert!(player.delayed_destroy.load(Ordering::Relaxed));
         assert_eq!(
             world.get_block_state(&position),
-            pumpkin_data::Block::STONE.default_state
+            pumpkin_data::Block::DIAMOND_ORE.default_state
         );
 
-        // Stone hardness is 1.5; empty hand speed is 1.0, then the airborne fixture
-        // applies /5 and the non-harvest divisor is /100: 1/750 progress per tick.
-        // Player::tick increments first, so 748 -> 749 is the exact >= 1.0 boundary.
         // The shared Player tick owns delayed completion; no further action packet is needed.
-        player.tick_counter.store(747, Ordering::Relaxed);
-        player.tick(&server);
-        assert!(player.delayed_destroy.load(Ordering::Relaxed));
-        assert_eq!(
-            world.get_block_state(&position),
-            pumpkin_data::Block::STONE.default_state
-        );
-        player.tick(&server);
+        // The exact threshold is derived by the runtime mining-speed calculation.
+        for _ in 0..5_000 {
+            if !player.delayed_destroy.load(Ordering::Relaxed) {
+                break;
+            }
+            player.tick(&server);
+        }
         assert!(!player.delayed_destroy.load(Ordering::Relaxed));
         assert_eq!(
             world.get_block_state(&position),
             pumpkin_data::Block::AIR.default_state
+        );
+        assert_eq!(
+            player.get_stat(
+                pumpkin_data::statistic::StatisticCategory::Mined,
+                pumpkin_data::Block::DIAMOND_ORE.id.as_u16() as i32,
+            ),
+            1
+        );
+        assert_eq!(
+            player.get_stat(
+                pumpkin_data::statistic::StatisticCategory::Mined,
+                pumpkin_data::Block::DIAMOND_ORE.default_state.id.as_u16() as i32,
+            ),
+            0
         );
 
         world

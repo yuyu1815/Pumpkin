@@ -2819,7 +2819,7 @@ impl Player {
                             }
                             let item_id = p.inventory().held_item().item.id;
                             p.increment_stat(StatisticCategory::Used, item_id as i32, 1);
-                            p.increment_stat(StatisticCategory::Mined, state.id.as_u16() as i32, 1);
+                            p.increment_stat(StatisticCategory::Mined, block.id.as_u16() as i32, 1);
                         }
                     }
                 } else {

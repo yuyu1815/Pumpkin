@@ -899,13 +899,294 @@ mod tests {
     use super::*;
     use crate::data_component::DataComponent;
     use crate::data_component_impl::{
-        CustomDataImpl, CustomNameImpl, DataComponentImpl, EnchantmentsImpl, ItemNameImpl,
-        LoreImpl, UnbreakableImpl,
+        ConsumableImpl, CustomDataImpl, CustomNameImpl, DataComponentImpl, EnchantmentsImpl,
+        ItemNameImpl, LoreImpl, UnbreakableImpl,
     };
 
     /// Helper: creates a fresh Iron Sword (max_damage 250, damage 0).
     fn iron_sword() -> ItemStack {
         ItemStack::new(1, &Item::IRON_SWORD)
+    }
+
+    #[test]
+    fn death_protection_item_stack_nbt_round_trip_preserves_effects() {
+        let mut effect = NbtCompound::new();
+        effect.put_string("type", "minecraft:clear_all_effects".to_owned());
+        let mut death_protection = NbtCompound::new();
+        death_protection.put_list("death_effects", vec![NbtTag::Compound(effect)]);
+        let mut components = NbtCompound::new();
+        components.put(
+            "minecraft:death_protection",
+            NbtTag::Compound(death_protection),
+        );
+
+        let mut input = NbtCompound::new();
+        input.put_string("id", "minecraft:totem_of_undying".to_owned());
+        input.put_int("count", 1);
+        input.put_compound("components", components.clone());
+
+        let decoded = ItemStack::read_item_stack(&input).expect("stack should decode");
+        let death_protection = decoded
+            .get_data_component::<crate::data_component_impl::DeathProtectionImpl>()
+            .expect("death protection should decode");
+        assert_eq!(death_protection.death_effects.len(), 1);
+
+        let mut output = NbtCompound::new();
+        decoded.write_item_stack(&mut output);
+        assert_eq!(output.get_compound("components"), Some(&components));
+    }
+
+    #[test]
+    fn death_protection_nbt_applies_official_optional_defaults() {
+        let absent = crate::data_component_impl::DeathProtectionImpl::read_data(&NbtTag::Compound(
+            NbtCompound::new(),
+        ))
+        .expect("absent death_effects defaults to an empty list");
+        assert!(absent.death_effects.is_empty());
+
+        let mut status = NbtCompound::new();
+        status.put_string("id", "minecraft:regeneration".to_owned());
+
+        let mut apply = NbtCompound::new();
+        apply.put_string("type", "minecraft:apply_effects".to_owned());
+        apply.put_list("effects", vec![NbtTag::Compound(status)]);
+
+        let mut teleport = NbtCompound::new();
+        teleport.put_string("type", "minecraft:teleport_randomly".to_owned());
+        let mut death_protection = NbtCompound::new();
+        death_protection.put_list(
+            "death_effects",
+            vec![NbtTag::Compound(apply), NbtTag::Compound(teleport)],
+        );
+        let mut components = NbtCompound::new();
+        components.put(
+            "minecraft:death_protection",
+            NbtTag::Compound(death_protection),
+        );
+        let mut input = NbtCompound::new();
+        input.put_string("id", "minecraft:totem_of_undying".to_owned());
+        input.put_int("count", 1);
+        input.put_compound("components", components);
+
+        let stack = ItemStack::read_item_stack(&input).expect("official optional fields decode");
+        let protection = stack
+            .get_data_component::<crate::data_component_impl::DeathProtectionImpl>()
+            .expect("death protection component");
+        let crate::data_component_impl::ConsumeEffect::ApplyEffects((effects, probability)) =
+            &protection.death_effects[0]
+        else {
+            panic!("expected apply effects");
+        };
+        assert_eq!(*probability, 1.0);
+        assert_eq!(effects[0].amplifier, 0);
+        assert_eq!(effects[0].duration, 0);
+        assert!(!effects[0].ambient);
+        assert!(effects[0].show_particles);
+        assert!(effects[0].show_icon);
+        match &protection.death_effects[1] {
+            crate::data_component_impl::ConsumeEffect::TeleportRandomly(diameter) => {
+                assert!((*diameter - 16.0).abs() < f32::EPSILON);
+            }
+            _ => panic!("expected teleport effect"),
+        }
+    }
+
+    #[test]
+    fn death_protection_show_icon_defaults_to_show_particles() {
+        let mut status = NbtCompound::new();
+        status.put_string("id", "minecraft:regeneration".to_owned());
+        status.put_bool("show_particles", false);
+        let mut apply = NbtCompound::new();
+        apply.put_string("type", "minecraft:apply_effects".to_owned());
+        apply.put_list("effects", vec![NbtTag::Compound(status)]);
+        let mut protection = NbtCompound::new();
+        protection.put_list("death_effects", vec![NbtTag::Compound(apply)]);
+        let decoded = crate::data_component_impl::DeathProtectionImpl::read_data(
+            &NbtTag::Compound(protection),
+        )
+        .expect("optional show_icon should decode");
+        let crate::data_component_impl::ConsumeEffect::ApplyEffects((effects, _)) =
+            &decoded.death_effects[0]
+        else {
+            panic!("expected apply effects");
+        };
+        assert!(!effects[0].show_particles);
+        assert!(!effects[0].show_icon);
+    }
+
+    #[test]
+    fn death_protection_accepts_official_numeric_conversions() {
+        let mut status = NbtCompound::new();
+        status.put_string("id", "minecraft:regeneration".to_owned());
+        status.put_byte("amplifier", 1);
+        status.put_long("duration", 900);
+        status.put_int("ambient", 0);
+        status.put_short("show_particles", 1);
+        status.put_int("show_icon", 1);
+        let mut apply = NbtCompound::new();
+        apply.put_string("type", "minecraft:apply_effects".to_owned());
+        apply.put_int("probability", 1);
+        apply.put_list("effects", vec![NbtTag::Compound(status)]);
+        let mut teleport = NbtCompound::new();
+        teleport.put_string("type", "minecraft:teleport_randomly".to_owned());
+        teleport.put_int("diameter", 16);
+        let mut protection = NbtCompound::new();
+        protection.put_list(
+            "death_effects",
+            vec![NbtTag::Compound(apply), NbtTag::Compound(teleport)],
+        );
+        let decoded = crate::data_component_impl::DeathProtectionImpl::read_data(
+            &NbtTag::Compound(protection),
+        )
+        .expect("numeric NBT values should use official number conversion");
+        assert_eq!(decoded.death_effects.len(), 2);
+    }
+
+    #[test]
+    fn death_protection_numeric_narrowing_matches_java_number() {
+        let decode_duration = |tag| {
+            let mut status = NbtCompound::new();
+            status.put_string("id", "minecraft:regeneration".to_owned());
+            status.put("duration", tag);
+            crate::data_component_impl::StatusEffectInstance::read_data(&NbtTag::Compound(status))
+                .expect("numeric duration should decode")
+                .duration
+        };
+
+        assert_eq!(decode_duration(NbtTag::Long(i64::MAX)), -1);
+        assert_eq!(decode_duration(NbtTag::Double(f64::INFINITY)), i32::MAX);
+        assert_eq!(decode_duration(NbtTag::Double(f64::NEG_INFINITY)), i32::MIN);
+        assert_eq!(decode_duration(NbtTag::Double(f64::NAN)), 0);
+    }
+
+    #[test]
+    fn death_protection_rejects_wrong_types_in_optional_fields() {
+        let mut status = NbtCompound::new();
+        status.put_string("id", "minecraft:regeneration".to_owned());
+        status.put_string("amplifier", "not a number".to_owned());
+        let mut apply = NbtCompound::new();
+        apply.put_string("type", "minecraft:apply_effects".to_owned());
+        apply.put_list("effects", vec![NbtTag::Compound(status)]);
+        let mut protection = NbtCompound::new();
+        protection.put_list("death_effects", vec![NbtTag::Compound(apply)]);
+        assert!(
+            crate::data_component_impl::DeathProtectionImpl::read_data(&NbtTag::Compound(
+                protection
+            ))
+            .is_none()
+        );
+
+        let mut apply = NbtCompound::new();
+        apply.put_string("type", "minecraft:apply_effects".to_owned());
+        apply.put_string("probability", "not a number".to_owned());
+        apply.put_list("effects", Vec::new());
+        let mut protection = NbtCompound::new();
+        protection.put_list("death_effects", vec![NbtTag::Compound(apply)]);
+        assert!(
+            crate::data_component_impl::DeathProtectionImpl::read_data(&NbtTag::Compound(
+                protection
+            ))
+            .is_none()
+        );
+
+        let mut teleport = NbtCompound::new();
+        teleport.put_string("type", "minecraft:teleport_randomly".to_owned());
+        teleport.put_string("diameter", "not a number".to_owned());
+        let mut protection = NbtCompound::new();
+        protection.put_list("death_effects", vec![NbtTag::Compound(teleport)]);
+        assert!(
+            crate::data_component_impl::DeathProtectionImpl::read_data(&NbtTag::Compound(
+                protection
+            ))
+            .is_none()
+        );
+
+        let mut status = NbtCompound::new();
+        status.put_string("id", "minecraft:regeneration".to_owned());
+        status.put_string("ambient", "not a boolean".to_owned());
+        let mut apply = NbtCompound::new();
+        apply.put_string("type", "minecraft:apply_effects".to_owned());
+        apply.put_list("effects", vec![NbtTag::Compound(status)]);
+        let mut protection = NbtCompound::new();
+        protection.put_list("death_effects", vec![NbtTag::Compound(apply)]);
+        assert!(
+            crate::data_component_impl::DeathProtectionImpl::read_data(&NbtTag::Compound(
+                protection
+            ))
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn death_protection_rejects_values_outside_official_codecs() {
+        let mut apply = NbtCompound::new();
+        apply.put_string("type", "minecraft:apply_effects".to_owned());
+        apply.put_float("probability", 1.01);
+        apply.put_list("effects", Vec::new());
+        let mut protection = NbtCompound::new();
+        protection.put_list("death_effects", vec![NbtTag::Compound(apply)]);
+        assert!(
+            crate::data_component_impl::DeathProtectionImpl::read_data(&NbtTag::Compound(
+                protection
+            ))
+            .is_none()
+        );
+
+        for probability in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            let mut apply = NbtCompound::new();
+            apply.put_string("type", "minecraft:apply_effects".to_owned());
+            apply.put_float("probability", probability);
+            apply.put_list("effects", Vec::new());
+            let mut protection = NbtCompound::new();
+            protection.put_list("death_effects", vec![NbtTag::Compound(apply)]);
+            assert!(
+                crate::data_component_impl::DeathProtectionImpl::read_data(&NbtTag::Compound(
+                    protection
+                ))
+                .is_none()
+            );
+        }
+
+        let mut teleport = NbtCompound::new();
+        teleport.put_string("type", "minecraft:teleport_randomly".to_owned());
+        teleport.put_float("diameter", 0.0);
+        let mut protection = NbtCompound::new();
+        protection.put_list("death_effects", vec![NbtTag::Compound(teleport)]);
+        assert!(
+            crate::data_component_impl::DeathProtectionImpl::read_data(&NbtTag::Compound(
+                protection
+            ))
+            .is_none()
+        );
+
+        let mut status = NbtCompound::new();
+        status.put_string("id", "minecraft:regeneration".to_owned());
+        status.put_int("amplifier", 256);
+        let mut apply = NbtCompound::new();
+        apply.put_string("type", "minecraft:apply_effects".to_owned());
+        apply.put_list("effects", vec![NbtTag::Compound(status)]);
+        let mut protection = NbtCompound::new();
+        protection.put_list("death_effects", vec![NbtTag::Compound(apply)]);
+        assert!(
+            crate::data_component_impl::DeathProtectionImpl::read_data(&NbtTag::Compound(
+                protection
+            ))
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn consumable_rejects_invalid_inline_effect() {
+        let mut invalid_effect = NbtCompound::new();
+        invalid_effect.put_string("type", "minecraft:not_a_consume_effect".to_owned());
+        let mut consumable = NbtCompound::new();
+        consumable.put_float("consume_seconds", 1.6);
+        consumable.put_string("animation", "eat".to_owned());
+        consumable.put_string("sound", "minecraft:entity.generic.eat".to_owned());
+        consumable.put_bool("has_consume_particles", true);
+        consumable.put_list("on_consume_effects", vec![NbtTag::Compound(invalid_effect)]);
+
+        assert!(ConsumableImpl::read_data(&NbtTag::Compound(consumable)).is_none());
     }
 
     #[test]

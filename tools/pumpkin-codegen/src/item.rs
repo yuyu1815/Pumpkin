@@ -183,6 +183,84 @@ pub struct EnchantableComponent {
     pub value: i32,
 }
 
+fn consume_effect_tokens(effects: &[ConsumeEffect]) -> TokenStream {
+    let mut effect_tokens = TokenStream::new();
+
+    for effect in effects {
+        match effect.r#type.as_str() {
+            "minecraft:clear_all_effects" => {
+                effect_tokens.extend(quote! { ConsumeEffect::ClearAllEffects, });
+            }
+            "minecraft:teleport_randomly" => {
+                let diameter = effect.diameter.unwrap_or(16.);
+                effect_tokens.extend(quote! { ConsumeEffect::TeleportRandomly(#diameter), });
+            }
+            "minecraft:play_sound" => {
+                let sound = format_ident!(
+                    "{}",
+                    effect
+                        .sound
+                        .as_ref()
+                        .unwrap()
+                        .strip_prefix("minecraft:")
+                        .unwrap()
+                        .to_pascal_case()
+                );
+                effect_tokens.extend(quote! { ConsumeEffect::PlaySound(IdOr::Id(Sound::#sound)), });
+            }
+            "minecraft:apply_effects" => {
+                let probability = effect.probability.unwrap_or(1.);
+                if let StringOrStatusEffects::Effects(status_effect_instances) =
+                    effect.effects.as_ref().unwrap()
+                {
+                    let mut status_tokens = TokenStream::new();
+
+                    for status in status_effect_instances {
+                        let effect_id = &status.id;
+                        let amplifier = status.amplifier.unwrap_or(0);
+                        let duration = status.duration.unwrap_or(0);
+                        let ambient = status.ambient.unwrap_or(false);
+                        let show_particles = status.show_particles.unwrap_or(true);
+                        let show_icon = status.show_icon.unwrap_or(show_particles);
+                        status_tokens.extend(quote! {
+                            StatusEffectInstance {
+                                effect_id: Cow::Borrowed(#effect_id),
+                                amplifier: #amplifier,
+                                duration: #duration,
+                                ambient: #ambient,
+                                show_particles: #show_particles,
+                                show_icon: #show_icon,
+                                hidden_effect: None
+                            },
+                        });
+                    }
+                    effect_tokens.extend(quote! {
+                        ConsumeEffect::ApplyEffects((Cow::Borrowed(&[#status_tokens]), #probability)),
+                    });
+                }
+            }
+            "minecraft:remove_effects" => {
+                if let StringOrStatusEffects::String(id) = effect.effects.as_ref().unwrap() {
+                    let effect_id = format_ident!(
+                        "{}",
+                        id.strip_prefix("minecraft:")
+                            .unwrap()
+                            .to_pascal_case()
+                            .to_uppercase()
+                    );
+
+                    effect_tokens.extend(quote! {
+                        ConsumeEffect::RemoveEffects(IDSet::IDs(Cow::Borrowed(&[&StatusEffect::#effect_id]))),
+                    });
+                }
+            }
+            _ => println!("Unknown CustomEffect type: {}", effect.r#type),
+        }
+    }
+
+    effect_tokens
+}
+
 impl ToTokens for ItemComponents {
     /// Emits a sequence of `(DataComponent, &impl DataComponentImpl)` tuple expressions for code generation.
     fn to_tokens(&self, tokens: &mut TokenStream) {
@@ -401,81 +479,8 @@ impl ToTokens for ItemComponents {
                     .unwrap()
                     .to_pascal_case()
             );
-            let effects: Vec<ConsumeEffect> =
-                consumable.on_consume_effects.clone().unwrap_or(vec![]);
-            let mut effect_tokens = TokenStream::new();
-
-            for effect in effects {
-                match effect.r#type.as_str() {
-                    "minecraft:clear_all_effects" => {
-                        effect_tokens.extend(quote! { ConsumeEffect::ClearAllEffects, });
-                    }
-                    "minecraft:teleport_randomly" => {
-                        let diameter = effect.diameter.unwrap_or(16.);
-                        effect_tokens
-                            .extend(quote! { ConsumeEffect::TeleportRandomly(#diameter), });
-                    }
-                    "minecraft:play_sound" => {
-                        let sound = format_ident!(
-                            "{}",
-                            effect
-                                .sound
-                                .unwrap()
-                                .strip_prefix("minecraft:")
-                                .unwrap()
-                                .to_pascal_case()
-                        );
-                        effect_tokens
-                            .extend(quote! { ConsumeEffect::PlaySound(IdOr::Id(Sound::#sound)), });
-                    }
-                    "minecraft:apply_effects" => {
-                        let probability = effect.probability.unwrap_or(1.);
-                        if let StringOrStatusEffects::Effects(status_effect_instances) =
-                            effect.effects.unwrap()
-                        {
-                            let mut status_tokens = TokenStream::new();
-
-                            for status in status_effect_instances {
-                                let effect_id = status.id;
-                                let amplifier = status.amplifier.unwrap_or(0);
-                                let duration = status.duration.unwrap_or(1);
-                                let ambient = status.ambient.unwrap_or(false);
-                                let show_particles = status.show_particles.unwrap_or(true);
-                                let show_icon = status.show_icon.unwrap_or(true);
-                                status_tokens.extend(quote! {
-                                    StatusEffectInstance {
-                                        effect_id: Cow::Borrowed(#effect_id),
-                                        amplifier: #amplifier,
-                                        duration: #duration,
-                                        ambient: #ambient,
-                                        show_particles: #show_particles,
-                                        show_icon: #show_icon
-                                    },
-                                });
-                            }
-                            effect_tokens.extend(quote! {
-                                ConsumeEffect::ApplyEffects((Cow::Borrowed(&[#status_tokens]), #probability)),
-                            });
-                        }
-                    }
-                    "minecraft:remove_effects" => {
-                        if let StringOrStatusEffects::String(id) = effect.effects.unwrap() {
-                            let effect_id = format_ident!(
-                                "{}",
-                                id.strip_prefix("minecraft:")
-                                    .unwrap()
-                                    .to_pascal_case()
-                                    .to_uppercase()
-                            );
-
-                            effect_tokens.extend(quote! {
-                                ConsumeEffect::RemoveEffects(IDSet::IDs(Cow::Borrowed(&[&StatusEffect::#effect_id]))),
-                            });
-                        }
-                    }
-                    _ => println!("Unknown CustomEffect type: {}", effect.r#type),
-                }
-            }
+            let effects = consumable.on_consume_effects.clone().unwrap_or_default();
+            let effect_tokens = consume_effect_tokens(&effects);
 
             tokens.extend(quote! { (Consumable, &ConsumableImpl {
                 consume_seconds: #consume_seconds,
@@ -490,8 +495,14 @@ impl ToTokens for ItemComponents {
             tokens.extend(quote! { (BlocksAttacks, &BlocksAttacksImpl), });
         }
 
-        if self.death_protection.is_some() {
-            tokens.extend(quote! { (DeathProtection, &DeathProtectionImpl), });
+        if let Some(death_protection) = &self.death_protection {
+            let effects = death_protection.death_effects.clone().unwrap_or_default();
+            let effect_tokens = consume_effect_tokens(&effects);
+            tokens.extend(quote! {
+                (DeathProtection, &DeathProtectionImpl {
+                    death_effects: Cow::Borrowed(&[#effect_tokens]),
+                }),
+            });
         }
 
         if let Some(weapon) = &self.weapon {
@@ -1133,10 +1144,11 @@ pub enum StringOrStatusEffects {
     Effects(Vec<StatusEffectInstance>),
 }
 
-/// Deserialized death-protection component (e.g., totem of undying); fields are unimplemented.
+/// Deserialized death-protection component (e.g., totem of undying).
 #[derive(Deserialize, Clone)]
 pub struct DeathProtection {
-    // TODO
+    #[serde(default)]
+    death_effects: Option<Vec<ConsumeEffect>>,
 }
 
 /// Deserialized attack-blocking component (e.g., shield); fields are unimplemented.

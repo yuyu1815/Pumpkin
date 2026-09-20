@@ -62,6 +62,7 @@ pub struct GenerationSchedule {
 
     public_chunk_map: Arc<DashMap<Vector2<i32>, SyncChunk>>,
     loaded_chunk_changes: Arc<crossbeam::queue::SegQueue<LoadedChunkChange>>,
+    scheduled_tick_chunks: Arc<dashmap::DashSet<Vector2<i32>>>,
     chunk_map: HashMap<ChunkPos, ChunkHolder>,
     unload_chunks: HashSetType<ChunkPos>,
 
@@ -86,6 +87,11 @@ pub struct GenerationSchedule {
 
 impl GenerationSchedule {
     fn publish_chunk(&self, pos: ChunkPos, chunk: SyncChunk) -> Option<SyncChunk> {
+        if chunk.block_ticks.has_ticks() || chunk.fluid_ticks.has_ticks() {
+            self.scheduled_tick_chunks.insert(pos);
+        } else {
+            self.scheduled_tick_chunks.remove(&pos);
+        }
         let previous = self.public_chunk_map.insert(pos, chunk);
         if previous.is_none() {
             self.loaded_chunk_changes
@@ -95,6 +101,7 @@ impl GenerationSchedule {
     }
 
     fn unpublish_chunk(&self, pos: ChunkPos) -> Option<SyncChunk> {
+        self.scheduled_tick_chunks.remove(&pos);
         let removed = self.public_chunk_map.remove(&pos).map(|(_, chunk)| chunk);
         if removed.is_some() {
             self.loaded_chunk_changes
@@ -161,6 +168,7 @@ impl GenerationSchedule {
                     send_level: level_channel,
                     public_chunk_map: level_sched.loaded_chunks.clone(),
                     loaded_chunk_changes: level_sched.loaded_chunk_changes.clone(),
+                    scheduled_tick_chunks: level_sched.chunks_with_scheduled_ticks.clone(),
                     unload_chunks: HashSetType::default(),
                     waiting_for_chunks: HashSetType::default(),
                     io_lock,
@@ -2002,6 +2010,7 @@ mod anvil_load_integration_tests {
                 send_level: level.level_channel.clone(),
                 public_chunk_map: level.loaded_chunks.clone(),
                 loaded_chunk_changes: level.loaded_chunk_changes.clone(),
+                scheduled_tick_chunks: level.chunks_with_scheduled_ticks.clone(),
                 chunk_map,
                 unload_chunks: HashSetType::default(),
                 waiting_for_chunks: HashSetType::default(),
@@ -2185,6 +2194,36 @@ mod anvil_load_integration_tests {
         }
 
         level.shutdown().await.expect("test level shutdown");
+        drop(temp_dir);
+    }
+
+    #[tokio::test]
+    async fn publishing_saved_ticks_registers_the_chunk_for_tick_collection() {
+        let temp_dir = TempDir::new().expect("tick registry tempdir");
+        let level = Level::from_root_folder(
+            &LevelConfig::default(),
+            temp_dir.path().to_path_buf(),
+            0,
+            Dimension::OVERWORLD,
+        );
+        let pos = ChunkPos::new(0, 0);
+        let (send_chunk, recv_chunk) = crossbeam::channel::unbounded();
+        let (mut scheduler, _save_rx) = test_schedule(&level, recv_chunk, send_chunk, pos);
+        let chunk = ChunkData::empty_sync(pos.x, pos.y);
+        chunk.block_ticks.schedule_tick(
+            &crate::tick::ScheduledTick {
+                delay: 0,
+                priority: crate::tick::TickPriority::Normal,
+                position: pumpkin_util::math::position::BlockPos::new(0, 64, 0),
+                value: &pumpkin_data::Block::STONE,
+            },
+            0,
+        );
+
+        scheduler.publish_chunk(pos, chunk);
+
+        assert!(level.chunks_with_scheduled_ticks.contains(&pos));
+        level.shutdown().await.expect("tick registry shutdown");
         drop(temp_dir);
     }
 }

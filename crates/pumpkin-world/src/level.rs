@@ -27,6 +27,8 @@ use pumpkin_data::{Block, BlockStateId, block_properties::has_random_ticks, flui
 use pumpkin_util::math::{position::BlockPos, vector2::Vector2};
 use pumpkin_util::world_seed::Seed;
 use rustc_hash::FxHashSet;
+use std::cmp::Reverse;
+use std::collections::BinaryHeap;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 use std::{
@@ -139,6 +141,28 @@ pub struct TickData {
     pub block_ticks: Vec<OrderedTick<&'static Block>>,
     pub fluid_ticks: Vec<OrderedTick<&'static Fluid>>,
     pub random_ticks: Vec<RandomTickSample>,
+}
+
+fn merge_tick_streams<T: Clone>(streams: Vec<Vec<OrderedTick<T>>>) -> Vec<OrderedTick<T>> {
+    let mut positions = vec![0; streams.len()];
+    let mut heads = BinaryHeap::new();
+    for (index, stream) in streams.iter().enumerate() {
+        if let Some(tick) = stream.first() {
+            heads.push((Reverse(tick.clone()), index));
+        }
+    }
+
+    let mut merged = Vec::new();
+    while let Some((Reverse(_), stream_index)) = heads.pop() {
+        let position = positions[stream_index];
+        let tick = streams[stream_index][position].clone();
+        merged.push(tick);
+        positions[stream_index] += 1;
+        if let Some(next) = streams[stream_index].get(positions[stream_index]) {
+            heads.push((Reverse(next.clone()), stream_index));
+        }
+    }
+    merged
 }
 
 #[derive(Clone, Copy)]
@@ -556,6 +580,8 @@ impl Level {
             fluid_ticks: Vec::new(),
             random_ticks: Vec::with_capacity(active_chunks.len() * 3),
         };
+        let mut block_tick_streams = Vec::new();
+        let mut fluid_tick_streams = Vec::new();
 
         // 1. Process active chunks (random ticks, block entities)
         for pos in active_chunks {
@@ -616,8 +642,21 @@ impl Level {
         for pos in scheduled_chunk_pos {
             if let Some(chunk) = self.loaded_chunks.get(&pos) {
                 let chunk = chunk.value();
-                ticks.block_ticks.append(&mut chunk.block_ticks.step_tick());
-                ticks.fluid_ticks.append(&mut chunk.fluid_ticks.step_tick());
+                let active = active_chunks.contains(&pos);
+                chunk.block_ticks.step_tick();
+                chunk.fluid_ticks.step_tick();
+                // Tick countdown changes the serialized scheduler state even when no callback runs.
+                chunk.mark_dirty(true);
+                if active {
+                    let block_ticks = chunk.block_ticks.take_ready_ticks();
+                    if !block_ticks.is_empty() {
+                        block_tick_streams.push(block_ticks);
+                    }
+                    let fluid_ticks = chunk.fluid_ticks.take_ready_ticks();
+                    if !fluid_ticks.is_empty() {
+                        fluid_tick_streams.push(fluid_ticks);
+                    }
+                }
 
                 // Remove from set if it no longer has ticks
                 if !chunk.block_ticks.has_ticks() && !chunk.fluid_ticks.has_ticks() {
@@ -628,8 +667,8 @@ impl Level {
             }
         }
 
-        ticks.block_ticks.sort_unstable();
-        ticks.fluid_ticks.sort_unstable();
+        ticks.block_ticks = merge_tick_streams(block_tick_streams);
+        ticks.fluid_ticks = merge_tick_streams(fluid_tick_streams);
 
         ticks
     }
@@ -670,19 +709,31 @@ impl Level {
         entity_chunks_to_remove
     }
 
+    fn register_scheduled_ticks(&self, pos: Vector2<i32>, chunk: &ChunkData) {
+        if chunk.block_ticks.has_ticks() || chunk.fluid_ticks.has_ticks() {
+            self.chunks_with_scheduled_ticks.insert(pos);
+        }
+    }
+
     pub async fn get_or_fetch_chunk<R, F: Fn(&SyncChunk) -> R>(
         self: &Arc<Self>,
         pos: Vector2<i32>,
         f: F,
     ) -> R {
         // Check if already in memory
-        if let Some(res) = self.read_chunk_sync(&pos, &f) {
+        if let Some(res) = self.read_chunk_sync(&pos, |chunk| {
+            self.register_scheduled_ticks(pos, chunk);
+            f(chunk)
+        }) {
             return res;
         }
         let chunk = self.fetch_chunk(pos).await;
         if self.loaded_chunks.insert(pos, chunk.clone()).is_none() {
             self.loaded_chunk_changes
                 .push(LoadedChunkChange::Loaded(pos));
+        }
+        if let Some(loaded) = self.loaded_chunks.get(&pos) {
+            self.register_scheduled_ticks(pos, loaded.value());
         }
         f(&chunk)
     }
@@ -1173,7 +1224,7 @@ impl Level {
     ) {
         let tick_order = self.schedule_tick_counts.fetch_add(1, Ordering::Relaxed);
         let scheduled_tick = ScheduledTick {
-            delay,
+            delay: i32::from(delay),
             position: block_pos,
             priority,
             // SAFETY: `block` is a valid reference that outlives this function call for scheduling.
@@ -1200,7 +1251,7 @@ impl Level {
     ) {
         let tick_order = self.schedule_tick_counts.fetch_add(1, Ordering::Relaxed);
         let scheduled_tick = ScheduledTick {
-            delay,
+            delay: i32::from(delay),
             position: block_pos,
             priority,
             // SAFETY: `fluid` is a valid reference that outlives this function call for scheduling.
@@ -1271,6 +1322,304 @@ mod tests {
             end_level.level_folder.dim_folder,
             root.join("dimensions").join("minecraft").join("the_end")
         );
+    }
+
+    #[tokio::test]
+    async fn cross_chunk_local_deadlines_do_not_override_priority() {
+        let temp_dir = TempDir::new().unwrap();
+        let level = Level::from_root_folder(
+            &LevelConfig::default(),
+            temp_dir.path().to_path_buf(),
+            0,
+            Dimension::OVERWORLD,
+        );
+        let old_chunk = Vector2::new(0, 0);
+        let new_chunk = Vector2::new(1, 0);
+        let old_target = BlockPos::new(0, 64, 0);
+        let old_future = BlockPos::new(1, 64, 0);
+        let new_target = BlockPos::new(16, 64, 0);
+        let old_fluid_target = BlockPos::new(2, 64, 0);
+        let new_fluid_target = BlockPos::new(18, 64, 0);
+        level
+            .loaded_chunks
+            .insert(old_chunk, ChunkData::empty_sync(old_chunk.x, old_chunk.y));
+        level
+            .loaded_chunks
+            .insert(new_chunk, ChunkData::empty_sync(new_chunk.x, new_chunk.y));
+
+        // Age only the old chunk before scheduling both due ticks.
+        level.schedule_block_tick(&Block::STONE, old_future, 255, TickPriority::Normal);
+        let inactive_chunks = FxHashSet::from_iter([Vector2::new(99, 0)]);
+        for _ in 0..100 {
+            level.get_tick_data(&inactive_chunks, 0);
+        }
+        level.schedule_block_tick(&Block::STONE, old_target, 0, TickPriority::High);
+        level.schedule_block_tick(&Block::DIRT, new_target, 0, TickPriority::Normal);
+        level.schedule_fluid_tick(&Fluid::WATER, old_fluid_target, 0, TickPriority::High);
+        level.schedule_fluid_tick(&Fluid::WATER, new_fluid_target, 0, TickPriority::Normal);
+
+        let active_chunks = FxHashSet::from_iter([old_chunk, new_chunk]);
+        let ticks = level.get_tick_data(&active_chunks, 0);
+        let actual: Vec<_> = ticks
+            .block_ticks
+            .into_iter()
+            .map(|tick| tick.position)
+            .collect();
+        assert_eq!(actual, vec![old_target, new_target]);
+        let actual: Vec<_> = ticks
+            .fluid_ticks
+            .into_iter()
+            .map(|tick| tick.position)
+            .collect();
+        assert_eq!(actual, vec![old_fluid_target, new_fluid_target]);
+        level.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn inactive_overdue_ticks_keep_deadline_order() {
+        let temp_dir = TempDir::new().unwrap();
+        let level = Level::from_root_folder(
+            &LevelConfig::default(),
+            temp_dir.path().to_path_buf(),
+            0,
+            Dimension::OVERWORLD,
+        );
+        let chunk_pos = Vector2::new(3, 0);
+        let late_deadline = BlockPos::new(48, 64, 0);
+        let early_deadline = BlockPos::new(49, 64, 0);
+        let late_fluid_deadline = BlockPos::new(50, 64, 0);
+        let early_fluid_deadline = BlockPos::new(51, 64, 0);
+        level
+            .loaded_chunks
+            .insert(chunk_pos, ChunkData::empty_sync(chunk_pos.x, chunk_pos.y));
+
+        // The later deadline is higher priority; each chunk must still drain by deadline.
+        level.schedule_block_tick(&Block::STONE, late_deadline, 3, TickPriority::High);
+        level.schedule_block_tick(&Block::STONE, early_deadline, 1, TickPriority::Normal);
+        level.schedule_fluid_tick(&Fluid::WATER, late_fluid_deadline, 3, TickPriority::High);
+        level.schedule_fluid_tick(&Fluid::WATER, early_fluid_deadline, 1, TickPriority::Normal);
+
+        let inactive_chunks = FxHashSet::from_iter([Vector2::new(0, 0)]);
+        for _ in 0..5 {
+            let ticks = level.get_tick_data(&inactive_chunks, 0);
+            assert!(ticks.block_ticks.is_empty());
+            assert!(ticks.fluid_ticks.is_empty());
+        }
+
+        let active_chunks = FxHashSet::from_iter([chunk_pos]);
+        let ticks = level.get_tick_data(&active_chunks, 0);
+        let actual: Vec<_> = ticks
+            .block_ticks
+            .into_iter()
+            .map(|tick| tick.position)
+            .collect();
+        assert_eq!(actual, vec![early_deadline, late_deadline]);
+        let actual: Vec<_> = ticks
+            .fluid_ticks
+            .into_iter()
+            .map(|tick| tick.position)
+            .collect();
+        assert_eq!(actual, vec![early_fluid_deadline, late_fluid_deadline]);
+        level.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn scheduled_ticks_keep_absolute_deadlines_outside_active_chunks() {
+        let temp_dir = TempDir::new().unwrap();
+        let config = LevelConfig::default();
+        let level = Level::from_root_folder(
+            &config,
+            temp_dir.path().to_path_buf(),
+            0,
+            Dimension::OVERWORLD,
+        );
+        let chunk_pos = Vector2::new(3, 0);
+        let block_due = BlockPos::new(48, 64, 0);
+        let block_future = BlockPos::new(49, 64, 0);
+        let fluid_due = BlockPos::new(50, 64, 0);
+        let fluid_future = BlockPos::new(51, 64, 0);
+        level
+            .loaded_chunks
+            .insert(chunk_pos, ChunkData::empty_sync(chunk_pos.x, chunk_pos.y));
+        level.schedule_block_tick(&Block::STONE, block_due, 2, TickPriority::Normal);
+        level.schedule_block_tick(&Block::STONE, block_future, 8, TickPriority::Normal);
+        level.schedule_fluid_tick(&Fluid::WATER, fluid_due, 2, TickPriority::Normal);
+        level.schedule_fluid_tick(&Fluid::WATER, fluid_future, 9, TickPriority::Normal);
+
+        let inactive_chunks = FxHashSet::from_iter([Vector2::new(0, 0)]);
+        for _ in 0..5 {
+            let ticks = level.get_tick_data(&inactive_chunks, 0);
+            assert!(ticks.block_ticks.is_empty());
+            assert!(ticks.fluid_ticks.is_empty());
+        }
+        // A new deadline for the same block/value is still deduplicated while inactive.
+        level.schedule_block_tick(&Block::STONE, block_due, 200, TickPriority::Low);
+        assert!(level.is_block_tick_scheduled(&block_due, &Block::STONE));
+        assert!(level.is_fluid_tick_scheduled(&fluid_due, &Fluid::WATER));
+        assert!(level.loaded_chunks.get(&chunk_pos).unwrap().is_dirty());
+        assert_eq!(
+            level
+                .loaded_chunks
+                .get(&chunk_pos)
+                .unwrap()
+                .block_ticks
+                .to_vec()
+                .iter()
+                .filter(|tick| tick.position == block_due)
+                .count(),
+            1
+        );
+        assert_eq!(
+            level
+                .loaded_chunks
+                .get(&chunk_pos)
+                .unwrap()
+                .block_ticks
+                .to_vec()
+                .iter()
+                .find(|tick| tick.position == block_due)
+                .map(|tick| tick.delay),
+            Some(-3)
+        );
+        assert_eq!(
+            level
+                .loaded_chunks
+                .get(&chunk_pos)
+                .unwrap()
+                .block_ticks
+                .to_vec()
+                .iter()
+                .find(|tick| tick.position == block_future)
+                .map(|tick| tick.delay),
+            Some(3)
+        );
+        assert_eq!(
+            level
+                .loaded_chunks
+                .get(&chunk_pos)
+                .unwrap()
+                .fluid_ticks
+                .to_vec()
+                .iter()
+                .find(|tick| tick.position == fluid_due)
+                .map(|tick| tick.delay),
+            Some(-3)
+        );
+        assert_eq!(
+            level
+                .loaded_chunks
+                .get(&chunk_pos)
+                .unwrap()
+                .fluid_ticks
+                .to_vec()
+                .iter()
+                .find(|tick| tick.position == fluid_future)
+                .map(|tick| tick.delay),
+            Some(4)
+        );
+
+        let active_chunks = FxHashSet::from_iter([chunk_pos]);
+        let ticks = level.get_tick_data(&active_chunks, 0);
+        assert_eq!(ticks.block_ticks.len(), 1);
+        assert_eq!(ticks.block_ticks[0].position, block_due);
+        assert_eq!(ticks.fluid_ticks.len(), 1);
+        assert_eq!(ticks.fluid_ticks[0].position, fluid_due);
+
+        assert!(
+            level
+                .get_tick_data(&active_chunks, 0)
+                .block_ticks
+                .is_empty()
+        );
+        assert!(
+            level
+                .get_tick_data(&active_chunks, 0)
+                .block_ticks
+                .is_empty()
+        );
+        let ticks = level.get_tick_data(&active_chunks, 0);
+        assert_eq!(ticks.block_ticks.len(), 1);
+        assert_eq!(ticks.block_ticks[0].position, block_future);
+        let ticks = level.get_tick_data(&active_chunks, 0);
+        assert_eq!(ticks.fluid_ticks.len(), 1);
+        assert_eq!(ticks.fluid_ticks[0].position, fluid_future);
+
+        let unloaded_chunk = Vector2::new(4, 0);
+        let unloaded_pos = BlockPos::new(64, 64, 0);
+        level.loaded_chunks.insert(
+            unloaded_chunk,
+            ChunkData::empty_sync(unloaded_chunk.x, unloaded_chunk.y),
+        );
+        level.schedule_block_tick(&Block::STONE, unloaded_pos, 0, TickPriority::Normal);
+        level.loaded_chunks.remove(&unloaded_chunk);
+        assert!(level.chunks_with_scheduled_ticks.contains(&unloaded_chunk));
+        level.get_tick_data(&active_chunks, 0);
+        assert!(!level.chunks_with_scheduled_ticks.contains(&unloaded_chunk));
+        level.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn loaded_saved_ticks_are_registered_for_processing() {
+        let temp_dir = TempDir::new().unwrap();
+        let level = Level::from_root_folder(
+            &LevelConfig::default(),
+            temp_dir.path().to_path_buf(),
+            0,
+            Dimension::OVERWORLD,
+        );
+        let chunk_pos = Vector2::new(2, 0);
+        let tick_pos = BlockPos::new(32, 64, 0);
+        level
+            .loaded_chunks
+            .insert(chunk_pos, ChunkData::empty_sync(chunk_pos.x, chunk_pos.y));
+        level.schedule_block_tick(&Block::STONE, tick_pos, 0, TickPriority::Normal);
+
+        // Simulate a chunk loaded with a saved-only tick before the registry is rebuilt.
+        level.chunks_with_scheduled_ticks.remove(&chunk_pos);
+        level.get_or_fetch_chunk(chunk_pos, |_| ()).await;
+        let active_chunks = FxHashSet::from_iter([chunk_pos]);
+        let ticks = level.get_tick_data(&active_chunks, 0);
+        assert_eq!(
+            ticks
+                .block_ticks
+                .iter()
+                .map(|tick| tick.position)
+                .collect::<Vec<_>>(),
+            vec![tick_pos]
+        );
+        level.shutdown().await.unwrap();
+    }
+
+    #[test]
+    fn clear_area_removes_ready_and_future_ticks() {
+        let scheduler = crate::tick::scheduler::ChunkTickScheduler::default();
+        let value: &'static Block = unsafe { &*std::ptr::from_ref(&Block::STONE) };
+        let ready_pos = BlockPos::new(0, 64, 0);
+        let future_pos = BlockPos::new(2, 64, 0);
+        scheduler.schedule_tick(
+            &ScheduledTick {
+                delay: 0,
+                priority: TickPriority::Normal,
+                position: ready_pos,
+                value,
+            },
+            0,
+        );
+        scheduler.schedule_tick(
+            &ScheduledTick {
+                delay: 10,
+                priority: TickPriority::Normal,
+                position: future_pos,
+                value,
+            },
+            1,
+        );
+        scheduler.step_tick();
+        scheduler.clear_area(&BlockPos::new(-1, 0, -1), &BlockPos::new(1, 256, 1));
+        assert!(!scheduler.is_scheduled(ready_pos, value));
+        assert!(scheduler.is_scheduled(future_pos, value));
+        scheduler.clear_area(&BlockPos::new(-1, 0, -1), &BlockPos::new(3, 256, 1));
+        assert!(!scheduler.has_ticks());
     }
 
     #[tokio::test]

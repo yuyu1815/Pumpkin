@@ -18,6 +18,16 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering::Relaxed;
 use tracing::{debug, error};
 
+const SCHEDULED_TICK_BATCH_SIZE: usize = 32;
+
+fn dispatch_scheduled_ticks<T, F>(ticks: &[T], callback: F)
+where
+    T: Sync,
+    F: Fn(&[T]) + Send + Sync,
+{
+    ticks.chunks(SCHEDULED_TICK_BATCH_SIZE).for_each(callback);
+}
+
 impl World {
     #[expect(clippy::too_many_lines)]
     pub fn tick(self: &Arc<Self>, server: &Arc<Server>) {
@@ -294,7 +304,7 @@ impl World {
 
     #[expect(clippy::too_many_lines)]
     fn tick_chunks(self: &Arc<Self>, server: &Arc<Server>) {
-        const BATCH_SIZE: usize = 32;
+        const BATCH_SIZE: usize = SCHEDULED_TICK_BATCH_SIZE;
         const INHABITED_TIME_BATCH_SIZE: usize = 1024;
         let random_tick_speed = self.level_info.load().game_rules.random_tick_speed;
 
@@ -302,45 +312,40 @@ impl World {
         let tick_data = self.level.get_tick_data(&active_chunks, random_tick_speed);
         let handle = server.runtime.clone();
 
-        // 1. Parallel Block Ticks via Rayon
+        // 1. Ordered Block Ticks. Scheduled callbacks may mutate shared world state, so their
+        // input order is part of the tick contract.
         let world = self.clone();
         let block_handle = handle.clone();
-        tick_data
-            .block_ticks
-            .par_chunks(BATCH_SIZE)
-            .for_each(|batch| {
-                let _guard = block_handle.enter();
-                let world = world.clone();
-                for scheduled_tick in batch {
-                    let pos = scheduled_tick.position;
-                    let block = world.get_block(&pos);
-                    if let Some(pumpkin_block) = world.block_registry.get_pumpkin_block(block.id) {
-                        pumpkin_block.on_scheduled_tick(OnScheduledTickArgs {
-                            world: &world,
-                            block,
-                            position: &pos,
-                        });
-                    }
+        dispatch_scheduled_ticks(&tick_data.block_ticks, |batch| {
+            let _guard = block_handle.enter();
+            let world = world.clone();
+            for scheduled_tick in batch {
+                let pos = scheduled_tick.position;
+                let block = world.get_block(&pos);
+                if let Some(pumpkin_block) = world.block_registry.get_pumpkin_block(block.id) {
+                    pumpkin_block.on_scheduled_tick(OnScheduledTickArgs {
+                        world: &world,
+                        block,
+                        position: &pos,
+                    });
                 }
-            });
+            }
+        });
 
-        // 2. Parallel Fluid Ticks via Rayon
+        // 2. Ordered Fluid Ticks. Keep the block phase before the fluid phase.
         let world = self.clone();
         let fluid_handle = handle.clone();
-        tick_data
-            .fluid_ticks
-            .par_chunks(BATCH_SIZE)
-            .for_each(|batch| {
-                let _guard = fluid_handle.enter();
-                let world = world.clone();
-                for scheduled_tick in batch {
-                    let pos = scheduled_tick.position;
-                    let fluid = world.get_fluid(&pos);
-                    if let Some(pumpkin_fluid) = world.block_registry.get_pumpkin_fluid(fluid.id) {
-                        pumpkin_fluid.on_scheduled_tick(&world, fluid, &pos);
-                    }
+        dispatch_scheduled_ticks(&tick_data.fluid_ticks, |batch| {
+            let _guard = fluid_handle.enter();
+            let world = world.clone();
+            for scheduled_tick in batch {
+                let pos = scheduled_tick.position;
+                let fluid = world.get_fluid(&pos);
+                if let Some(pumpkin_fluid) = world.block_registry.get_pumpkin_fluid(fluid.id) {
+                    pumpkin_fluid.on_scheduled_tick(&world, fluid, &pos);
                 }
-            });
+            }
+        });
 
         // 3. Parallel Random Ticks via Rayon
         let world = self.clone();
@@ -514,5 +519,43 @@ impl World {
         for entity in entities {
             self.spawn_entity_non_save(entity);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::dispatch_scheduled_ticks;
+    use std::sync::{Arc, Condvar, Mutex};
+    use std::time::Duration;
+
+    #[test]
+    fn scheduled_tick_dispatch_preserves_global_order_across_33_callbacks() {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(2)
+            .build()
+            .expect("test rayon pool");
+        let head_recorded = Arc::new((Mutex::new(false), Condvar::new()));
+        let trace = Arc::new(Mutex::new(Vec::new()));
+        let ticks: Vec<u32> = (0..33).collect();
+
+        pool.install(|| {
+            dispatch_scheduled_ticks(&ticks, |batch| {
+                if batch[0] == 32 {
+                    trace.lock().unwrap().extend_from_slice(batch);
+                    let mut recorded = head_recorded.0.lock().unwrap();
+                    *recorded = true;
+                    head_recorded.1.notify_one();
+                } else {
+                    let recorded = head_recorded.0.lock().unwrap();
+                    let _ = head_recorded
+                        .1
+                        .wait_timeout_while(recorded, Duration::from_millis(100), |seen| !*seen)
+                        .unwrap();
+                    trace.lock().unwrap().extend_from_slice(batch);
+                }
+            });
+        });
+
+        assert_eq!(*trace.lock().unwrap(), (0..33).collect::<Vec<_>>());
     }
 }

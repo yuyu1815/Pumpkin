@@ -50,7 +50,46 @@ impl Hash for FoodImpl {
     }
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+fn nbt_number(tag: &NbtTag) -> Option<f64> {
+    match tag {
+        NbtTag::Byte(value) => Some(f64::from(*value)),
+        NbtTag::Short(value) => Some(f64::from(*value)),
+        NbtTag::Int(value) => Some(f64::from(*value)),
+        NbtTag::Long(value) => Some(*value as f64),
+        NbtTag::Float(value) => Some(f64::from(*value)),
+        NbtTag::Double(value) => Some(*value),
+        _ => None,
+    }
+}
+
+fn nbt_i32(tag: &NbtTag) -> Option<i32> {
+    match tag {
+        NbtTag::Byte(value) => Some(i32::from(*value)),
+        NbtTag::Short(value) => Some(i32::from(*value)),
+        NbtTag::Int(value) => Some(*value),
+        NbtTag::Long(value) => Some(*value as i32),
+        NbtTag::Float(value) => Some(*value as i32),
+        NbtTag::Double(value) => Some(*value as i32),
+        _ => None,
+    }
+}
+
+fn optional_i32(compound: &NbtCompound, key: &str, default: i32) -> Option<i32> {
+    compound.get(key).map_or(Some(default), nbt_i32)
+}
+
+fn optional_f32(compound: &NbtCompound, key: &str, default: f32) -> Option<f32> {
+    compound.get(key).map_or(Some(default), |tag| {
+        nbt_number(tag).map(|value| value as f32)
+    })
+}
+
+fn optional_bool(compound: &NbtCompound, key: &str, default: bool) -> Option<bool> {
+    compound.get(key).map_or(Some(default), |tag| {
+        nbt_number(tag).map(|value| value != 0.0)
+    })
+}
+
 pub struct StatusEffectInstance {
     pub effect_id: Cow<'static, str>,
     pub amplifier: i32,
@@ -58,46 +97,192 @@ pub struct StatusEffectInstance {
     pub ambient: bool,
     pub show_particles: bool,
     pub show_icon: bool,
+    pub hidden_effect: Option<Box<StatusEffectInstance>>,
+}
+
+impl Clone for StatusEffectInstance {
+    fn clone(&self) -> Self {
+        let mut nodes = Vec::new();
+        let mut current = Some(self);
+        while let Some(effect) = current {
+            nodes.push(Self {
+                effect_id: effect.effect_id.clone(),
+                amplifier: effect.amplifier,
+                duration: effect.duration,
+                ambient: effect.ambient,
+                show_particles: effect.show_particles,
+                show_icon: effect.show_icon,
+                hidden_effect: None,
+            });
+            current = effect.hidden_effect.as_deref();
+        }
+
+        let mut hidden_effect = None;
+        for mut node in nodes.into_iter().rev() {
+            node.hidden_effect = hidden_effect;
+            hidden_effect = Some(Box::new(node));
+        }
+        hidden_effect
+            .map(|effect| *effect)
+            .expect("status effect always has a root")
+    }
+}
+
+impl PartialEq for StatusEffectInstance {
+    fn eq(&self, other: &Self) -> bool {
+        let mut left = Some(self);
+        let mut right = Some(other);
+        loop {
+            match (left, right) {
+                (Some(left_node), Some(right_node)) => {
+                    if left_node.effect_id != right_node.effect_id
+                        || left_node.amplifier != right_node.amplifier
+                        || left_node.duration != right_node.duration
+                        || left_node.ambient != right_node.ambient
+                        || left_node.show_particles != right_node.show_particles
+                        || left_node.show_icon != right_node.show_icon
+                    {
+                        return false;
+                    }
+                    left = left_node.hidden_effect.as_deref();
+                    right = right_node.hidden_effect.as_deref();
+                }
+                (None, None) => return true,
+                _ => return false,
+            }
+        }
+    }
+}
+
+impl Eq for StatusEffectInstance {}
+
+impl Hash for StatusEffectInstance {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let mut current = Some(self);
+        while let Some(effect) = current {
+            effect.effect_id.hash(state);
+            effect.amplifier.hash(state);
+            effect.duration.hash(state);
+            effect.ambient.hash(state);
+            effect.show_particles.hash(state);
+            effect.show_icon.hash(state);
+            current = effect.hidden_effect.as_deref();
+            current.is_some().hash(state);
+        }
+    }
+}
+
+impl Drop for StatusEffectInstance {
+    fn drop(&mut self) {
+        let mut hidden_effect = self.hidden_effect.take();
+        while let Some(mut effect) = hidden_effect {
+            hidden_effect = effect.hidden_effect.take();
+        }
+    }
+}
+
+impl std::fmt::Debug for StatusEffectInstance {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut depth = 0;
+        let mut current = Some(self);
+        while let Some(effect) = current {
+            depth += 1;
+            current = effect.hidden_effect.as_deref();
+        }
+        formatter
+            .debug_struct("StatusEffectInstance")
+            .field("effect_id", &self.effect_id)
+            .field("amplifier", &self.amplifier)
+            .field("duration", &self.duration)
+            .field("ambient", &self.ambient)
+            .field("show_particles", &self.show_particles)
+            .field("show_icon", &self.show_icon)
+            .field("hidden_effect_depth", &depth)
+            .finish()
+    }
 }
 
 impl StatusEffectInstance {
     pub fn read_data(nbt: &NbtTag) -> Option<Self> {
-        let compound = nbt.extract_compound()?;
-        let effect_id = Cow::Owned(compound.get_string("id")?.to_string());
-        let amplifier = compound.get_int("amplifier")?;
-        let duration = compound.get_int("duration")?;
-        let ambient = compound.get_bool("ambient")?;
-        let show_particles = compound.get_bool("show_particles")?;
-        let show_icon = compound.get_bool("show_icon")?;
-        Some(Self {
-            effect_id,
-            amplifier,
-            duration,
-            ambient,
-            show_particles,
-            show_icon,
-        })
+        let root = nbt.extract_compound()?;
+        let effect_id = StatusEffect::from_minecraft_name(root.get_string("id")?)?.minecraft_name;
+
+        // NBT parsing already enforces MAX_NBT_DEPTH. Keep this walk iterative so the
+        // recursive hidden_effect payload cannot grow the Rust call stack.
+        let mut nodes = Vec::new();
+        let mut current = Some(nbt);
+        while let Some(tag) = current {
+            let compound = tag.extract_compound()?;
+            let amplifier = optional_i32(compound, "amplifier", 0)?;
+            if !(0..=255).contains(&amplifier) {
+                return None;
+            }
+            let duration = optional_i32(compound, "duration", 0)?;
+            let ambient = optional_bool(compound, "ambient", false)?;
+            let show_particles = optional_bool(compound, "show_particles", true)?;
+            let show_icon = optional_bool(compound, "show_icon", show_particles)?;
+            current = compound.get("hidden_effect");
+            nodes.push(Self {
+                effect_id: Cow::Borrowed(effect_id),
+                amplifier,
+                duration,
+                ambient,
+                show_particles,
+                show_icon,
+                hidden_effect: None,
+            });
+        }
+
+        let mut hidden_effect = None;
+        for mut node in nodes.into_iter().rev() {
+            node.hidden_effect = hidden_effect;
+            hidden_effect = Some(Box::new(node));
+        }
+        hidden_effect.map(|effect| *effect)
     }
 
     pub fn as_nbt(&self) -> NbtTag {
-        let mut compound = NbtCompound::new();
-        compound.put_string("id", self.effect_id.to_string());
-        compound.put_int("amplifier", self.amplifier);
-        compound.put_int("duration", self.duration);
-        compound.put_bool("ambient", self.ambient);
-        compound.put_bool("show_particles", self.show_particles);
-        compound.put_bool("show_icon", self.show_icon);
-        NbtTag::Compound(compound)
+        let mut compounds = Vec::new();
+        let mut current = Some(self);
+        while let Some(effect) = current {
+            let mut compound = NbtCompound::new();
+            if compounds.is_empty() {
+                compound.put_string("id", effect.effect_id.to_string());
+            }
+            compound.put_int("amplifier", effect.amplifier);
+            compound.put_int("duration", effect.duration);
+            compound.put_bool("ambient", effect.ambient);
+            compound.put_bool("show_particles", effect.show_particles);
+            compound.put_bool("show_icon", effect.show_icon);
+            compounds.push(compound);
+            current = effect.hidden_effect.as_deref();
+        }
+
+        let mut encoded = None;
+        for mut compound in compounds.into_iter().rev() {
+            if let Some(hidden) = encoded {
+                compound.put("hidden_effect", NbtTag::Compound(hidden));
+            }
+            encoded = Some(compound);
+        }
+        NbtTag::Compound(encoded.expect("status effect always has a root"))
     }
 
     pub fn get_hash(&self) -> i32 {
         let mut digest = Digest::new(Crc32Iscsi);
-        digest.update(&get_str_hash(self.effect_id.as_ref()).to_le_bytes());
-        digest.update(&get_i32_hash(self.amplifier).to_le_bytes());
-        digest.update(&get_i32_hash(self.duration).to_le_bytes());
-        digest.update(&[self.ambient as u8]);
-        digest.update(&[self.show_particles as u8]);
-        digest.update(&[self.show_icon as u8]);
+        let mut current = Some(self);
+        while let Some(effect) = current {
+            digest.update(&get_str_hash(effect.effect_id.as_ref()).to_le_bytes());
+            digest.update(&get_i32_hash(effect.amplifier).to_le_bytes());
+            digest.update(&get_i32_hash(effect.duration).to_le_bytes());
+            digest.update(&[effect.ambient as u8]);
+            digest.update(&[effect.show_particles as u8]);
+            digest.update(&[effect.show_icon as u8]);
+            current = effect.hidden_effect.as_deref();
+            if current.is_some() {
+                digest.update(&[1]);
+            }
+        }
         digest.finalize() as i32
     }
 }
@@ -219,6 +404,7 @@ impl ConsumeEffect {
     pub fn read_data(nbt: &NbtTag) -> Option<Self> {
         let compound = nbt.extract_compound()?;
         let r#type = compound.get_string("type")?;
+        let r#type = r#type.strip_prefix("minecraft:").unwrap_or(r#type);
         match r#type {
             "remove_effects" => {
                 let idset = IDSet::read(compound.get("effects")?)?;
@@ -226,20 +412,26 @@ impl ConsumeEffect {
             }
             "clear_all_effects" => Some(Self::ClearAllEffects),
             "teleport_randomly" => {
-                let dst = compound.get_float("diameter")?;
+                let dst = optional_f32(compound, "diameter", 16.0)?;
+                if !(dst > 0.0 && dst <= f32::MAX) {
+                    return None;
+                }
                 Some(Self::TeleportRandomly(dst))
             }
             "play_sound" => {
-                let sound = get_idor(compound, "sound", Sound::EntityGenericEat);
+                let sound = crate::data_component_impl::get_idor_strict(compound, "sound")?;
                 Some(Self::PlaySound(sound))
             }
             "apply_effects" => {
-                let probability = compound.get_float("probability")?;
+                let probability = optional_f32(compound, "probability", 1.0)?;
+                if !(0.0..=1.0).contains(&probability) {
+                    return None;
+                }
                 let effects_vec: Vec<StatusEffectInstance> = compound
                     .get_list("effects")?
                     .iter()
-                    .filter_map(StatusEffectInstance::read_data)
-                    .collect();
+                    .map(StatusEffectInstance::read_data)
+                    .collect::<Option<Vec<_>>>()?;
                 let effects: Cow<'static, [StatusEffectInstance]> = Cow::Owned(effects_vec);
                 Some(Self::ApplyEffects((effects, probability)))
             }
@@ -248,7 +440,7 @@ impl ConsumeEffect {
     }
     pub fn as_nbt(&self) -> NbtTag {
         let mut compound = NbtCompound::new();
-        compound.put_string("type", self.to_str().to_string());
+        compound.put_string("type", format!("minecraft:{}", self.to_str()));
         match self {
             ConsumeEffect::ApplyEffects(data) => {
                 let nbt_arr = data.0.iter().map(|x| x.as_nbt()).collect();
@@ -334,10 +526,12 @@ impl ConsumableImpl {
         let consume_particles = compound.get_bool("has_consume_particles").unwrap_or(false);
         let opt_list = compound.get_list("on_consume_effects");
         let effects: Cow<'static, [ConsumeEffect]> = if let Some(effect_list) = opt_list {
-            effect_list
-                .iter()
-                .filter_map(ConsumeEffect::read_data)
-                .collect()
+            Cow::Owned(
+                effect_list
+                    .iter()
+                    .map(ConsumeEffect::read_data)
+                    .collect::<Option<Vec<_>>>()?,
+            )
         } else {
             Cow::Borrowed(&[])
         };
@@ -473,37 +667,13 @@ impl PotionContentsImpl {
         };
         let custom_color = compound.get_int("custom_color");
         let custom_name = compound.get_string("custom_name").map(|s| s.to_string());
-        let custom_effects = compound
-            .get_list("custom_effects")
-            .map(|list| {
-                list.iter()
-                    .filter_map(|item| {
-                        let effect_tag = item.extract_compound()?;
-                        let id: Cow<'static, str> =
-                            Cow::Owned(effect_tag.get_string("id")?.to_string());
-                        let amplifier = effect_tag
-                            .get_int("amplifier")
-                            .or_else(|| effect_tag.get_byte("amplifier").map(i32::from))
-                            .unwrap_or(0);
-                        let duration = effect_tag
-                            .get_int("duration")
-                            .or_else(|| effect_tag.get_byte("duration").map(i32::from))
-                            .unwrap_or(0);
-                        let ambient = effect_tag.get_bool("ambient").unwrap_or(false);
-                        let show_particles = effect_tag.get_bool("show_particles").unwrap_or(true);
-                        let show_icon = effect_tag.get_bool("show_icon").unwrap_or(true);
-                        Some(StatusEffectInstance {
-                            effect_id: id,
-                            amplifier,
-                            duration,
-                            ambient,
-                            show_particles,
-                            show_icon,
-                        })
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
+        let custom_effects = match compound.get_list("custom_effects") {
+            Some(list) => list
+                .iter()
+                .map(StatusEffectInstance::read_data)
+                .collect::<Option<Vec<_>>>()?,
+            None => Vec::new(),
+        };
         Some(Self {
             potion_id,
             custom_color,
@@ -522,18 +692,13 @@ impl DataComponentImpl for PotionContentsImpl {
             compound.put_int("custom_color", color);
         }
         if !self.custom_effects.is_empty() {
-            let mut effects_list = Vec::new();
-            for effect in &self.custom_effects {
-                let mut effect_compound = NbtCompound::new();
-                effect_compound.put_string("id", effect.effect_id.to_string());
-                effect_compound.put_int("amplifier", effect.amplifier);
-                effect_compound.put_int("duration", effect.duration);
-                effect_compound.put_byte("ambient", effect.ambient as i8);
-                effect_compound.put_byte("show_particles", effect.show_particles as i8);
-                effect_compound.put_byte("show_icon", effect.show_icon as i8);
-                effects_list.push(NbtTag::Compound(effect_compound));
-            }
-            compound.put("custom_effects", NbtTag::List(effects_list));
+            compound.put_list(
+                "custom_effects",
+                self.custom_effects
+                    .iter()
+                    .map(StatusEffectInstance::as_nbt)
+                    .collect(),
+            );
         }
         if let Some(name) = &self.custom_name {
             compound.put_string("custom_name", name.clone());
@@ -591,8 +756,13 @@ impl Hash for PotionDurationScaleImpl {
 
 #[cfg(test)]
 mod tests {
-    use super::{DataComponentImpl, PotionDurationScaleImpl};
+    use super::{
+        DataComponentImpl, PotionContentsImpl, PotionDurationScaleImpl, StatusEffectInstance,
+    };
     use crate::item::Item;
+    use pumpkin_nbt::{compound::NbtCompound, tag::NbtTag};
+    use std::borrow::Cow;
+    use std::hash::Hasher;
 
     #[test]
     fn potion_duration_scale_round_trips_as_a_float() {
@@ -616,6 +786,110 @@ mod tests {
             .expect("tipped arrows should have a duration scale");
 
         assert_eq!(scale.scale, 0.125);
+    }
+
+    fn hidden_effect_fixture(id: &str) -> NbtTag {
+        let mut hidden_2 = NbtCompound::new();
+        hidden_2.put_int("amplifier", 0);
+        hidden_2.put_int("duration", 20);
+        hidden_2.put_bool("ambient", false);
+        hidden_2.put_bool("show_particles", true);
+        hidden_2.put_bool("show_icon", true);
+
+        let mut hidden_1 = NbtCompound::new();
+        hidden_1.put_int("amplifier", 0);
+        hidden_1.put_int("duration", 40);
+        hidden_1.put_bool("ambient", false);
+        hidden_1.put_bool("show_particles", true);
+        hidden_1.put_bool("show_icon", true);
+        hidden_1.put("hidden_effect", NbtTag::Compound(hidden_2));
+
+        let mut root = NbtCompound::new();
+        root.put_string("id", id.to_owned());
+        root.put_int("amplifier", 1);
+        root.put_int("duration", 100);
+        root.put_bool("ambient", false);
+        root.put_bool("show_particles", true);
+        root.put_bool("show_icon", true);
+        root.put("hidden_effect", NbtTag::Compound(hidden_1));
+
+        let mut component = NbtCompound::new();
+        component.put_list("custom_effects", vec![NbtTag::Compound(root)]);
+        NbtTag::Compound(component)
+    }
+
+    #[test]
+    fn potion_contents_preserves_two_hidden_effect_links_in_nbt() {
+        let input = hidden_effect_fixture("minecraft:regeneration");
+        let decoded = PotionContentsImpl::read_data(&input).expect("fixture should decode");
+        assert_eq!(decoded.custom_effects.len(), 1);
+        assert_eq!(
+            decoded.custom_effects[0]
+                .hidden_effect
+                .as_ref()
+                .and_then(|effect| effect.hidden_effect.as_ref())
+                .map(|effect| effect.duration),
+            Some(20)
+        );
+        assert_eq!(decoded.write_data(), input);
+    }
+
+    #[test]
+    fn potion_contents_rejects_invalid_hidden_effect_and_unknown_id() {
+        let mut root = NbtCompound::new();
+        root.put_string("id", "minecraft:regeneration".to_owned());
+        root.put_string("hidden_effect", "not a compound".to_owned());
+        let mut wrong_type_component = NbtCompound::new();
+        wrong_type_component.put_list("custom_effects", vec![NbtTag::Compound(root)]);
+        assert!(PotionContentsImpl::read_data(&NbtTag::Compound(wrong_type_component)).is_none());
+        assert!(
+            PotionContentsImpl::read_data(&hidden_effect_fixture("minecraft:not_real")).is_none()
+        );
+    }
+
+    #[test]
+    fn potion_contents_applies_effect_defaults_and_preserves_name() {
+        let mut effect = NbtCompound::new();
+        effect.put_string("id", "minecraft:regeneration".to_owned());
+        let mut component = NbtCompound::new();
+        component.put_list("custom_effects", vec![NbtTag::Compound(effect)]);
+        component.put_string("custom_name", "test potion".to_owned());
+
+        let decoded = PotionContentsImpl::read_data(&NbtTag::Compound(component))
+            .expect("official optional fields should default");
+        let effect = &decoded.custom_effects[0];
+        assert_eq!(effect.amplifier, 0);
+        assert_eq!(effect.duration, 0);
+        assert!(!effect.ambient);
+        assert!(effect.show_particles);
+        assert!(effect.show_icon);
+        assert_eq!(decoded.custom_name.as_deref(), Some("test potion"));
+    }
+
+    #[test]
+    fn status_effect_chain_operations_are_iterative() {
+        let mut chain = None;
+        for _ in (0..4096).rev() {
+            chain = Some(Box::new(StatusEffectInstance {
+                effect_id: Cow::Borrowed("minecraft:regeneration"),
+                amplifier: 0,
+                duration: 1,
+                ambient: false,
+                show_particles: true,
+                show_icon: true,
+                hidden_effect: chain,
+            }));
+        }
+        let effect = *chain.expect("chain should have a root");
+        let cloned = effect.clone();
+        assert_eq!(effect, cloned);
+
+        let mut left = std::collections::hash_map::DefaultHasher::new();
+        let mut right = std::collections::hash_map::DefaultHasher::new();
+        std::hash::Hash::hash(&effect, &mut left);
+        std::hash::Hash::hash(&cloned, &mut right);
+        assert_eq!(left.finish(), right.finish());
+        assert!(format!("{effect:?}").contains("hidden_effect_depth"));
     }
 }
 

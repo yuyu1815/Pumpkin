@@ -149,7 +149,7 @@ where
     let x = nbt.get_int("x")?;
     let y = nbt.get_int("y")?;
     let z = nbt.get_int("z")?;
-    let delay = nbt.get_int("t")? as u8;
+    let delay = nbt.get_int("t")?;
     let priority = TickPriority::try_from(nbt.get_int("p")?).ok()?;
     let res_loc_str = nbt.get_string("i")?;
     let res_loc = ResourceLocation::from_str(res_loc_str).ok()?;
@@ -571,7 +571,7 @@ impl ChunkData {
             tick_comp.put_int("x", tick.position.0.x);
             tick_comp.put_int("y", tick.position.0.y);
             tick_comp.put_int("z", tick.position.0.z);
-            tick_comp.put_int("t", tick.delay as i32);
+            tick_comp.put_int("t", tick.delay);
             tick_comp.put_int("p", tick.priority as i32);
             tick_comp.put_string("i", tick.value.to_resource_location());
             block_ticks_list.push(NbtTag::Compound(tick_comp));
@@ -584,7 +584,7 @@ impl ChunkData {
             tick_comp.put_int("x", tick.position.0.x);
             tick_comp.put_int("y", tick.position.0.y);
             tick_comp.put_int("z", tick.position.0.z);
-            tick_comp.put_int("t", tick.delay as i32);
+            tick_comp.put_int("t", tick.delay);
             tick_comp.put_int("p", tick.priority as i32);
             tick_comp.put_string("i", tick.value.to_resource_location());
             fluid_ticks_list.push(NbtTag::Compound(tick_comp));
@@ -981,6 +981,80 @@ mod tests {
                 .unwrap()
                 .id
         );
+    }
+
+    fn chunk_with_tick_delays(delays: &[i32]) -> Vec<u8> {
+        let base = ChunkData::empty(0, 0).internal_to_bytes().to_vec();
+        let mut cursor = std::io::Cursor::new(base);
+        let mut reader = pumpkin_nbt::deserializer::NbtReadHelperJava::new(&mut cursor);
+        let mut root = pumpkin_nbt::Nbt::read(&mut reader)
+            .expect("read base chunk")
+            .root_tag;
+        let ticks = delays
+            .iter()
+            .enumerate()
+            .map(|(index, &delay)| {
+                let mut tick = NbtCompound::new();
+                tick.put_int("x", index as i32);
+                tick.put_int("y", 64);
+                tick.put_int("z", 0);
+                tick.put_int("t", delay);
+                tick.put_int("p", 0);
+                tick.put_string("i", "minecraft:stone".to_owned());
+                NbtTag::Compound(tick)
+            })
+            .collect();
+        root.put_list("block_ticks", ticks);
+        pumpkin_nbt::Nbt::from(root).write().to_vec()
+    }
+
+    fn loaded_tick_delays(chunk: &ChunkData) -> Vec<i32> {
+        let mut delays: Vec<_> = chunk
+            .block_ticks
+            .to_vec()
+            .into_iter()
+            .map(|tick| tick.delay)
+            .collect();
+        delays.sort_unstable();
+        delays
+    }
+
+    #[test]
+    fn signed_tick_delays_survive_chunk_save_reload() {
+        let fixture = chunk_with_tick_delays(&[-1, 256, 257]);
+        let loaded = ChunkData::internal_from_bytes(&fixture, Vector2::new(0, 0))
+            .expect("load signed tick fixture");
+        let reloaded =
+            ChunkData::internal_from_bytes(&loaded.internal_to_bytes(), Vector2::new(0, 0))
+                .expect("reload signed tick fixture");
+
+        assert_eq!(loaded_tick_delays(&reloaded), vec![-1, 256, 257]);
+    }
+
+    #[test]
+    fn negative_tick_delay_is_due_immediately() {
+        let fixture = chunk_with_tick_delays(&[-1]);
+        let chunk = ChunkData::internal_from_bytes(&fixture, Vector2::new(0, 0))
+            .expect("load overdue tick fixture");
+
+        chunk.block_ticks.step_tick();
+        assert_eq!(chunk.block_ticks.take_ready_ticks().len(), 1);
+    }
+
+    #[test]
+    fn long_tick_delays_wait_for_their_round() {
+        let fixture = chunk_with_tick_delays(&[256, 257]);
+        let chunk = ChunkData::internal_from_bytes(&fixture, Vector2::new(0, 0))
+            .expect("load long tick fixture");
+
+        for _ in 0..256 {
+            chunk.block_ticks.step_tick();
+            assert!(chunk.block_ticks.take_ready_ticks().is_empty());
+        }
+        chunk.block_ticks.step_tick();
+        assert_eq!(chunk.block_ticks.take_ready_ticks().len(), 1);
+        chunk.block_ticks.step_tick();
+        assert_eq!(chunk.block_ticks.take_ready_ticks().len(), 1);
     }
 
     #[test]

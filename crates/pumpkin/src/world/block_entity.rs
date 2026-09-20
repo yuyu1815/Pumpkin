@@ -1,5 +1,5 @@
 use super::{World, bedrock_chest_block_actor};
-use crate::block::entities::{BlockEntity, block_entity_from_nbt};
+use crate::block::entities::{BlockEntity, block_entity_from_nbt, block_entity_matches_state};
 use pumpkin_data::BlockStateId;
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_protocol::codec::var_int::VarInt;
@@ -36,7 +36,8 @@ impl World {
             .get(&chunk_pos)
             .and_then(|m| m.get(block_pos).cloned())
         {
-            return Some(entity);
+            let state_id = self.get_block_state_id_if_loaded(block_pos)?;
+            return block_entity_matches_state(entity.as_ref(), state_id).then_some(entity);
         }
 
         let nbt = self
@@ -50,6 +51,11 @@ impl World {
                     .cloned()
             })
             .flatten()?;
+        let state_id = self.get_block_state_id_if_loaded(block_pos)?;
+        let entity = block_entity_from_nbt(&nbt)?;
+        if !block_entity_matches_state(entity.as_ref(), state_id) {
+            return None;
+        }
         if let Some(custom_data) = nbt
             .get_compound("PumpkinCustomData")
             .or_else(|| nbt.get_compound("BukkitValues"))
@@ -57,7 +63,6 @@ impl World {
             self.custom_block_entity_data
                 .insert(*block_pos, custom_data.clone());
         }
-        let entity = block_entity_from_nbt(&nbt)?;
         self.block_entities
             .entry(chunk_pos)
             .or_default()
@@ -100,8 +105,12 @@ impl World {
                     .section
                     .get_block_absolute_y(relative.x as usize, relative.y, relative.z as usize)
                     .and_then(|state_id| {
-                        bedrock_chest_block_actor(state_id, *position)
-                            .or_else(|| entity.bedrock_block_actor_data(state_id))
+                        block_entity_matches_state(entity.as_ref(), state_id)
+                            .then(|| {
+                                bedrock_chest_block_actor(state_id, *position)
+                                    .or_else(|| entity.bedrock_block_actor_data(state_id))
+                            })
+                            .flatten()
                     })
             })
             .chain(
@@ -116,7 +125,10 @@ impl World {
                             relative.z as usize,
                         )?;
                         bedrock_chest_block_actor(state_id, *position).or_else(|| {
-                            block_entity_from_nbt(nbt)?.bedrock_block_actor_data(state_id)
+                            let entity = block_entity_from_nbt(nbt)?;
+                            block_entity_matches_state(entity.as_ref(), state_id)
+                                .then(|| entity.bedrock_block_actor_data(state_id))
+                                .flatten()
                         })
                     }),
             )
@@ -276,6 +288,13 @@ impl World {
         };
 
         for block_entity in block_entities {
+            let Some(state_id) = self.get_block_state_id_if_loaded(&block_entity.get_position())
+            else {
+                continue;
+            };
+            if !block_entity_matches_state(block_entity.as_ref(), state_id) {
+                continue;
+            }
             let mut nbt = NbtCompound::new();
             block_entity.write_internal(&mut nbt);
             if let Some(custom_data) = self

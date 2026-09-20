@@ -16,6 +16,10 @@ use pumpkin_util::identifier::Identifier;
 use pumpkin_util::version::JavaMinecraftVersion;
 
 const MAX_STATUS_EFFECTS: usize = 128;
+// Implementation ceiling retained from the former iterative skip codec; not an official limit.
+const MAX_EFFECT_DEPTH: usize = 32;
+const MAX_IDSET_ELEMENTS: usize = 256;
+const MAX_DEATH_EFFECTS: usize = 256;
 const MAX_TOOLTIP_HIDDEN_COMPONENTS: usize = 256;
 
 #[must_use]
@@ -55,6 +59,9 @@ fn deserialize_idset<T: IDSetContent>(
         }
         std::cmp::Ordering::Greater => {
             let len = id_type - 1;
+            if len as usize > MAX_IDSET_ELEMENTS {
+                return Err(ReadingError::Message("Too many IDSet elements".into()));
+            }
             let mut content_vec = Vec::with_capacity(len as usize);
 
             for _ in 0..len {
@@ -83,13 +90,62 @@ fn serialize_idset<C: IDSetContent>(
             seq.write_string(tag)
         }
         IDSet::IDs(elements) => {
-            seq.write_var_int(&VarInt(elements.len() as i32 + 1))?;
+            if elements.len() > MAX_IDSET_ELEMENTS {
+                return Err(WritingError::Message("Too many IDSet elements".into()));
+            }
+            let count = i32::try_from(elements.len() + 1)
+                .map_err(|_| WritingError::Message("Too many IDSet elements".into()))?;
+            seq.write_var_int(&VarInt(count))?;
             for elmt in elements.iter() {
                 seq.write_var_int(&VarInt(elmt.registry_id() as i32))?;
             }
             Ok(())
         }
     }
+}
+
+fn deserialize_status_effect(
+    seq: &mut impl NetworkReadExt,
+    effect_name: &'static str,
+) -> Result<StatusEffectInstance, ReadingError> {
+    let mut nodes = Vec::new();
+    let mut depth = 0;
+
+    loop {
+        let amplifier = seq.get_var_int()?.0;
+        let duration = seq.get_var_int()?.0;
+        let ambient = seq.get_bool()?;
+        let show_particles = seq.get_bool()?;
+        let show_icon = seq.get_bool()?;
+        let has_hidden = seq.get_bool()?;
+        nodes.push(StatusEffectInstance {
+            effect_id: Cow::Borrowed(effect_name),
+            amplifier,
+            duration,
+            ambient,
+            show_particles,
+            show_icon,
+            hidden_effect: None,
+        });
+        if !has_hidden {
+            break;
+        }
+        depth += 1;
+        if depth > MAX_EFFECT_DEPTH {
+            return Err(ReadingError::TooLarge(
+                "Potion effect hidden depth exceeded".into(),
+            ));
+        }
+    }
+
+    let mut hidden_effect = None;
+    for mut node in nodes.into_iter().rev() {
+        node.hidden_effect = hidden_effect;
+        hidden_effect = Some(Box::new(node));
+    }
+    hidden_effect
+        .map(|effect| *effect)
+        .ok_or_else(|| ReadingError::Message("Missing status effect details".into()))
 }
 
 fn deserialize_status_effects(
@@ -101,60 +157,45 @@ fn deserialize_status_effects(
     }
     let mut custom_effects = Vec::with_capacity(effects_len);
     for _ in 0..effects_len {
-        let effect_registry_id = seq.get_var_int()?.0;
-        let effect_name = StatusEffect::from_id(effect_registry_id as u16)
+        let effect_registry_id = u16::try_from(seq.get_var_int()?.0)
+            .map_err(|_| ReadingError::Message("Invalid effect_id!".into()))?;
+        let effect_name = StatusEffect::from_id(effect_registry_id)
             .ok_or(ReadingError::Message("Invalid effect_id!".into()))?
             .minecraft_name;
-        let effect_id = Cow::Borrowed(effect_name);
-
-        // Effect parameters
-        let amplifier = seq.get_var_int()?.0;
-        let duration = seq.get_var_int()?.0;
-        let ambient = seq.get_bool()?;
-        let show_particles = seq.get_bool()?;
-        let show_icon = seq.get_bool()?;
-
-        // Hidden effect (optional, recursive) - we skip it for now
-        let has_hidden = seq.get_bool()?;
-        if has_hidden {
-            // Skip hidden effect parameters recursively
-            skip_effect_parameters(seq)?;
-        }
-
-        custom_effects.push(StatusEffectInstance {
-            effect_id,
-            amplifier,
-            duration,
-            ambient,
-            show_particles,
-            show_icon,
-        });
+        custom_effects.push(deserialize_status_effect(seq, effect_name)?);
     }
 
     Ok(custom_effects)
 }
 
 fn serialize_status_effects(
-    effects: &Vec<StatusEffectInstance>,
+    effects: &[StatusEffectInstance],
     seq: &mut impl NetworkWriteExt,
 ) -> Result<(), WritingError> {
     seq.write_var_int(&VarInt(effects.len() as i32))?;
 
     for effect in effects {
-        let effect_id = StatusEffect::from_minecraft_name(&effect.effect_id)
-            .ok_or_else(|| {
+        let effect_name =
+            StatusEffect::from_minecraft_name(&effect.effect_id).ok_or_else(|| {
                 WritingError::Message(format!("Invalid status effect: {}", effect.effect_id))
-            })?
-            .registry_id();
-        seq.write_var_int(&VarInt(effect_id as i32))?;
-        // Effect parameters
-        seq.write_var_int(&VarInt::from(effect.amplifier))?;
-        seq.write_var_int(&VarInt::from(effect.duration))?;
-        seq.write_bool(effect.ambient)?;
-        seq.write_bool(effect.show_particles)?;
-        seq.write_bool(effect.show_icon)?;
-        // No hidden effect for now
-        seq.write_bool(false)?;
+            })?;
+        seq.write_var_int(&VarInt(effect_name.registry_id() as i32))?;
+
+        let mut current = Some(effect);
+        while let Some(effect) = current {
+            if effect.effect_id.as_ref() != effect_name.minecraft_name {
+                return Err(WritingError::Message(
+                    "Hidden status effect has a different effect id".into(),
+                ));
+            }
+            seq.write_var_int(&VarInt::from(effect.amplifier))?;
+            seq.write_var_int(&VarInt::from(effect.duration))?;
+            seq.write_bool(effect.ambient)?;
+            seq.write_bool(effect.show_particles)?;
+            seq.write_bool(effect.show_icon)?;
+            current = effect.hidden_effect.as_deref();
+            seq.write_bool(current.is_some())?;
+        }
     }
     Ok(())
 }
@@ -165,9 +206,10 @@ fn deserialize_consume_effect(
     let effect_type = seq.get_var_int()?.0;
     match effect_type {
         0 => {
+            let effects = deserialize_status_effects(seq)?;
             let probability = seq.get_f32()?;
             Ok(ConsumeEffect::ApplyEffects((
-                Cow::Owned(deserialize_status_effects(seq)?),
+                Cow::Owned(effects),
                 probability,
             )))
         }
@@ -212,7 +254,7 @@ fn serialize_consume_effect(
     seq.write_var_int(&VarInt(consume_effect.registry_id() as i32))?;
     match consume_effect {
         ConsumeEffect::ApplyEffects((effects, probability)) => {
-            serialize_status_effects(&effects.to_vec(), seq)?;
+            serialize_status_effects(effects, seq)?;
             seq.write_f32(*probability)?;
         }
         ConsumeEffect::RemoveEffects(idset) => serialize_idset(idset, seq)?,
@@ -703,34 +745,76 @@ impl DataComponentCodec<Self> for PotionContentsImpl {
     }
 }
 
-/// Helper to skip hidden effect parameters iteratively with a depth cap
-fn skip_effect_parameters(seq: &mut impl NetworkReadExt) -> Result<(), ReadingError> {
-    const MAX_EFFECT_DEPTH: usize = 32;
-    let mut depth = 0;
-    loop {
-        // amplifier
-        seq.get_var_int()?;
-        // duration
-        seq.get_var_int()?;
-        // ambient
-        seq.get_bool()?;
-        // show_particles
-        seq.get_bool()?;
-        // show_icon
-        seq.get_bool()?;
-        // has_hidden
-        let has_hidden = seq.get_bool()?;
-        if !has_hidden {
-            break;
-        }
-        depth += 1;
-        if depth > MAX_EFFECT_DEPTH {
-            return Err(ReadingError::TooLarge(
-                "Potion effect hidden depth exceeded".into(),
-            ));
-        }
+#[cfg(test)]
+mod hidden_effect_tests {
+    use super::{
+        ConsumeEffect, DataComponentCodec, MAX_EFFECT_DEPTH, PotionContentsImpl, ReadingError,
+        deserialize_consume_effect, deserialize_status_effect, serialize_consume_effect,
+    };
+    use std::io::Cursor;
+
+    #[test]
+    fn potion_contents_preserves_two_hidden_effect_links_on_wire() {
+        let expected = [
+            0x00, 0x00, 0x01, 0x09, 0x01, 0x64, 0x00, 0x01, 0x01, 0x01, 0x00, 0x28, 0x00, 0x01,
+            0x01, 0x01, 0x00, 0x14, 0x00, 0x01, 0x01, 0x00, 0x00,
+        ];
+        let mut input = expected.as_slice();
+        let decoded = PotionContentsImpl::deserialize(&mut input).expect("fixture should decode");
+        assert!(input.is_empty());
+
+        let mut encoded = Vec::new();
+        decoded
+            .serialize(&mut encoded)
+            .expect("fixture should encode");
+        assert_eq!(encoded, expected);
     }
-    Ok(())
+
+    #[test]
+    fn apply_effects_wire_order_is_effects_then_probability() {
+        let expected = [
+            0x00, // apply_effects
+            0x01, 0x09, // one regeneration effect
+            0x01, 0x64, 0x00, 0x01, 0x01, 0x00, // details
+            0x3f, 0x80, 0x00, 0x00, // probability = 1.0f
+        ];
+        let mut input = expected.as_slice();
+        let decoded = deserialize_consume_effect(&mut input).expect("fixture should decode");
+        assert!(input.is_empty());
+        match &decoded {
+            ConsumeEffect::ApplyEffects((effects, probability)) => {
+                assert_eq!(effects.len(), 1);
+                assert_eq!(effects[0].duration, 100);
+                assert_eq!(*probability, 1.0);
+            }
+            other => panic!("expected apply_effects, got {other:?}"),
+        }
+
+        let mut encoded = Vec::new();
+        serialize_consume_effect(&decoded, &mut encoded).expect("fixture should encode");
+        assert_eq!(encoded, expected);
+    }
+
+    fn status_effect_details(hidden_links: usize) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity((hidden_links + 1) * 6);
+        for link in 0..=hidden_links {
+            bytes.extend([0, 0, 0, 1, 1, u8::from(link < hidden_links)]);
+        }
+        bytes
+    }
+
+    #[test]
+    fn wire_hidden_effect_depth_limit_has_a_checked_boundary() {
+        let mut at_limit = Cursor::new(status_effect_details(MAX_EFFECT_DEPTH));
+        assert!(deserialize_status_effect(&mut at_limit, "minecraft:regeneration").is_ok());
+        assert_eq!(at_limit.position() as usize, at_limit.get_ref().len());
+
+        let mut over_limit = Cursor::new(status_effect_details(MAX_EFFECT_DEPTH + 1));
+        assert!(matches!(
+            deserialize_status_effect(&mut over_limit, "minecraft:regeneration"),
+            Err(ReadingError::TooLarge(_))
+        ));
+    }
 }
 
 impl DataComponentCodec<Self> for FireworkExplosionImpl {
@@ -2409,15 +2493,31 @@ impl DataComponentCodec<Self> for TooltipStyleImpl {
 
 impl DataComponentCodec<Self> for DeathProtectionImpl {
     fn serialize(&self, seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
-        seq.write_var_int(&VarInt(0))
+        if self.death_effects.len() > MAX_DEATH_EFFECTS {
+            return Err(WritingError::Message("Too many death effects".into()));
+        }
+        let count = i32::try_from(self.death_effects.len())
+            .map_err(|_| WritingError::Message("Too many death effects".into()))?;
+        seq.write_var_int(&VarInt(count))?;
+        for effect in self.death_effects.iter() {
+            serialize_consume_effect(effect, seq)?;
+        }
+        Ok(())
     }
 
     fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
-        let len = seq.get_var_int()?.0 as usize;
-        for _ in 0..len {
-            let _ = deserialize_consume_effect(seq)?;
+        let count = seq.get_var_int()?.0;
+        if count < 0 || count as usize > MAX_DEATH_EFFECTS {
+            return Err(ReadingError::Message("Invalid death effect count".into()));
         }
-        Ok(Self)
+
+        let mut death_effects = Vec::with_capacity(count as usize);
+        for _ in 0..count {
+            death_effects.push(deserialize_consume_effect(seq)?);
+        }
+        Ok(Self {
+            death_effects: Cow::Owned(death_effects),
+        })
     }
 }
 
@@ -3311,6 +3411,104 @@ impl DataComponentCodec<Self> for BreakSoundImpl {
     fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
         let _ = seq.get_var_int()?;
         Ok(Self)
+    }
+}
+
+#[cfg(test)]
+mod death_protection_tests {
+    use super::*;
+
+    #[test]
+    fn death_protection_wire_and_nbt_round_trip_preserves_effects() {
+        let wire = [0x01, 0x02];
+        let mut input = wire.as_slice();
+        let decoded = DeathProtectionImpl::deserialize(&mut input).unwrap();
+        assert!(input.is_empty());
+
+        let mut encoded = Vec::new();
+        decoded.serialize(&mut encoded).unwrap();
+        assert_eq!(encoded, wire);
+
+        let mut clear = NbtCompound::new();
+        clear.put_string("type", "minecraft:clear_all_effects".to_owned());
+        let mut status = NbtCompound::new();
+        status.put_string("id", "minecraft:regeneration".to_owned());
+        status.put_int("amplifier", 1);
+        status.put_int("duration", 900);
+        status.put_bool("ambient", false);
+        status.put_bool("show_particles", true);
+        status.put_bool("show_icon", true);
+        let mut apply = NbtCompound::new();
+        apply.put_string("type", "minecraft:apply_effects".to_owned());
+        apply.put_float("probability", 1.0);
+        apply.put_list("effects", vec![NbtTag::Compound(status)]);
+        let mut nbt = NbtCompound::new();
+        nbt.put_list(
+            "death_effects",
+            vec![NbtTag::Compound(clear), NbtTag::Compound(apply)],
+        );
+        let value = DeathProtectionImpl::read_data(&NbtTag::Compound(nbt.clone())).unwrap();
+        assert_eq!(value.death_effects.len(), 2);
+        assert_eq!(value.write_data(), NbtTag::Compound(nbt));
+    }
+
+    #[test]
+    fn death_protection_rejects_invalid_effect_counts_and_tags() {
+        let mut invalid_effect = NbtCompound::new();
+        invalid_effect.put_string("type", "minecraft:not_a_consume_effect".to_owned());
+        let mut invalid_nbt = NbtCompound::new();
+        invalid_nbt.put_list("death_effects", vec![NbtTag::Compound(invalid_effect)]);
+        assert!(DeathProtectionImpl::read_data(&NbtTag::Compound(invalid_nbt)).is_none());
+
+        let mut wrong_type = NbtCompound::new();
+        wrong_type.put_string("death_effects", "not a list".to_owned());
+        assert!(DeathProtectionImpl::read_data(&NbtTag::Compound(wrong_type)).is_none());
+
+        let mut negative = Vec::new();
+        negative.write_var_int(&VarInt(-1)).unwrap();
+        assert!(DeathProtectionImpl::deserialize(&mut negative.as_slice()).is_err());
+
+        let mut too_many = Vec::new();
+        too_many.write_var_int(&VarInt(257)).unwrap();
+        assert!(DeathProtectionImpl::deserialize(&mut too_many.as_slice()).is_err());
+
+        let mut huge_idset = Vec::new();
+        huge_idset.write_var_int(&VarInt(1)).unwrap();
+        huge_idset.write_var_int(&VarInt(1)).unwrap();
+        huge_idset.write_var_int(&VarInt(258)).unwrap();
+        assert!(DeathProtectionImpl::deserialize(&mut huge_idset.as_slice()).is_err());
+
+        let mut unknown_remove = NbtCompound::new();
+        unknown_remove.put_string("type", "minecraft:remove_effects".to_owned());
+        unknown_remove.put_list(
+            "effects",
+            vec![NbtTag::String("minecraft:not_a_status_effect".into())],
+        );
+        let mut unknown_remove_nbt = NbtCompound::new();
+        unknown_remove_nbt.put_list("death_effects", vec![NbtTag::Compound(unknown_remove)]);
+        assert!(DeathProtectionImpl::read_data(&NbtTag::Compound(unknown_remove_nbt)).is_none());
+
+        let mut unknown_sound = NbtCompound::new();
+        unknown_sound.put_string("type", "minecraft:play_sound".to_owned());
+        unknown_sound.put_string("sound", "minecraft:not_a_sound".to_owned());
+        let mut unknown_sound_nbt = NbtCompound::new();
+        unknown_sound_nbt.put_list("death_effects", vec![NbtTag::Compound(unknown_sound)]);
+        assert!(DeathProtectionImpl::read_data(&NbtTag::Compound(unknown_sound_nbt)).is_none());
+
+        let mut unknown_status = NbtCompound::new();
+        unknown_status.put_string("id", "minecraft:not_a_status_effect".to_owned());
+        unknown_status.put_int("amplifier", 0);
+        unknown_status.put_int("duration", 1);
+        unknown_status.put_bool("ambient", false);
+        unknown_status.put_bool("show_particles", true);
+        unknown_status.put_bool("show_icon", true);
+        let mut unknown_apply = NbtCompound::new();
+        unknown_apply.put_string("type", "minecraft:apply_effects".to_owned());
+        unknown_apply.put_float("probability", 1.0);
+        unknown_apply.put_list("effects", vec![NbtTag::Compound(unknown_status)]);
+        let mut unknown_status_nbt = NbtCompound::new();
+        unknown_status_nbt.put_list("death_effects", vec![NbtTag::Compound(unknown_apply)]);
+        assert!(DeathProtectionImpl::read_data(&NbtTag::Compound(unknown_status_nbt)).is_none());
     }
 }
 

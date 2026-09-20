@@ -1737,11 +1737,13 @@ impl World {
         let is_new_block = old_block != new_block;
         let block_moved = flags.contains(BlockFlags::MOVED);
 
-        if is_new_block
-            && old_block.default_state.block_entity_type != u16::MAX
-            && let Some(entity) = self.get_block_entity(position)
-        {
-            if !flags.contains(BlockFlags::SKIP_BLOCK_ENTITY_REPLACED_CALLBACK) {
+        if is_new_block && old_block.default_state.block_entity_type != u16::MAX {
+            if let Some(entity) = self
+                .block_entities
+                .get(&chunk_coordinate)
+                .and_then(|entities| entities.get(position).cloned())
+                && !flags.contains(BlockFlags::SKIP_BLOCK_ENTITY_REPLACED_CALLBACK)
+            {
                 entity.on_block_replaced(self, position);
             }
             self.remove_block_entity(position);
@@ -3130,6 +3132,72 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn parser_only_map_entity_does_not_match_furnace_state() {
+        let temp_dir = TempDir::new().expect("map mismatch tempdir");
+        let world = test_world(temp_dir.path());
+        let position = BlockPos::new(1, 64, 1);
+        let chunk_pos = position.chunk_position();
+
+        world.level.loaded_chunks.insert(
+            chunk_pos,
+            pumpkin_world::chunk::ChunkData::empty_sync(chunk_pos.x, chunk_pos.y),
+        );
+        world.set_block_state(
+            &position,
+            Block::FURNACE.default_state.id,
+            super::BlockFlags::FORCE_STATE,
+        );
+        world.remove_block_entity(&position);
+
+        let mut map_nbt = NbtCompound::new();
+        map_nbt.put_string("id", "minecraft:map".to_owned());
+        map_nbt.put_int("x", position.0.x);
+        map_nbt.put_int("y", position.0.y);
+        map_nbt.put_int("z", position.0.z);
+        let live_map =
+            crate::block::entities::block_entity_from_nbt(&map_nbt).expect("map parser fixture");
+        world
+            .block_entities
+            .entry(chunk_pos)
+            .or_default()
+            .insert(position, live_map);
+        assert!(world.get_block_entity(&position).is_none());
+        world.save_block_entities(chunk_pos);
+        assert!(
+            world
+                .level
+                .read_chunk_sync(&chunk_pos, |chunk| {
+                    chunk
+                        .pending_block_entities
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .contains_key(&position)
+                })
+                .unwrap_or(false)
+                == false
+        );
+        world.block_entities.remove(&chunk_pos);
+        world.add_block_entity_nbt(position, &map_nbt);
+        world.migrate_pending_block_entities(chunk_pos);
+
+        assert!(world.get_block_entity(&position).is_none());
+        assert!(
+            world
+                .level
+                .read_chunk_sync(&chunk_pos, |chunk| {
+                    chunk
+                        .pending_block_entities
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .contains_key(&position)
+                })
+                .unwrap_or(false)
+        );
+
+        world.shutdown().await.expect("map mismatch shutdown");
+    }
+
+    #[tokio::test]
     async fn block_entity_replacement_removes_pending_nbt_before_new_block() {
         let temp_dir = TempDir::new().expect("block entity persistence tempdir");
         let world = test_world(temp_dir.path());
@@ -3208,6 +3276,82 @@ mod tests {
             "removed block entity left stale pending NBT"
         );
         assert_eq!(pending_after_reload.as_deref(), Some("minecraft:furnace"));
+    }
+
+    #[tokio::test]
+    async fn mismatched_block_entity_stays_pending_without_promotion() {
+        let temp_dir = TempDir::new().expect("block entity mismatch tempdir");
+        let world = test_world(temp_dir.path());
+        let position = BlockPos::new(1, 64, 1);
+        let chunk_pos = position.chunk_position();
+
+        world.level.loaded_chunks.insert(
+            chunk_pos,
+            pumpkin_world::chunk::ChunkData::empty_sync(chunk_pos.x, chunk_pos.y),
+        );
+        world.set_block_state(
+            &position,
+            Block::STONE.default_state.id,
+            super::BlockFlags::FORCE_STATE,
+        );
+
+        let mut chest_nbt = NbtCompound::new();
+        chest_nbt.put_string("id", "minecraft:chest".to_owned());
+        chest_nbt.put_int("x", position.0.x);
+        chest_nbt.put_int("y", position.0.y);
+        chest_nbt.put_int("z", position.0.z);
+        chest_nbt.put_string("FutureField", "must-remain-pending".to_owned());
+        world.add_block_entity_nbt(position, &chest_nbt);
+
+        world.migrate_pending_block_entities(chunk_pos);
+
+        assert!(
+            world.get_block_entity(&position).is_none(),
+            "known block entity IDs must not promote on a block-state mismatch"
+        );
+        let pending = world
+            .level
+            .read_chunk_sync(&chunk_pos, |chunk| {
+                chunk
+                    .pending_block_entities
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .get(&position)
+                    .cloned()
+            })
+            .flatten()
+            .expect("mismatched entity remains pending");
+        assert_eq!(
+            pending.get_string("FutureField"),
+            Some("must-remain-pending")
+        );
+
+        let serialized = world
+            .level
+            .read_chunk_sync(&chunk_pos, |chunk| {
+                chunk.to_bytes().expect("serialize chunk")
+            })
+            .expect("loaded chunk");
+        let reloaded = <pumpkin_world::chunk::ChunkData as SingleChunkDataSerializer>::from_bytes(
+            &serialized,
+            chunk_pos,
+        )
+        .expect("reload chunk");
+        let reloaded = reloaded
+            .pending_block_entities
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(
+            reloaded
+                .get(&position)
+                .and_then(|nbt| nbt.get_string("FutureField")),
+            Some("must-remain-pending")
+        );
+
+        world
+            .shutdown()
+            .await
+            .expect("shutdown mismatch test world");
     }
 
     #[test]

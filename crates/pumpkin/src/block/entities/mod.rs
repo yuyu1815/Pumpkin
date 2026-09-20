@@ -1,7 +1,7 @@
 use std::{any::Any, sync::Arc};
 
 use pumpkin_data::item_stack::ItemStack;
-use pumpkin_data::{Block, block_properties::BLOCK_ENTITY_TYPES};
+use pumpkin_data::{Block, BlockState, block_properties::BLOCK_ENTITY_TYPES};
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_util::math::position::BlockPos;
 
@@ -328,6 +328,23 @@ pub fn block_entity_from_nbt(nbt: &NbtCompound) -> Option<Arc<dyn BlockEntity>> 
 #[must_use]
 pub fn has_block_block_entity(block: &Block) -> bool {
     BLOCK_ENTITY_TYPES.contains(&block.name)
+}
+
+#[must_use]
+pub fn block_entity_matches_state(block_entity: &dyn BlockEntity, state_id: BlockStateId) -> bool {
+    let actual_name = block_entity
+        .resource_location()
+        .split(':')
+        .next_back()
+        .unwrap_or("");
+    let Some(actual_id) = BLOCK_ENTITY_TYPES
+        .iter()
+        .position(|name| *name == actual_name)
+    else {
+        return false;
+    };
+    u32::try_from(actual_id).ok()
+        == Some(u32::from(BlockState::from_id(state_id).block_entity_type))
 }
 
 #[must_use]

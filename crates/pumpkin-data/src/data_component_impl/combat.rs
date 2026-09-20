@@ -4,8 +4,8 @@ use crate::attributes::Attributes;
 use crate::damage::DamageType;
 use crate::data_component_impl::basic::SoundEvent;
 use crate::data_component_impl::{
-    DataComponentImpl, EquipmentSlot, IDSet, IdOr, get_f32_hash, get_i32_hash, get_idor,
-    get_idor_hash, get_idset_hash, get_str_hash, put_idor,
+    ConsumeEffect, DataComponentImpl, EquipmentSlot, IDSet, IdOr, get_f32_hash, get_i32_hash,
+    get_idor, get_idor_hash, get_idset_hash, get_str_hash, put_idor,
 };
 use crate::entity_type::EntityType;
 use crate::item::Item;
@@ -911,14 +911,46 @@ impl DataComponentImpl for GliderImpl {
     default_impl!(Glider);
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct DeathProtectionImpl;
+#[derive(Clone, Debug, PartialEq)]
+pub struct DeathProtectionImpl {
+    pub death_effects: Cow<'static, [ConsumeEffect]>,
+}
 impl DeathProtectionImpl {
-    pub const fn read_data(_data: &NbtTag) -> Option<Self> {
-        Some(Self)
+    pub const fn new(death_effects: Cow<'static, [ConsumeEffect]>) -> Self {
+        Self { death_effects }
+    }
+
+    pub fn read_data(data: &NbtTag) -> Option<Self> {
+        let compound = data.extract_compound()?;
+        let death_effects: Cow<'static, [ConsumeEffect]> = match compound.get("death_effects") {
+            Some(data) => Cow::Owned(
+                data.extract_list()?
+                    .iter()
+                    .map(ConsumeEffect::read_data)
+                    .collect::<Option<Vec<_>>>()?,
+            ),
+            None => Cow::Borrowed(&[] as &[ConsumeEffect]),
+        };
+        Some(Self { death_effects })
+    }
+
+    pub fn write_data(&self) -> NbtTag {
+        let mut compound = NbtCompound::new();
+        compound.put_list(
+            "death_effects",
+            self.death_effects
+                .iter()
+                .map(ConsumeEffect::as_nbt)
+                .collect(),
+        );
+        NbtTag::Compound(compound)
     }
 }
 impl DataComponentImpl for DeathProtectionImpl {
+    fn write_data(&self) -> NbtTag {
+        Self::write_data(self)
+    }
+
     default_impl!(DeathProtection);
 }
 
