@@ -361,10 +361,7 @@ impl SpawnState {
         let potential = PotentialCalculator::default();
         let local_mob_cap = LocalMobCapCalculator::default();
         let counter = MobCounts::default();
-        let active_chunks = world
-            .active_chunks
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let active_chunks = world.active_chunks.snapshot();
         for entity in entities.load().iter() {
             if let Some(mob) = entity.get_mob()
                 && (mob.get_mob_entity().persistence_required.load(Relaxed)
@@ -877,11 +874,7 @@ pub fn is_right_distance_to_player_and_spawn_point(
     let chunk_z = get_section_cord(pos.0.z);
     let target_chunk = Vector2::new(chunk_x, chunk_z);
     target_chunk == *chunk_pos
-        || (world
-            .active_chunks
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .contains(&target_chunk)
+        || (world.active_chunks.snapshot().contains(&target_chunk)
             && world
                 .worldborder
                 .lock()

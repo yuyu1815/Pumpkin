@@ -916,11 +916,7 @@ mod tests {
             .expect("new player detached for transfer");
         new.change_world_chunks(&current_world.level, &nether);
         new.living_entity.entity.set_world(nether.clone());
-        nether.players.rcu(|current_list| {
-            let mut new_list = (**current_list).clone();
-            new_list.push(new.clone());
-            new_list
-        });
+        nether.publish_player_membership(&new);
         assert!(Arc::ptr_eq(&new.world(), &nether));
         assert!(reset_inbound_state(player_id, new_session, &new.chat_owner));
         assert!(

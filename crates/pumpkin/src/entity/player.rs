@@ -3957,11 +3957,7 @@ impl Player {
                 else {
                     return;
                 };
-               new_world.players.rcu(|current_list| {
-                    let mut new_list = (**current_list).clone();
-                    new_list.push(player.clone());
-                    new_list
-                });
+                new_world.publish_player_membership(&player);
                 self.unload_watched_chunks(&current_world).await;
 
                 self.change_world_chunks(&current_world.level, &new_world);

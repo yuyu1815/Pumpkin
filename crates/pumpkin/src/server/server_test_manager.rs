@@ -265,11 +265,7 @@ impl ServerGameTestWorld {
         let max_chunk_x = (max.0.x - 1) >> 4;
         let min_chunk_z = min.0.z >> 4;
         let max_chunk_z = (max.0.z - 1) >> 4;
-        let active_chunks = self
-            .world
-            .active_chunks
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let active_chunks = self.world.active_chunks.snapshot();
 
         for chunk_x in min_chunk_x..=max_chunk_x {
             for chunk_z in min_chunk_z..=max_chunk_z {
@@ -307,15 +303,7 @@ fn acquire_forced_game_test_chunk(world: &World, chunk: Vector2<i32>) {
         return;
     }
 
-    let was_forced = {
-        let mut forced_chunks = world
-            .forced_chunks
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let was_forced = forced_chunks.contains(&chunk);
-        forced_chunks.insert(chunk);
-        was_forced
-    };
+    let was_forced = !world.active_chunks.add_forced_chunk(chunk);
     leases.insert(
         key,
         ForcedGameTestChunk {
@@ -342,11 +330,7 @@ fn release_forced_game_test_chunk(world: &World, chunk: Vector2<i32>) {
     drop(leases);
 
     if release_world_chunk {
-        world
-            .forced_chunks
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .remove(&chunk);
+        world.active_chunks.remove_forced_chunk(&chunk);
     }
 }
 

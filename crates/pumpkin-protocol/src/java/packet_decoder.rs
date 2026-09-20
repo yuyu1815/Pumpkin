@@ -141,6 +141,10 @@ impl<R: AsyncRead + Unpin> TCPNetworkDecoder<R> {
             }
 
             if decompressed_length > 0 {
+                if decompressed_length < threshold {
+                    Err(PacketDecodeError::NotCompressed)?;
+                }
+
                 expected_packet_data_len = decompressed_length;
                 expected_uncompressed_packet_data_len = Some(decompressed_length);
                 DecompressionReader::Decompress(ZlibDecoder::new(BufReader::new(bounded_reader)))
@@ -320,8 +324,7 @@ mod tests {
 
         // Initialize the decoder with compression enabled
         let mut decoder = TCPNetworkDecoder::new(packet.as_slice());
-        // Larger than payload
-        decoder.set_compression(1000);
+        decoder.set_compression(1);
 
         // Attempt to decode
         let raw_packet = decoder.get_raw_packet().await.map_err(|e| e.to_string())?;
@@ -434,7 +437,7 @@ mod tests {
 
         // Initialize the decoder with both compression and encryption enabled
         let mut decoder = TCPNetworkDecoder::new(packet.as_slice());
-        decoder.set_compression(1000);
+        decoder.set_compression(1);
         decoder.set_encryption(&key).map_err(|e| e.to_string())?;
 
         // Attempt to decode
@@ -471,7 +474,7 @@ mod tests {
 
         // Initialize the decoder with compression enabled
         let mut decoder = TCPNetworkDecoder::new(&packet_bytes[..]);
-        decoder.set_compression(1000);
+        decoder.set_compression(1);
 
         // Attempt to decode and expect a decompression error
         let result = decoder.get_raw_packet().await;
@@ -515,7 +518,7 @@ mod tests {
 
         // Initialize the decoder with compression enabled
         let mut decoder = TCPNetworkDecoder::new(packet.as_slice());
-        decoder.set_compression(MAX_PACKET_SIZE as usize + 1);
+        decoder.set_compression(1);
 
         // Attempt to decode
         let result = decoder.get_raw_packet().await;
@@ -523,6 +526,21 @@ mod tests {
         let raw_packet = result.map_err(|e| e.to_string())?;
         assert_eq!(raw_packet.id, packet_id);
         assert_eq!(raw_packet.payload.as_ref(), payload);
+        Ok(())
+    }
+
+    /// A compressed packet must declare an uncompressed size at or above the threshold.
+    #[tokio::test]
+    async fn reject_compressed_packet_below_compression_threshold()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let packet = build_packet(9, b"short", true, None, None)?;
+        let mut decoder = TCPNetworkDecoder::new(packet.as_slice());
+        decoder.set_compression(1000);
+
+        assert!(matches!(
+            decoder.get_raw_packet().await,
+            Err(PacketDecodeError::NotCompressed)
+        ));
         Ok(())
     }
 

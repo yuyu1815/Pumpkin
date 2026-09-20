@@ -982,4 +982,41 @@ mod tests {
                 .id
         );
     }
+
+    #[test]
+    fn unknown_block_entity_nbt_survives_chunk_round_trip() {
+        let position = BlockPos::new(1, 64, 2);
+        let chunk_position = Vector2::new(0, 0);
+        let mut nbt = NbtCompound::new();
+        nbt.put_string("id", "example:future_block_entity".to_owned());
+        nbt.put_int("x", position.0.x);
+        nbt.put_int("y", position.0.y);
+        nbt.put_int("z", position.0.z);
+        nbt.put_string("FutureField", "must-survive".to_owned());
+
+        let chunk = ChunkData::empty(chunk_position.x, chunk_position.y);
+        chunk
+            .pending_block_entities
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(position, nbt);
+
+        let loaded = ChunkData::internal_from_bytes(&chunk.internal_to_bytes(), chunk_position)
+            .expect("load chunk");
+        let reloaded = ChunkData::internal_from_bytes(&loaded.internal_to_bytes(), chunk_position)
+            .expect("reload chunk");
+        let saved_nbt = reloaded
+            .pending_block_entities
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&position)
+            .cloned()
+            .expect("unknown block entity remains pending");
+
+        assert_eq!(
+            saved_nbt.get_string("id"),
+            Some("example:future_block_entity")
+        );
+        assert_eq!(saved_nbt.get_string("FutureField"), Some("must-survive"));
+    }
 }

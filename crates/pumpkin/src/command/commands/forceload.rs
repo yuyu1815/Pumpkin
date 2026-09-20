@@ -71,17 +71,9 @@ impl CommandExecutor for ForceloadAddExecutor {
             ));
         }
 
-        {
-            let mut forced = world
-                .forced_chunks
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            for x in min_x..=max_x {
-                for z in min_z..=max_z {
-                    forced.insert(Vector2::new(x, z));
-                }
-            }
-        }
+        world.active_chunks.add_forced_chunks(
+            (min_x..=max_x).flat_map(|x| (min_z..=max_z).map(move |z| Vector2::new(x, z))),
+        );
 
         world.update_active_chunks();
 
@@ -154,17 +146,9 @@ impl CommandExecutor for ForceloadRemoveExecutor {
             ));
         }
 
-        {
-            let mut forced = world
-                .forced_chunks
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            for x in min_x..=max_x {
-                for z in min_z..=max_z {
-                    forced.remove(&Vector2::new(x, z));
-                }
-            }
-        }
+        world.active_chunks.remove_forced_chunks(
+            (min_x..=max_x).flat_map(|x| (min_z..=max_z).map(move |z| Vector2::new(x, z))),
+        );
 
         world.update_active_chunks();
 
@@ -207,15 +191,7 @@ impl CommandExecutor for ForceloadRemoveAllExecutor {
             .as_ref()
             .ok_or_else(|| ERROR_FAILED_REMOVE.create_without_context())?;
 
-        let removed_count = {
-            let mut forced = world
-                .forced_chunks
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            let count = forced.len();
-            forced.clear();
-            count
-        };
+        let removed_count = world.active_chunks.clear_forced_chunks();
 
         world.update_active_chunks();
 
@@ -251,13 +227,7 @@ impl CommandExecutor for ForceloadQueryExecutor {
             Vector2::new(block_x >> 4, block_z >> 4)
         };
 
-        let is_forced = {
-            let forced = world
-                .forced_chunks
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            forced.contains(&chunk_pos)
-        };
+        let is_forced = world.active_chunks.is_forced(&chunk_pos);
 
         let dimension_name = world.dimension.minecraft_name.to_string();
 
@@ -283,16 +253,12 @@ impl CommandExecutor for ForceloadQueryExecutor {
             context.source.send_error(text);
         }
 
-        let all_forced = {
-            let forced = world
-                .forced_chunks
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            forced
-                .iter()
-                .map(|pos| format!("[{}, {}]", pos.x, pos.y))
-                .collect::<Vec<_>>()
-        };
+        let all_forced = world
+            .active_chunks
+            .forced_chunks_snapshot()
+            .iter()
+            .map(|pos| format!("[{}, {}]", pos.x, pos.y))
+            .collect::<Vec<_>>();
 
         if all_forced.is_empty() {
             let text = TextComponent::translate_cross(
