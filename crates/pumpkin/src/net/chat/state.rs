@@ -56,6 +56,7 @@ struct InboundChatState {
     owner: Weak<ChatOwnerToken>,
     next_index: i32,
     last_timestamp_epoch_second: Option<i64>,
+    last_timestamp_epoch_millis: Option<i64>,
     broken: bool,
 }
 
@@ -66,15 +67,16 @@ impl InboundChatState {
             owner: Weak::new(),
             next_index: 0,
             last_timestamp_epoch_second: None,
+            last_timestamp_epoch_millis: None,
             broken: false,
         }
     }
 
-    fn check_link(
+    fn check_link_at(
         &self,
         session_id: Uuid,
         index: i32,
-        timestamp_epoch_second: i64,
+        timestamp_epoch_millis: i64,
     ) -> Result<(), ChatStateError> {
         if self.broken {
             return Err(ChatStateError::ChainBroken);
@@ -89,20 +91,25 @@ impl InboundChatState {
             });
         }
         if self
-            .last_timestamp_epoch_second
-            .is_some_and(|last| timestamp_epoch_second < last)
+            .last_timestamp_epoch_millis
+            .is_some_and(|last| timestamp_epoch_millis < last)
         {
             return Err(ChatStateError::OutOfOrderTimestamp);
         }
         Ok(())
     }
 
-    fn advance(&mut self, timestamp_epoch_second: i64) -> Result<(), ChatStateError> {
+    fn advance_at(
+        &mut self,
+        timestamp_epoch_millis: i64,
+        timestamp_epoch_second: i64,
+    ) -> Result<(), ChatStateError> {
         self.next_index = self
             .next_index
             .checked_add(1)
             .ok_or(ChatStateError::IndexOverflow)?;
         self.last_timestamp_epoch_second = Some(timestamp_epoch_second);
+        self.last_timestamp_epoch_millis = Some(timestamp_epoch_millis);
         Ok(())
     }
 }
@@ -287,8 +294,103 @@ pub fn verify_and_commit(
     )
 }
 
-/// Verifies all signed command arguments against one cloned ACK window and
-/// commits the chain cursor and ACK window only after every argument succeeds.
+/// Applies the packet's last-seen update before command parsing/authentication.
+///
+/// Vanilla calls `unpackAndApplyLastSeen` first for signed commands.  Keep this
+/// mutation separate from argument verification so a later command rejection
+/// does not roll back an already accepted ACK update.
+pub fn apply_last_seen_update(
+    player: &Player,
+    message_count: i32,
+    acknowledged: &[u8],
+    checksum: u8,
+) -> Result<Vec<Box<[u8]>>, ChatStateError> {
+    let mut cache = player
+        .signature_cache
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let (validator, last_seen) =
+        preview_last_seen(&cache.last_seen_validator, message_count, acknowledged)?;
+    if validator.tracked_messages_count() > 4096 {
+        return Err(ChatStateError::TooManyPendingChats);
+    }
+    if checksum != 0 {
+        let expected = last_seen_checksum(&last_seen);
+        if expected != checksum {
+            return Err(ChatStateError::ChecksumMismatch {
+                expected,
+                received: checksum,
+            });
+        }
+    }
+    cache.last_seen_validator = validator;
+    Ok(last_seen)
+}
+
+/// Verifies command argument signatures in packet-entry order.
+///
+/// Each successful entry advances the live chain immediately, just as the
+/// vanilla decoder advances after each `unpack`.  A later failure therefore
+/// preserves earlier advances and leaves the chain broken.
+pub fn verify_signed_command_entries(
+    player: &Player,
+    session_id: Uuid,
+    public_key: &[u8],
+    timestamp: i64,
+    salt: i64,
+    last_seen: &[Box<[u8]>],
+    contents: &[&str],
+    signatures: &[&[u8]],
+) -> Result<(), ChatStateError> {
+    if contents.len() != signatures.len() {
+        return Err(ChatStateError::AckValidation);
+    }
+
+    let player_id = player.gameprofile.id;
+    let timestamp_epoch_second = timestamp.div_euclid(1_000);
+    let mut store = inbound_state()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let Some(state) = store.states.get_mut(&player_id) else {
+        return Err(ChatStateError::LifecycleMismatch);
+    };
+    if !player.chat_owner.is_active()
+        || state.session_id != session_id
+        || !state
+            .owner
+            .upgrade()
+            .is_some_and(|owner| Arc::ptr_eq(&owner, &player.chat_owner))
+    {
+        return Err(ChatStateError::LifecycleMismatch);
+    }
+
+    for (content, signature) in contents.iter().zip(signatures) {
+        let index = state.next_index;
+        if let Err(error) = state.check_link_at(session_id, index, timestamp) {
+            if matches!(error, ChatStateError::OutOfOrderTimestamp) {
+                state.broken = true;
+            }
+            return Err(error);
+        }
+
+        let link = SignedMessageLink::new(index, player_id, session_id);
+        let body =
+            SignedMessageBody::new((*content).to_string(), timestamp, salt, last_seen.to_vec());
+        // Vanilla records the timestamp before RSA verification.  The chain is
+        // broken on failure, so this is observable only through diagnostics.
+        state.last_timestamp_epoch_second = Some(timestamp_epoch_second);
+        state.last_timestamp_epoch_millis = Some(timestamp);
+        if let Err(error) = verify_chat_message_signature(public_key, &link, &body, signature) {
+            state.broken = true;
+            return Err(error.into());
+        }
+        state.advance_at(timestamp, timestamp_epoch_second)?;
+    }
+    Ok(())
+}
+
+/// Verifies all signed command arguments with the existing ACK/state helpers.
+/// ACK state is committed first; argument links are committed one by one.
 pub fn verify_signed_command_and_commit(
     player: &Player,
     session_id: Uuid,
@@ -301,17 +403,9 @@ pub fn verify_signed_command_and_commit(
     contents: &[&str],
     signatures: &[&[u8]],
 ) -> Result<(), ChatStateError> {
-    verify_and_commit_entries(
-        player,
-        session_id,
-        public_key,
-        timestamp,
-        salt,
-        message_count,
-        acknowledged,
-        (checksum != 0).then_some(checksum),
-        contents,
-        signatures,
+    let last_seen = apply_last_seen_update(player, message_count, acknowledged, checksum)?;
+    verify_signed_command_entries(
+        player, session_id, public_key, timestamp, salt, &last_seen, contents, signatures,
     )
 }
 
@@ -330,74 +424,15 @@ fn verify_and_commit_entries(
     if contents.len() != signatures.len() {
         return Err(ChatStateError::AckValidation);
     }
-
-    let player_id = player.gameprofile.id;
-    let timestamp_epoch_second = timestamp.div_euclid(1_000);
-    let mut store = inbound_state()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let Some(state) = store.states.get(&player_id).cloned() else {
-        return Err(ChatStateError::LifecycleMismatch);
-    };
-    if !player.chat_owner.is_active()
-        || state.session_id != session_id
-        || !state
-            .owner
-            .upgrade()
-            .is_some_and(|owner| Arc::ptr_eq(&owner, &player.chat_owner))
-    {
-        return Err(ChatStateError::LifecycleMismatch);
-    }
-
-    let mut cache = player
-        .signature_cache
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let (validator, last_seen) =
-        preview_last_seen(&cache.last_seen_validator, message_count, acknowledged)?;
-    if validator.tracked_messages_count() > 4096 {
-        return Err(ChatStateError::TooManyPendingChats);
-    }
-    if let Some(received) = checksum {
-        let expected = last_seen_checksum(&last_seen);
-        if expected != received {
-            return Err(ChatStateError::ChecksumMismatch { expected, received });
-        }
-    }
-
-    let mut candidate = state.clone();
-    for (content, signature) in contents.iter().zip(signatures) {
-        if let Err(error) =
-            candidate.check_link(session_id, candidate.next_index, timestamp_epoch_second)
-        {
-            if matches!(
-                &error,
-                ChatStateError::Replay { .. }
-                    | ChatStateError::OutOfOrderTimestamp
-                    | ChatStateError::SessionMismatch
-            ) {
-                let mut broken = state.clone();
-                broken.broken = true;
-                store.states.insert(player_id, broken);
-            }
-            return Err(error);
-        }
-
-        let link = SignedMessageLink::new(candidate.next_index, player_id, session_id);
-        let body =
-            SignedMessageBody::new((*content).to_string(), timestamp, salt, last_seen.clone());
-        if let Err(error) = verify_chat_message_signature(public_key, &link, &body, signature) {
-            let mut broken = state.clone();
-            broken.broken = true;
-            store.states.insert(player_id, broken);
-            return Err(error.into());
-        }
-        candidate.advance(timestamp_epoch_second)?;
-    }
-
-    cache.last_seen_validator = validator;
-    store.states.insert(player_id, candidate);
-    Ok(())
+    let last_seen = apply_last_seen_update(
+        player,
+        message_count,
+        acknowledged,
+        checksum.unwrap_or_default(),
+    )?;
+    verify_signed_command_entries(
+        player, session_id, public_key, timestamp, salt, &last_seen, contents, signatures,
+    )
 }
 
 /// Applies one packet's ack update to a clone of the tracked window.
@@ -522,12 +557,12 @@ mod tests {
     #[test]
     fn root_and_next_indices_advance_only_after_success() {
         let mut state = state();
-        assert_eq!(state.check_link(Uuid::from_u128(10), 0, 1), Ok(()));
-        state.advance(1).expect("root commit");
+        assert_eq!(state.check_link_at(Uuid::from_u128(10), 0, 1), Ok(()));
+        state.advance_at(1, 1).expect("root commit");
         assert_eq!(state.next_index, 1);
         assert_eq!(state.last_timestamp_epoch_second, Some(1));
         assert_eq!(
-            state.check_link(Uuid::from_u128(10), 0, 2),
+            state.check_link_at(Uuid::from_u128(10), 0, 2),
             Err(ChatStateError::Replay {
                 expected: 1,
                 received: 0,
@@ -541,8 +576,8 @@ mod tests {
     fn n_argument_chain_links_consume_sequential_indices() {
         let mut state = state();
         for index in 0..3 {
-            assert_eq!(state.check_link(Uuid::from_u128(10), index, 100), Ok(()));
-            state.advance(100).expect("argument link commit");
+            assert_eq!(state.check_link_at(Uuid::from_u128(10), index, 100), Ok(()));
+            state.advance_at(100, 100).expect("argument link commit");
         }
         assert_eq!(state.next_index, 3);
         assert_eq!(state.last_timestamp_epoch_second, Some(100));
@@ -551,9 +586,9 @@ mod tests {
     #[test]
     fn old_timestamp_is_separate_and_does_not_advance() {
         let mut state = state();
-        state.advance(1_000).expect("root commit");
+        state.advance_at(1_000, 1_000).expect("root commit");
         assert_eq!(
-            state.check_link(Uuid::from_u128(10), 1, 999),
+            state.check_link_at(Uuid::from_u128(10), 1, 999),
             Err(ChatStateError::OutOfOrderTimestamp)
         );
         assert_eq!(state.next_index, 1);
@@ -561,12 +596,29 @@ mod tests {
     }
 
     #[test]
+    fn missing_millisecond_state_does_not_compare_epoch_seconds_as_millis() {
+        let mut state = state();
+        state.last_timestamp_epoch_second = Some(1_000);
+        assert_eq!(state.check_link_at(Uuid::from_u128(10), 0, 999), Ok(()));
+    }
+
+    #[test]
+    fn timestamp_order_keeps_millisecond_precision() {
+        let mut state = state();
+        state.advance_at(1_001, 1).expect("timestamp commit");
+        assert_eq!(
+            state.check_link_at(Uuid::from_u128(10), 1, 1_000),
+            Err(ChatStateError::OutOfOrderTimestamp)
+        );
+    }
+
+    #[test]
     fn chain_break_is_sticky_after_replay_or_signature_failure() {
         let mut state = state();
-        state.advance(1_000).expect("root commit");
+        state.advance_at(1_000, 1_000).expect("root commit");
         state.broken = true;
         assert_eq!(
-            state.check_link(Uuid::from_u128(10), 1, 1_001),
+            state.check_link_at(Uuid::from_u128(10), 1, 1_001),
             Err(ChatStateError::ChainBroken)
         );
     }
@@ -972,7 +1024,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn signed_command_fixture_exercises_n2_atomicity_and_no_signable_ack() {
+    async fn signed_command_fixture_exercises_n2_chain_progress_and_no_signable_ack() {
         const FIXTURE: &str = include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../tools/compat-26_2/chat-fixtures/signed-command-independent.json"
@@ -1151,6 +1203,31 @@ mod tests {
             state.next_index = 41;
             state.broken = false;
         }
+        // Reset the ACK window so the following failure independently proves
+        // ACK-first ordering rather than reusing the successful N=2 call.
+        {
+            let mut cache = player
+                .signature_cache
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            cache.last_seen_validator = LastSeenMessagesValidator::new(3);
+            cache.last_seen_validator.tracked_messages = [
+                Some(LastSeenTrackedEntry {
+                    signature: vec![0_u8; 256].into_boxed_slice(),
+                    pending: true,
+                }),
+                Some(LastSeenTrackedEntry {
+                    signature: vec![1_u8; 256].into_boxed_slice(),
+                    pending: true,
+                }),
+                Some(LastSeenTrackedEntry {
+                    signature: vec![0x80_u8; 256].into_boxed_slice(),
+                    pending: true,
+                }),
+            ]
+            .into_iter()
+            .collect();
+        }
         let mut invalid_signatures = signatures.clone();
         invalid_signatures[1][0] ^= 1;
         let invalid_refs = invalid_signatures
@@ -1172,6 +1249,20 @@ mod tests {
             ),
             Err(ChatStateError::Signature(_))
         ));
+        let cache = player
+            .signature_cache
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(
+            cache
+                .last_seen_validator
+                .tracked_messages
+                .iter()
+                .map(|entry| entry.as_ref().map(|entry| entry.pending))
+                .collect::<Vec<_>>(),
+            vec![Some(false), None, Some(false)]
+        );
+        drop(cache);
         let state = inbound_state()
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -1179,7 +1270,9 @@ mod tests {
             .get(&player_id)
             .cloned()
             .expect("failed state");
-        assert_eq!(state.next_index, 41);
+        // Vanilla advances the first link before the second signature fails.
+        assert_eq!(state.next_index, 42);
+        assert_eq!(state.last_timestamp_epoch_second, Some(timestamp / 1_000));
         assert!(state.broken);
 
         {

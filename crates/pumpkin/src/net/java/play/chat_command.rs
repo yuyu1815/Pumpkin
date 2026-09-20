@@ -51,12 +51,34 @@ impl From<&SChatCommandSigned<'_>> for SignedCommandPacket {
 enum SignedCommandArgumentError {
     Malformed,
     Unknown(String),
-    Duplicate(String),
     Missing(String),
 }
 
 fn signed_command_event_matches(expected: &str, actual: &str) -> bool {
     expected == actual
+}
+
+fn signed_session(player: &Arc<Player>) -> Option<(uuid::Uuid, Vec<u8>)> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64;
+    let chat_session = player
+        .chat_session
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if chat_session.session_id == uuid::Uuid::nil()
+        || chat_session.public_key.is_empty()
+        || chat_session.signature.is_empty()
+        || chat_session.expires_at < now
+    {
+        warn!(
+            player = %player.gameprofile.name,
+            "Rejected signed command without a valid chat session"
+        );
+        return None;
+    }
+    Some((chat_session.session_id, chat_session.public_key.to_vec()))
 }
 
 fn validate_signed_command_arguments(
@@ -67,23 +89,17 @@ fn validate_signed_command_arguments(
         return Err(SignedCommandArgumentError::Malformed);
     };
 
-    let mut expected = HashSet::with_capacity(parsed.len());
-    for argument in parsed {
-        if !expected.insert(argument.name.as_str()) {
-            return Err(SignedCommandArgumentError::Duplicate(argument.name.clone()));
-        }
-    }
-
     let mut received = HashSet::with_capacity(signatures.len());
     for signature in signatures {
-        if !received.insert(signature.name.as_str()) {
-            return Err(SignedCommandArgumentError::Duplicate(
-                signature.name.clone(),
-            ));
-        }
-        if !expected.contains(signature.name.as_str()) {
+        if !parsed
+            .iter()
+            .any(|argument| argument.name == signature.name)
+        {
             return Err(SignedCommandArgumentError::Unknown(signature.name.clone()));
         }
+        // Vanilla permits duplicate entries: each one is decoded in packet
+        // order and the map value is replaced by the last entry.
+        received.insert(signature.name.as_str());
     }
 
     for argument in parsed {
@@ -158,7 +174,7 @@ impl JavaClient {
         }}
     }
 
-    fn execute_authenticated_chat_command<'a>(
+    fn execute_parsed_chat_command<'a>(
         &self,
         player: &Arc<Player>,
         server: &Arc<Server>,
@@ -187,6 +203,9 @@ impl JavaClient {
         }
 
         let command = event.command;
+        // Signed and unsigned-decoder paths must execute the parse result that
+        // was already permission-filtered and validated above. Re-parsing here
+        // would let command-tree changes alter the selected execution path.
         if let Err(error) = dispatcher.execute(parsed) {
             CommandDispatcher::send_error_to_source(
                 &player.get_command_source(server),
@@ -212,25 +231,146 @@ impl JavaClient {
             .chat_lifecycle
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+
+        // Vanilla applies ACKs before parsing or signed-argument decoding.
+        let last_seen = match crate::net::chat::state::apply_last_seen_update(
+            player,
+            packet.message_count,
+            &packet.acknowledged,
+            packet.checksum,
+        ) {
+            Ok(last_seen) => last_seen,
+            Err(error) => {
+                warn!(
+                    player = %player.gameprofile.name,
+                    ?error,
+                    "Rejected signed command acknowledgement"
+                );
+                self.try_kick(&TextComponent::translate_cross(
+                    translation::java::MULTIPLAYER_DISCONNECT_CHAT_VALIDATION_FAILED,
+                    translation::java::MULTIPLAYER_DISCONNECT_CHAT_VALIDATION_FAILED,
+                    [],
+                ));
+                return;
+            }
+        };
+
         let source = player.get_command_source(server);
         let dispatcher = server.command_dispatcher.load();
         let parsed = dispatcher.parse_input(&packet.command, &source);
-        let signable = parsed.signable_arguments();
-
-        // A signed packet must parse completely; decode/parse failure never
-        // falls back to the ordinary unsigned command path.
-        let Some(signable) = signable else {
+        let Some(signable) = parsed.signable_arguments() else {
             warn!(
                 player = %player.gameprofile.name,
                 "Rejected signed command with malformed or permission-filtered parse"
             );
             return;
         };
+        let secure = server.basic_config.allow_chat_reports;
+        let has_entries = !packet.argument_signatures.is_empty();
 
+        // An empty signed-argument list is vanilla's unsigned seam. It is
+        // legal for commands with no signable arguments in every mode, and for
+        // signable commands when secure-profile enforcement is disabled.
+        if !has_entries {
+            if secure && !signable.is_empty() {
+                warn!(
+                    player = %player.gameprofile.name,
+                    "Rejected unsigned signable command while secure chat is enabled"
+                );
+                return;
+            }
+            self.execute_parsed_chat_command(player, server, &packet.command, &dispatcher, parsed);
+            return;
+        }
+
+        let first_unknown = packet
+            .argument_signatures
+            .iter()
+            .position(|entry| !signable.iter().any(|argument| argument.name == entry.name));
+
+        // Vanilla rejects an unknown name and marks a secure chain broken. In
+        // reports-disabled mode its unsigned decoder has a no-op break marker.
+        if let Some(unknown_index) = first_unknown {
+            if !secure {
+                return;
+            }
+            if unknown_index > 0 {
+                let (session_id, public_key) = match signed_session(player) {
+                    Some(session) => session,
+                    None => return,
+                };
+                let mut contents = Vec::with_capacity(unknown_index);
+                let mut signatures = Vec::with_capacity(unknown_index);
+                for entry in &packet.argument_signatures[..unknown_index] {
+                    let argument = signable
+                        .iter()
+                        .find(|argument| argument.name == entry.name)
+                        .expect("unknown entry is after known prefix");
+                    contents.push(argument.raw_value(&packet.command));
+                    signatures.push(entry.signature.as_slice());
+                }
+                if let Err(error) = crate::net::chat::state::verify_signed_command_entries(
+                    player,
+                    session_id,
+                    &public_key,
+                    packet.timestamp,
+                    packet.salt,
+                    &last_seen,
+                    &contents,
+                    &signatures,
+                ) {
+                    warn!(
+                        player = %player.gameprofile.name,
+                        ?error,
+                        "Rejected signed command before unknown argument entry"
+                    );
+                    return;
+                }
+            }
+            crate::net::chat::state::break_inbound_chain(player);
+            return;
+        }
+
+        let mut contents = Vec::with_capacity(packet.argument_signatures.len());
+        let mut signatures = Vec::with_capacity(packet.argument_signatures.len());
+        for entry in &packet.argument_signatures {
+            let argument = signable
+                .iter()
+                .find(|argument| argument.name == entry.name)
+                .expect("unknown entries were handled above");
+            contents.push(argument.raw_value(&packet.command));
+            signatures.push(entry.signature.as_slice());
+        }
+
+        if secure {
+            let (session_id, public_key) = match signed_session(player) {
+                Some(session) => session,
+                None => return,
+            };
+            if let Err(error) = crate::net::chat::state::verify_signed_command_entries(
+                player,
+                session_id,
+                &public_key,
+                packet.timestamp,
+                packet.salt,
+                &last_seen,
+                &contents,
+                &signatures,
+            ) {
+                warn!(
+                    player = %player.gameprofile.name,
+                    ?error,
+                    "Rejected signed command authentication"
+                );
+                return;
+            }
+        }
+
+        // Missing is checked after packet-entry decoding. This preserves the
+        // vanilla partial chain advance and does not mark the chain broken.
         if let Err(error) =
             validate_signed_command_arguments(Some(&signable), &packet.argument_signatures)
         {
-            crate::net::chat::state::break_inbound_chain(player);
             warn!(
                 player = %player.gameprofile.name,
                 ?error,
@@ -239,70 +379,9 @@ impl JavaClient {
             return;
         }
 
-        let mut contents = Vec::with_capacity(packet.argument_signatures.len());
-        let mut signatures = Vec::with_capacity(packet.argument_signatures.len());
-        for entry in &packet.argument_signatures {
-            let Some(argument) = signable.iter().find(|argument| argument.name == entry.name)
-            else {
-                crate::net::chat::state::break_inbound_chain(player);
-                return;
-            };
-            contents.push(argument.raw_value(&packet.command));
-            signatures.push(entry.signature.as_slice());
-        }
-
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as i64;
-        let (session_id, public_key) = {
-            let chat_session = player
-                .chat_session
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if chat_session.session_id == uuid::Uuid::nil()
-                || chat_session.public_key.is_empty()
-                || chat_session.signature.is_empty()
-                || chat_session.expires_at < now
-            {
-                warn!(
-                    player = %player.gameprofile.name,
-                    "Rejected signed command without a valid chat session"
-                );
-                return;
-            }
-            (chat_session.session_id, chat_session.public_key.clone())
-        };
-
-        if let Err(error) = crate::net::chat::state::verify_signed_command_and_commit(
-            player,
-            session_id,
-            &public_key,
-            packet.timestamp,
-            packet.salt,
-            packet.message_count,
-            &packet.acknowledged,
-            packet.checksum,
-            &contents,
-            &signatures,
-        ) {
-            warn!(
-                player = %player.gameprofile.name,
-                ?error,
-                "Rejected signed command authentication"
-            );
-            return;
-        }
-
-        // Execute the exact parse result that was authenticated. The event may
-        // observe the command, but cannot replace it with an unauthenticated one.
-        self.execute_authenticated_chat_command(
-            player,
-            server,
-            &packet.command,
-            &dispatcher,
-            parsed,
-        );
+        // In reports-disabled mode entries are decoded as unsigned messages;
+        // their bytes are deliberately not treated as authenticated.
+        self.execute_parsed_chat_command(player, server, &packet.command, &dispatcher, parsed);
     }
 }
 
@@ -353,7 +432,7 @@ mod tests {
                 Some(&[parsed("message")]),
                 &[signature("message"), signature("message")]
             ),
-            Err(SignedCommandArgumentError::Duplicate("message".into()))
+            Ok(())
         );
         assert_eq!(
             validate_signed_command_arguments(Some(&[parsed("message")]), &[]),
