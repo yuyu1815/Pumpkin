@@ -16,6 +16,7 @@ use crc_fast::CrcAlgorithm::Crc32Iscsi;
 use crc_fast::Digest;
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_nbt::tag::NbtTag;
+use pumpkin_util::identifier::Identifier;
 use std::borrow::Cow;
 use std::hash::Hash;
 
@@ -27,35 +28,198 @@ pub enum Operation {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum ModifierDisplay {
+    Default,
+    Hidden,
+    Override(NbtTag),
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct Modifier {
     pub r#type: &'static Attributes,
-    pub id: &'static str,
+    pub id: Cow<'static, str>,
     pub amount: f64,
     pub operation: Operation,
     pub slot: crate::AttributeModifierSlot,
+    pub display: ModifierDisplay,
 }
 impl Hash for Modifier {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.r#type.hash(state);
         self.id.hash(state);
-        unsafe { (*(&raw const self.amount).cast::<u64>()).hash(state) };
+        self.amount.to_bits().hash(state);
         self.operation.hash(state);
         self.slot.hash(state);
+        match &self.display {
+            ModifierDisplay::Default => 0u8,
+            ModifierDisplay::Hidden => 1u8,
+            ModifierDisplay::Override(_) => 2u8,
+        }
+        .hash(state);
     }
 }
 
-#[derive(Clone, Debug, Hash, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AttributeModifiersImpl {
     pub attribute_modifiers: Cow<'static, [Modifier]>,
 }
 impl AttributeModifiersImpl {
-    pub const fn read_data(_data: &NbtTag) -> Option<Self> {
+    pub fn read_data(data: &NbtTag) -> Option<Self> {
+        let entries = data.extract_list()?;
+        let mut modifiers = Vec::with_capacity(entries.len());
+        for entry in entries {
+            let entry = entry.extract_compound()?;
+            let attribute = entry
+                .get_string("type")
+                .and_then(|name| {
+                    Attributes::ALL
+                        .iter()
+                        .find(|attribute| attribute.name == name)
+                })
+                .or_else(|| {
+                    usize::try_from(entry.get_int("attribute_id")?)
+                        .ok()
+                        .and_then(|id| Attributes::ALL.get(id))
+                })?;
+            let id = entry.get_string("id")?;
+            Identifier::parse(id).ok()?;
+            let operation = match entry.get_string("operation") {
+                Some("add_value") => Operation::AddValue,
+                Some("add_multiplied_base") => Operation::AddMultipliedBase,
+                Some("add_multiplied_total") => Operation::AddMultipliedTotal,
+                Some(_) => return None,
+                None => match entry.get_int("operation")? {
+                    0 => Operation::AddValue,
+                    1 => Operation::AddMultipliedBase,
+                    2 => Operation::AddMultipliedTotal,
+                    _ => return None,
+                },
+            };
+            let slot = match entry.get_string("slot") {
+                Some("any") => crate::AttributeModifierSlot::Any,
+                Some("mainhand") => crate::AttributeModifierSlot::MainHand,
+                Some("offhand") => crate::AttributeModifierSlot::OffHand,
+                Some("hand") => crate::AttributeModifierSlot::Hand,
+                Some("feet") => crate::AttributeModifierSlot::Feet,
+                Some("legs") => crate::AttributeModifierSlot::Legs,
+                Some("chest") => crate::AttributeModifierSlot::Chest,
+                Some("head") => crate::AttributeModifierSlot::Head,
+                Some("armor") => crate::AttributeModifierSlot::Armor,
+                Some("body") => crate::AttributeModifierSlot::Body,
+                Some("saddle") => crate::AttributeModifierSlot::Saddle,
+                Some(_) => return None,
+                None => match entry.get_int("slot") {
+                    None => crate::AttributeModifierSlot::Any,
+                    Some(0) => crate::AttributeModifierSlot::Any,
+                    Some(1) => crate::AttributeModifierSlot::MainHand,
+                    Some(2) => crate::AttributeModifierSlot::OffHand,
+                    Some(3) => crate::AttributeModifierSlot::Hand,
+                    Some(4) => crate::AttributeModifierSlot::Feet,
+                    Some(5) => crate::AttributeModifierSlot::Legs,
+                    Some(6) => crate::AttributeModifierSlot::Chest,
+                    Some(7) => crate::AttributeModifierSlot::Head,
+                    Some(8) => crate::AttributeModifierSlot::Armor,
+                    Some(9) => crate::AttributeModifierSlot::Body,
+                    Some(10) => crate::AttributeModifierSlot::Saddle,
+                    Some(_) => return None,
+                },
+            };
+            let display = match entry.get("display") {
+                None => ModifierDisplay::Default,
+                Some(NbtTag::String(value)) if value.as_ref() == "hidden" => {
+                    ModifierDisplay::Hidden
+                }
+                Some(NbtTag::Compound(display)) => match display.get_string("type") {
+                    Some("default") => ModifierDisplay::Default,
+                    Some("hidden") => ModifierDisplay::Hidden,
+                    Some("override") => ModifierDisplay::Override(display.get("value")?.clone()),
+                    Some(_) => return None,
+                    None => ModifierDisplay::Override(NbtTag::Compound(display.clone())),
+                },
+                Some(value) => ModifierDisplay::Override(value.clone()),
+            };
+            modifiers.push(Modifier {
+                r#type: attribute,
+                id: Cow::Owned(id.to_owned()),
+                amount: entry.get_double("amount")?,
+                operation,
+                slot,
+                display,
+            });
+        }
         Some(Self {
-            attribute_modifiers: Cow::Borrowed(&[]),
+            attribute_modifiers: Cow::Owned(modifiers),
         })
     }
 }
+impl Hash for AttributeModifiersImpl {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.attribute_modifiers.hash(state);
+    }
+}
+
+impl AttributeModifiersImpl {
+    fn to_nbt(&self) -> NbtTag {
+        let entries = self
+            .attribute_modifiers
+            .iter()
+            .map(|modifier| {
+                let mut entry = NbtCompound::new();
+                entry.put_string("type", modifier.r#type.name.to_string());
+                entry.put_string("id", modifier.id.to_string());
+                entry.put_double("amount", modifier.amount);
+                entry.put_string(
+                    "operation",
+                    match modifier.operation {
+                        Operation::AddValue => "add_value",
+                        Operation::AddMultipliedBase => "add_multiplied_base",
+                        Operation::AddMultipliedTotal => "add_multiplied_total",
+                    }
+                    .into(),
+                );
+                if !matches!(modifier.slot, crate::AttributeModifierSlot::Any) {
+                    entry.put_string(
+                        "slot",
+                        match modifier.slot {
+                            crate::AttributeModifierSlot::MainHand => "mainhand",
+                            crate::AttributeModifierSlot::OffHand => "offhand",
+                            crate::AttributeModifierSlot::Hand => "hand",
+                            crate::AttributeModifierSlot::Feet => "feet",
+                            crate::AttributeModifierSlot::Legs => "legs",
+                            crate::AttributeModifierSlot::Chest => "chest",
+                            crate::AttributeModifierSlot::Head => "head",
+                            crate::AttributeModifierSlot::Armor => "armor",
+                            crate::AttributeModifierSlot::Body => "body",
+                            crate::AttributeModifierSlot::Saddle => "saddle",
+                            crate::AttributeModifierSlot::Any => unreachable!(),
+                        }
+                        .into(),
+                    );
+                }
+                match &modifier.display {
+                    ModifierDisplay::Default => {}
+                    ModifierDisplay::Hidden => {
+                        let mut display = NbtCompound::new();
+                        display.put_string("type", "hidden".into());
+                        entry.put("display", NbtTag::Compound(display));
+                    }
+                    ModifierDisplay::Override(value) => {
+                        let mut display = NbtCompound::new();
+                        display.put_string("type", "override".into());
+                        display.put("value", value.clone());
+                        entry.put("display", NbtTag::Compound(display));
+                    }
+                }
+                NbtTag::Compound(entry)
+            })
+            .collect();
+        NbtTag::List(entries)
+    }
+}
 impl DataComponentImpl for AttributeModifiersImpl {
+    fn write_data(&self) -> NbtTag {
+        self.to_nbt()
+    }
     default_impl!(AttributeModifiers);
 }
 

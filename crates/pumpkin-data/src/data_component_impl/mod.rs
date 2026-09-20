@@ -913,6 +913,41 @@ mod tests {
     }
 
     #[test]
+    fn attribute_modifiers_official_nbt_round_trip() {
+        let mut override_value = NbtCompound::new();
+        override_value.put_string("text", "override".to_owned());
+        let value = AttributeModifiersImpl {
+            attribute_modifiers: Cow::Owned(vec![
+                Modifier {
+                    r#type: &crate::attributes::Attributes::ATTACK_DAMAGE,
+                    id: Cow::Borrowed("minecraft:test_damage"),
+                    amount: 1.5,
+                    operation: Operation::AddValue,
+                    slot: crate::AttributeModifierSlot::Any,
+                    display: ModifierDisplay::Default,
+                },
+                Modifier {
+                    r#type: &crate::attributes::Attributes::MOVEMENT_SPEED,
+                    id: Cow::Borrowed("custom:test_speed"),
+                    amount: f64::INFINITY,
+                    operation: Operation::AddMultipliedBase,
+                    slot: crate::AttributeModifierSlot::MainHand,
+                    display: ModifierDisplay::Hidden,
+                },
+                Modifier {
+                    r#type: &crate::attributes::Attributes::MAX_HEALTH,
+                    id: Cow::Borrowed("custom:test_override"),
+                    amount: -1.25,
+                    operation: Operation::AddMultipliedTotal,
+                    slot: crate::AttributeModifierSlot::Saddle,
+                    display: ModifierDisplay::Override(NbtTag::Compound(override_value)),
+                },
+            ]),
+        };
+        assert_round_trip(value, AttributeModifiersImpl::read_data);
+    }
+
+    #[test]
     fn swing_animation_round_trip() {
         assert_round_trip(
             SwingAnimationImpl {

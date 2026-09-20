@@ -12,6 +12,7 @@ use pumpkin_data::effect::StatusEffect;
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::sound::Sound;
 use pumpkin_nbt::{compound::NbtCompound, serializer::NbtWriteHelperJava, tag::NbtTag};
+use pumpkin_util::identifier::Identifier;
 use pumpkin_util::version::JavaMinecraftVersion;
 
 const MAX_STATUS_EFFECTS: usize = 128;
@@ -1952,48 +1953,154 @@ impl DataComponentCodec<Self> for CanBreakImpl {
     }
 }
 
+const fn attribute_modifier_slot_id(
+    slot: &pumpkin_data::enchantment::AttributeModifierSlot,
+) -> i32 {
+    match slot {
+        pumpkin_data::enchantment::AttributeModifierSlot::Any => 0,
+        pumpkin_data::enchantment::AttributeModifierSlot::MainHand => 1,
+        pumpkin_data::enchantment::AttributeModifierSlot::OffHand => 2,
+        pumpkin_data::enchantment::AttributeModifierSlot::Hand => 3,
+        pumpkin_data::enchantment::AttributeModifierSlot::Feet => 4,
+        pumpkin_data::enchantment::AttributeModifierSlot::Legs => 5,
+        pumpkin_data::enchantment::AttributeModifierSlot::Chest => 6,
+        pumpkin_data::enchantment::AttributeModifierSlot::Head => 7,
+        pumpkin_data::enchantment::AttributeModifierSlot::Armor => 8,
+        pumpkin_data::enchantment::AttributeModifierSlot::Body => 9,
+        pumpkin_data::enchantment::AttributeModifierSlot::Saddle => 10,
+    }
+}
+
+fn attribute_modifier_slot(
+    value: i32,
+) -> Result<pumpkin_data::enchantment::AttributeModifierSlot, ReadingError> {
+    match value {
+        0 => Ok(pumpkin_data::enchantment::AttributeModifierSlot::Any),
+        1 => Ok(pumpkin_data::enchantment::AttributeModifierSlot::MainHand),
+        2 => Ok(pumpkin_data::enchantment::AttributeModifierSlot::OffHand),
+        3 => Ok(pumpkin_data::enchantment::AttributeModifierSlot::Hand),
+        4 => Ok(pumpkin_data::enchantment::AttributeModifierSlot::Feet),
+        5 => Ok(pumpkin_data::enchantment::AttributeModifierSlot::Legs),
+        6 => Ok(pumpkin_data::enchantment::AttributeModifierSlot::Chest),
+        7 => Ok(pumpkin_data::enchantment::AttributeModifierSlot::Head),
+        8 => Ok(pumpkin_data::enchantment::AttributeModifierSlot::Armor),
+        9 => Ok(pumpkin_data::enchantment::AttributeModifierSlot::Body),
+        10 => Ok(pumpkin_data::enchantment::AttributeModifierSlot::Saddle),
+        _ => Err(ReadingError::Message(format!(
+            "Invalid attribute modifier slot id: {value}"
+        ))),
+    }
+}
+
+fn attribute_modifier_operation(
+    value: i32,
+) -> Result<pumpkin_data::data_component_impl::Operation, ReadingError> {
+    match value {
+        0 => Ok(pumpkin_data::data_component_impl::Operation::AddValue),
+        1 => Ok(pumpkin_data::data_component_impl::Operation::AddMultipliedBase),
+        2 => Ok(pumpkin_data::data_component_impl::Operation::AddMultipliedTotal),
+        _ => Err(ReadingError::Message(format!(
+            "Invalid attribute modifier operation id: {value}"
+        ))),
+    }
+}
+
+fn serialize_modifier_display(
+    display: &ModifierDisplay,
+    seq: &mut impl NetworkWriteExt,
+) -> Result<(), WritingError> {
+    match display {
+        ModifierDisplay::Default => seq.write_var_int(&VarInt(0)),
+        ModifierDisplay::Hidden => seq.write_var_int(&VarInt(1)),
+        ModifierDisplay::Override(component) => {
+            if matches!(component, NbtTag::End) {
+                return Err(WritingError::Message(
+                    "Attribute modifier display component cannot be End".into(),
+                ));
+            }
+            seq.write_var_int(&VarInt(2))?;
+            seq.write_nbt_with_version(Some(component), &JavaMinecraftVersion::V_26_2)
+        }
+    }
+}
+
+fn deserialize_modifier_display(
+    seq: &mut impl NetworkReadExt,
+) -> Result<ModifierDisplay, ReadingError> {
+    match seq.get_var_int()?.0 {
+        0 => Ok(ModifierDisplay::Default),
+        1 => Ok(ModifierDisplay::Hidden),
+        2 => Ok(ModifierDisplay::Override(
+            seq.get_nbt_with_version(&JavaMinecraftVersion::V_26_2)?
+                .ok_or_else(|| {
+                    ReadingError::Message("Attribute modifier display component is missing".into())
+                })?,
+        )),
+        value => Err(ReadingError::Message(format!(
+            "Invalid attribute modifier display type id: {value}"
+        ))),
+    }
+}
+
 impl DataComponentCodec<Self> for AttributeModifiersImpl {
     fn serialize(&self, seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
-        seq.write_var_int(&VarInt::from(self.attribute_modifiers.len() as i32))?;
+        let count = i32::try_from(self.attribute_modifiers.len())
+            .map_err(|_| WritingError::Message("Too many attribute modifiers".into()))?;
+        seq.write_var_int(&VarInt(count))?;
         for modifier in self.attribute_modifiers.iter() {
-            seq.write_var_int(&VarInt::from(modifier.r#type.id as i32))?;
-            seq.write_string(modifier.id)?;
+            seq.write_var_int(&VarInt(i32::from(modifier.r#type.id)))?;
+            Identifier::parse(&modifier.id).map_err(|error| {
+                WritingError::Message(format!("Invalid attribute modifier resource id: {error}"))
+            })?;
+            seq.write_string(&modifier.id)?;
             seq.write_f64(modifier.amount)?;
-            seq.write_var_int(&VarInt::from(modifier.operation as i32))?;
-            let slot_id = match modifier.slot {
-                pumpkin_data::enchantment::AttributeModifierSlot::Any => 0,
-                pumpkin_data::enchantment::AttributeModifierSlot::MainHand => 1,
-                pumpkin_data::enchantment::AttributeModifierSlot::OffHand => 2,
-                pumpkin_data::enchantment::AttributeModifierSlot::Hand => 3,
-                pumpkin_data::enchantment::AttributeModifierSlot::Feet => 4,
-                pumpkin_data::enchantment::AttributeModifierSlot::Legs => 5,
-                pumpkin_data::enchantment::AttributeModifierSlot::Chest => 6,
-                pumpkin_data::enchantment::AttributeModifierSlot::Head => 7,
-                pumpkin_data::enchantment::AttributeModifierSlot::Armor => 8,
-                pumpkin_data::enchantment::AttributeModifierSlot::Body => 9,
-                pumpkin_data::enchantment::AttributeModifierSlot::Saddle => 10,
+            let operation = match modifier.operation {
+                Operation::AddValue => 0,
+                Operation::AddMultipliedBase => 1,
+                Operation::AddMultipliedTotal => 2,
             };
-            seq.write_var_int(&VarInt(slot_id))?;
-            seq.write_var_int(&VarInt(0))?;
+            seq.write_var_int(&VarInt(operation))?;
+            seq.write_var_int(&VarInt(attribute_modifier_slot_id(&modifier.slot)))?;
+            serialize_modifier_display(&modifier.display, seq)?;
         }
         Ok(())
     }
 
     fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
-        let len = seq.get_var_int()?.0 as usize;
-        for _ in 0..len {
-            let _attr_id = seq.get_var_int()?;
-            let _id = seq.get_str()?;
-            let _amount = seq.get_f64()?;
-            let _operation = seq.get_var_int()?;
-            let _slot = seq.get_var_int()?;
-            let display_type = seq.get_var_int()?.0;
-            if display_type == 2 {
-                let _ = seq.get_nbt_with_version(&JavaMinecraftVersion::V_26_2)?;
-            }
+        let count = seq.get_var_int()?.0;
+        let count = usize::try_from(count).map_err(|_| {
+            ReadingError::Message(format!("Negative attribute modifier count: {count}"))
+        })?;
+        let mut modifiers = Vec::new();
+        for _ in 0..count {
+            let attribute_id = seq.get_var_int()?.0;
+            let attribute_id = usize::try_from(attribute_id).map_err(|_| {
+                ReadingError::Message(format!("Invalid attribute registry id: {attribute_id}"))
+            })?;
+            let attribute = pumpkin_data::attributes::Attributes::ALL
+                .get(attribute_id)
+                .ok_or_else(|| {
+                    ReadingError::Message(format!("Unknown attribute registry id: {attribute_id}"))
+                })?;
+            let id = seq.get_str()?;
+            Identifier::parse(&id).map_err(|error| {
+                ReadingError::Message(format!("Invalid attribute modifier resource id: {error}"))
+            })?;
+            let amount = seq.get_f64()?;
+            let operation = attribute_modifier_operation(seq.get_var_int()?.0)?;
+            let slot = attribute_modifier_slot(seq.get_var_int()?.0)?;
+            let display = deserialize_modifier_display(seq)?;
+            modifiers.push(Modifier {
+                r#type: attribute,
+                id: Cow::Owned(id.into()),
+                amount,
+                operation,
+                slot,
+                display,
+            });
         }
         Ok(Self {
-            attribute_modifiers: Cow::Borrowed(&[]),
+            attribute_modifiers: Cow::Owned(modifiers),
         })
     }
 }
@@ -3177,6 +3284,144 @@ impl DataComponentCodec<Self> for BreakSoundImpl {
 }
 
 #[cfg(test)]
+mod attribute_modifier_tests {
+    use super::*;
+
+    fn write_modifier(
+        wire: &mut Vec<u8>,
+        attribute: i32,
+        id: &str,
+        amount: f64,
+        operation: i32,
+        slot: i32,
+        display: i32,
+    ) {
+        wire.write_var_int(&VarInt(attribute)).unwrap();
+        wire.write_string(id).unwrap();
+        wire.write_f64(amount).unwrap();
+        wire.write_var_int(&VarInt(operation)).unwrap();
+        wire.write_var_int(&VarInt(slot)).unwrap();
+        wire.write_var_int(&VarInt(display)).unwrap();
+    }
+
+    #[test]
+    fn independent_wire_round_trip_preserves_all_modifier_fields() {
+        let mut wire = Vec::new();
+        wire.write_var_int(&VarInt(3)).unwrap();
+        write_modifier(&mut wire, 3, "minecraft:base_attack_damage", -2.5, 0, 1, 0);
+        write_modifier(
+            &mut wire,
+            26,
+            "custom:non_finite_nan",
+            f64::from_bits(0x7ff8_0000_0000_0042),
+            2,
+            10,
+            1,
+        );
+        write_modifier(
+            &mut wire,
+            23,
+            "minecraft:health_bonus",
+            f64::INFINITY,
+            1,
+            8,
+            2,
+        );
+        let mut display = NbtCompound::new();
+        display.put_string("text", "override".to_owned());
+        wire.write_nbt(NbtTag::Compound(display)).unwrap();
+        let mut input = wire.as_slice();
+        let decoded = AttributeModifiersImpl::deserialize(&mut input).unwrap();
+        assert!(input.is_empty());
+        assert_eq!(decoded.attribute_modifiers.len(), 3);
+        assert_eq!(decoded.attribute_modifiers[0].r#type.id, 3);
+        assert_eq!(
+            decoded.attribute_modifiers[0].id.as_ref(),
+            "minecraft:base_attack_damage"
+        );
+        assert_eq!(decoded.attribute_modifiers[0].amount, -2.5);
+        assert_eq!(
+            decoded.attribute_modifiers[0].operation,
+            Operation::AddValue
+        );
+        assert_eq!(
+            decoded.attribute_modifiers[0].slot,
+            pumpkin_data::enchantment::AttributeModifierSlot::MainHand
+        );
+        assert!(matches!(
+            decoded.attribute_modifiers[0].display,
+            ModifierDisplay::Default
+        ));
+        assert_eq!(
+            decoded.attribute_modifiers[1].r#type.name,
+            "minecraft:movement_speed"
+        );
+        assert_eq!(
+            decoded.attribute_modifiers[1].amount.to_bits(),
+            0x7ff8_0000_0000_0042
+        );
+        assert_eq!(
+            decoded.attribute_modifiers[1].operation,
+            Operation::AddMultipliedTotal
+        );
+        assert_eq!(
+            decoded.attribute_modifiers[1].slot,
+            pumpkin_data::enchantment::AttributeModifierSlot::Saddle
+        );
+        assert!(matches!(
+            decoded.attribute_modifiers[1].display,
+            ModifierDisplay::Hidden
+        ));
+        assert!(decoded.attribute_modifiers[2].amount.is_infinite());
+        assert!(matches!(
+            decoded.attribute_modifiers[2].display,
+            ModifierDisplay::Override(_)
+        ));
+
+        let mut encoded = Vec::new();
+        decoded.serialize(&mut encoded).unwrap();
+        assert_eq!(encoded, wire);
+    }
+
+    #[test]
+    fn attribute_modifier_rejects_invalid_counts_ids_and_enums() {
+        let mut negative = &[0xff, 0xff, 0xff, 0xff, 0x0f][..];
+        assert!(AttributeModifiersImpl::deserialize(&mut negative).is_err());
+
+        let unknown_attribute = vec![1, 40];
+        assert!(AttributeModifiersImpl::deserialize(&mut unknown_attribute.as_slice()).is_err());
+
+        let mut unknown_operation = Vec::new();
+        unknown_operation.write_var_int(&VarInt(1)).unwrap();
+        write_modifier(&mut unknown_operation, 0, "minecraft:test", 0.0, 3, 0, 0);
+        assert!(AttributeModifiersImpl::deserialize(&mut unknown_operation.as_slice()).is_err());
+
+        let mut unknown_slot = Vec::new();
+        unknown_slot.write_var_int(&VarInt(1)).unwrap();
+        write_modifier(&mut unknown_slot, 0, "minecraft:test", 0.0, 0, 11, 0);
+        assert!(AttributeModifiersImpl::deserialize(&mut unknown_slot.as_slice()).is_err());
+
+        let mut unknown_display = Vec::new();
+        unknown_display.write_var_int(&VarInt(1)).unwrap();
+        write_modifier(&mut unknown_display, 0, "minecraft:test", 0.0, 0, 0, 3);
+        assert!(AttributeModifiersImpl::deserialize(&mut unknown_display.as_slice()).is_err());
+
+        let mut invalid_id = Vec::new();
+        invalid_id.write_var_int(&VarInt(1)).unwrap();
+        write_modifier(
+            &mut invalid_id,
+            0,
+            "minecraft:not a resource id",
+            0.0,
+            0,
+            0,
+            0,
+        );
+        assert!(AttributeModifiersImpl::deserialize(&mut invalid_id.as_slice()).is_err());
+    }
+}
+
+#[cfg(test)]
 mod adventure_predicate_tests {
     use super::*;
 
@@ -3204,12 +3449,21 @@ mod adventure_predicate_tests {
         let mut nbt = NbtCompound::new();
         nbt.put_string("id", "minecraft:chest".to_string());
         wire.write_nbt(NbtTag::Compound(nbt)).unwrap();
-        wire.write_var_int(&VarInt(2)).unwrap();
+        wire.write_var_int(&VarInt(3)).unwrap();
         wire.write_var_int(&VarInt(DataComponent::CustomData.to_id() as i32))
             .unwrap();
         let mut custom = NbtCompound::new();
         custom.put_string("marker", "preserved".to_string());
         wire.write_nbt(NbtTag::Compound(custom)).unwrap();
+        wire.write_var_int(&VarInt(DataComponent::AttributeModifiers.to_id() as i32))
+            .unwrap();
+        wire.write_var_int(&VarInt(1)).unwrap();
+        wire.write_var_int(&VarInt(3)).unwrap();
+        wire.write_string("minecraft:nested_exact").unwrap();
+        wire.write_f64(1.25).unwrap();
+        wire.write_var_int(&VarInt(2)).unwrap();
+        wire.write_var_int(&VarInt(3)).unwrap();
+        wire.write_var_int(&VarInt(1)).unwrap();
         wire.write_var_int(&VarInt(DataComponent::TooltipDisplay.to_id() as i32))
             .unwrap();
         wire.write_bool(true).unwrap();
@@ -3223,12 +3477,72 @@ mod adventure_predicate_tests {
         let mut input = wire.as_slice();
         let decoded = CanPlaceOnImpl::deserialize(&mut input).unwrap();
         assert!(input.is_empty());
+        let predicate = decoded.predicate.extract_list().unwrap()[0]
+            .extract_compound()
+            .unwrap();
+        let components = predicate
+            .get_compound("components")
+            .unwrap()
+            .get_compound("components")
+            .unwrap();
+        let modifiers = components
+            .get_list("minecraft:attribute_modifiers")
+            .unwrap();
+        assert_eq!(modifiers.len(), 1);
+        assert_eq!(
+            modifiers[0].extract_compound().unwrap().get_string("type"),
+            Some("minecraft:attack_damage")
+        );
         let mut encoded = Vec::new();
         decoded.serialize(&mut encoded).unwrap();
         let mut redecoded_input = encoded.as_slice();
         let redecoded = CanPlaceOnImpl::deserialize(&mut redecoded_input).unwrap();
         assert!(redecoded_input.is_empty());
         assert_eq!(redecoded, decoded);
+    }
+
+    #[test]
+    fn nested_attribute_modifier_exact_matcher_round_trips_wire_and_type() {
+        let mut wire = Vec::new();
+        wire.write_var_int(&VarInt(1)).unwrap();
+        wire.write_bool(false).unwrap();
+        wire.write_bool(false).unwrap();
+        wire.write_bool(false).unwrap();
+        wire.write_var_int(&VarInt(1)).unwrap();
+        wire.write_var_int(&VarInt(DataComponent::AttributeModifiers.to_id() as i32))
+            .unwrap();
+        wire.write_var_int(&VarInt(1)).unwrap();
+        wire.write_var_int(&VarInt(3)).unwrap();
+        wire.write_string("minecraft:nested_exact").unwrap();
+        wire.write_f64(1.25).unwrap();
+        wire.write_var_int(&VarInt(0)).unwrap();
+        wire.write_var_int(&VarInt(0)).unwrap();
+        wire.write_var_int(&VarInt(0)).unwrap();
+        wire.write_var_int(&VarInt(0)).unwrap();
+
+        let mut input = wire.as_slice();
+        let decoded = CanPlaceOnImpl::deserialize(&mut input).unwrap();
+        assert!(input.is_empty());
+        let predicate = decoded.predicate.extract_list().unwrap()[0]
+            .extract_compound()
+            .unwrap();
+        let components = predicate
+            .get_compound("components")
+            .unwrap()
+            .get_compound("components")
+            .unwrap();
+        let modifiers = components
+            .get_list("minecraft:attribute_modifiers")
+            .unwrap();
+        assert_eq!(modifiers.len(), 1);
+        assert_eq!(
+            modifiers[0].extract_compound().unwrap().get_string("type"),
+            Some("minecraft:attack_damage")
+        );
+
+        let mut encoded = Vec::new();
+        decoded.serialize(&mut encoded).unwrap();
+        assert_eq!(encoded, wire);
     }
 
     #[test]
