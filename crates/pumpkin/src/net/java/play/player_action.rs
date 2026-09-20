@@ -437,6 +437,7 @@ mod tests {
         basic.allow_nether = false;
         basic.allow_end = false;
         basic.allow_chat_reports = false;
+        basic.spawn_protection = 0;
         basic.use_favicon = false;
 
         let mut advanced = AdvancedConfiguration::default();
@@ -537,8 +538,17 @@ mod tests {
             pumpkin_data::Block::STONE.default_state
         );
 
+        // Stone hardness is 1.5; empty hand speed is 1.0, then the airborne fixture
+        // applies /5 and the non-harvest divisor is /100: 1/750 progress per tick.
+        // Player::tick increments first, so 748 -> 749 is the exact >= 1.0 boundary.
         // The shared Player tick owns delayed completion; no further action packet is needed.
-        player.tick_counter.store(10_000, Ordering::Relaxed);
+        player.tick_counter.store(747, Ordering::Relaxed);
+        player.tick(&server);
+        assert!(player.delayed_destroy.load(Ordering::Relaxed));
+        assert_eq!(
+            world.get_block_state(&position),
+            pumpkin_data::Block::STONE.default_state
+        );
         player.tick(&server);
         assert!(!player.delayed_destroy.load(Ordering::Relaxed));
         assert_eq!(
