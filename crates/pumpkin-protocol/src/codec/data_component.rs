@@ -4,14 +4,14 @@ use std::borrow::Cow;
 
 use crate::codec::var_int::VarInt;
 use crate::ser::{NetworkReadExt, NetworkWriteExt, ReadingError, WritingError};
-use pumpkin_data::Enchantment;
 use pumpkin_data::data_component::DataComponent;
 use pumpkin_data::data_component_impl::*;
+use pumpkin_data::{Block, BlockId, Enchantment};
 
 use pumpkin_data::effect::StatusEffect;
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::sound::Sound;
-use pumpkin_nbt::{serializer::NbtWriteHelperJava, tag::NbtTag};
+use pumpkin_nbt::{compound::NbtCompound, serializer::NbtWriteHelperJava, tag::NbtTag};
 use pumpkin_util::version::JavaMinecraftVersion;
 
 const MAX_STATUS_EFFECTS: usize = 128;
@@ -1468,120 +1468,486 @@ impl DataComponentCodec<Self> for DamageTypeImpl {
     }
 }
 
-impl DataComponentCodec<Self> for CanPlaceOnImpl {
-    fn serialize(&self, seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
-        seq.write_var_int(&VarInt(0))
-    }
+const MAX_ADVENTURE_PREDICATES: usize = 256;
+const MAX_ADVENTURE_BLOCKS: usize = 256;
+const MAX_ADVENTURE_PROPERTIES: usize = 256;
+const MAX_ADVENTURE_COMPONENTS: usize = 256;
 
-    fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
-        let count = seq.get_var_int()?.0;
-        for _ in 0..count {
-            let has_blocks = seq.get_bool()?;
-            if has_blocks {
-                let id_type = seq.get_var_int()?.0;
-                if id_type == 0 {
-                    let _ = seq.get_str()?;
-                } else if id_type > 0 {
-                    for _ in 0..(id_type - 1) {
-                        let _ = seq.get_var_int()?;
-                    }
+fn adventure_count(
+    seq: &mut impl NetworkReadExt,
+    what: &str,
+    max: usize,
+) -> Result<usize, ReadingError> {
+    let value = seq.get_var_int()?.0;
+    let count = usize::try_from(value)
+        .map_err(|_| ReadingError::Message(format!("Negative {what} count: {value}")))?;
+    if count > max {
+        return Err(ReadingError::TooLarge(format!(
+            "{what} count {count} exceeds {max}"
+        )));
+    }
+    Ok(count)
+}
+fn adventure_component(value: i32) -> Result<DataComponent, ReadingError> {
+    let id = u8::try_from(value)
+        .map_err(|_| ReadingError::Message(format!("Invalid data component id: {value}")))?;
+    DataComponent::try_from_id(id)
+        .ok_or_else(|| ReadingError::Message(format!("Unknown data component id: {value}")))
+}
+fn adventure_component_name(name: &str) -> Result<DataComponent, WritingError> {
+    DataComponent::try_from_name(name).ok_or_else(|| {
+        WritingError::Message(format!(
+            "Unknown data component in adventure predicate: {name}"
+        ))
+    })
+}
+fn read_adventure_blocks(seq: &mut impl NetworkReadExt) -> Result<NbtTag, ReadingError> {
+    match seq.get_var_int()?.0 {
+        0 => Ok(NbtTag::String(format!("#{}", seq.get_str()?).into())),
+        value if value > 0 => {
+            let count = usize::try_from(value - 1)
+                .map_err(|_| ReadingError::Message("Invalid adventure block set length".into()))?;
+            if count > MAX_ADVENTURE_BLOCKS {
+                return Err(ReadingError::TooLarge(
+                    "Too many adventure block IDs".into(),
+                ));
+            }
+            let mut blocks = Vec::with_capacity(count);
+            for _ in 0..count {
+                let id = u16::try_from(seq.get_var_int()?.0)
+                    .map_err(|_| ReadingError::Message("Invalid adventure block ID".into()))?;
+                let block = BlockId::new(id).map(Block::from_id).ok_or_else(|| {
+                    ReadingError::Message(format!("Unknown adventure block registry ID: {id}"))
+                })?;
+                blocks.push(NbtTag::String(block.name.into()));
+            }
+            Ok(NbtTag::List(blocks))
+        }
+        _ => Err(ReadingError::Message(
+            "Negative adventure block set type/length".into(),
+        )),
+    }
+}
+fn write_adventure_blocks(
+    blocks: &NbtTag,
+    seq: &mut impl NetworkWriteExt,
+) -> Result<(), WritingError> {
+    match blocks {
+        NbtTag::String(name) if name.starts_with('#') => {
+            seq.write_var_int(&VarInt(0))?;
+            seq.write_string(name.strip_prefix('#').unwrap_or(name))
+        }
+        NbtTag::String(name) => {
+            let block = Block::from_name(name)
+                .ok_or_else(|| WritingError::Message(format!("Unknown adventure block: {name}")))?;
+            seq.write_var_int(&VarInt(2))?;
+            seq.write_var_int(&VarInt(i32::from(block.registry_id())))
+        }
+        NbtTag::List(names) => {
+            if names.len() > MAX_ADVENTURE_BLOCKS {
+                return Err(WritingError::Message("Too many adventure block IDs".into()));
+            }
+            seq.write_var_int(&VarInt(i32::try_from(names.len() + 1).map_err(|_| {
+                WritingError::Message("Adventure block count overflow".into())
+            })?))?;
+            for name in names {
+                let NbtTag::String(name) = name else {
+                    return Err(WritingError::Message(
+                        "Adventure block ID must be a string".into(),
+                    ));
+                };
+                let block = Block::from_name(name).ok_or_else(|| {
+                    WritingError::Message(format!("Unknown adventure block: {name}"))
+                })?;
+                seq.write_var_int(&VarInt(i32::from(block.registry_id())))?;
+            }
+            Ok(())
+        }
+        _ => Err(WritingError::Message(
+            "Adventure blocks must be a string or list".into(),
+        )),
+    }
+}
+fn read_adventure_state(seq: &mut impl NetworkReadExt) -> Result<NbtTag, ReadingError> {
+    let count = adventure_count(seq, "adventure state property", MAX_ADVENTURE_PROPERTIES)?;
+    let mut state = NbtCompound::new();
+    for _ in 0..count {
+        let name = seq.get_str()?;
+        if state.get(&name).is_some() {
+            return Err(ReadingError::Message(format!(
+                "Duplicate adventure state property: {name}"
+            )));
+        }
+        if seq.get_bool()? {
+            state.put(&name, NbtTag::String(seq.get_str()?.into()));
+        } else {
+            let mut range = NbtCompound::new();
+            if seq.get_bool()? {
+                range.put_string("min", seq.get_str()?.into());
+            }
+            if seq.get_bool()? {
+                range.put_string("max", seq.get_str()?.into());
+            }
+            state.put(&name, NbtTag::Compound(range));
+        }
+    }
+    Ok(NbtTag::Compound(state))
+}
+fn write_adventure_state(
+    state: &NbtTag,
+    seq: &mut impl NetworkWriteExt,
+) -> Result<(), WritingError> {
+    let NbtTag::Compound(state) = state else {
+        return Err(WritingError::Message(
+            "Adventure state must be a compound".into(),
+        ));
+    };
+    if state.child_tags.len() > MAX_ADVENTURE_PROPERTIES {
+        return Err(WritingError::Message(
+            "Too many adventure state properties".into(),
+        ));
+    }
+    seq.write_var_int(&VarInt(i32::try_from(state.child_tags.len()).map_err(
+        |_| WritingError::Message("Adventure state count overflow".into()),
+    )?))?;
+    for (name, value) in &state.child_tags {
+        seq.write_string(name)?;
+        match value {
+            NbtTag::String(value) => {
+                seq.write_bool(true)?;
+                seq.write_string(value)?;
+            }
+            NbtTag::Compound(range) => {
+                if range
+                    .child_tags
+                    .keys()
+                    .any(|key| key.as_ref() != "min" && key.as_ref() != "max")
+                {
+                    return Err(WritingError::Message(format!(
+                        "Unknown adventure state range field: {name}"
+                    )));
+                }
+                seq.write_bool(false)?;
+                let min = range.get_string("min");
+                seq.write_bool(min.is_some())?;
+                if let Some(min) = min {
+                    seq.write_string(min)?;
+                }
+                let max = range.get_string("max");
+                seq.write_bool(max.is_some())?;
+                if let Some(max) = max {
+                    seq.write_string(max)?;
                 }
             }
-            let has_props = seq.get_bool()?;
-            if has_props {
-                let props_len = seq.get_var_int()?.0;
-                for _ in 0..props_len {
-                    let _ = seq.get_str()?;
-                    let is_exact = seq.get_bool()?;
-                    if is_exact {
-                        let _ = seq.get_str()?;
-                    } else {
-                        if seq.get_bool()? {
-                            let _ = seq.get_str()?;
-                        }
-                        if seq.get_bool()? {
-                            let _ = seq.get_str()?;
-                        }
-                    }
-                }
-            }
-            let has_nbt = seq.get_bool()?;
-            if has_nbt {
-                let _ = seq.get_nbt_with_version(&JavaMinecraftVersion::V_26_2)?;
-            }
-            let exact_len = seq.get_var_int()?.0;
-            for _ in 0..exact_len {
-                let comp_id = seq.get_var_int()?.0 as u8;
-                if let Some(comp) = DataComponent::try_from_id(comp_id) {
-                    let _ = deserialize(comp, seq)?;
-                }
-            }
-            let partial_len = seq.get_var_int()?.0;
-            for _ in 0..partial_len {
-                let _ = seq.get_var_int()?;
+            _ => {
+                return Err(WritingError::Message(format!(
+                    "Invalid adventure state value: {name}"
+                )));
             }
         }
+    }
+    Ok(())
+}
+fn read_adventure_components(seq: &mut impl NetworkReadExt) -> Result<NbtTag, ReadingError> {
+    let exact_count = adventure_count(seq, "adventure exact component", MAX_ADVENTURE_COMPONENTS)?;
+    let mut exact = NbtCompound::new();
+    for _ in 0..exact_count {
+        let id = adventure_component(seq.get_var_int()?.0)?;
+        let name = id.to_name();
+        if exact.get(name).is_some() {
+            return Err(ReadingError::Message(format!(
+                "Duplicate adventure exact component: {name}"
+            )));
+        }
+        let value = if id == DataComponent::TooltipDisplay {
+            let mut tooltip = NbtCompound::new();
+            tooltip.put_bool("hide_tooltip", seq.get_bool()?);
+            let count = adventure_count(seq, "tooltip hidden component", MAX_ADVENTURE_COMPONENTS)?;
+            let mut hidden = Vec::with_capacity(count);
+            for _ in 0..count {
+                hidden.push(NbtTag::String(
+                    adventure_component(seq.get_var_int()?.0)?.to_name().into(),
+                ));
+            }
+            tooltip.put_list("hidden_components", hidden);
+            NbtTag::Compound(tooltip)
+        } else {
+            deserialize(id, seq)?.write_data()
+        };
+        exact.put(name, value);
+    }
+    let partial_count =
+        adventure_count(seq, "adventure partial component", MAX_ADVENTURE_COMPONENTS)?;
+    let mut partial = Vec::with_capacity(partial_count);
+    for _ in 0..partial_count {
+        partial.push(NbtTag::String(
+            adventure_component(seq.get_var_int()?.0)?.to_name().into(),
+        ));
+    }
+    let mut result = NbtCompound::new();
+    if !exact.child_tags.is_empty() {
+        result.put("components", NbtTag::Compound(exact));
+    }
+    if !partial.is_empty() {
+        result.put_list("predicates", partial);
+    }
+    Ok(NbtTag::Compound(result))
+}
+fn write_adventure_components(
+    value: &NbtTag,
+    seq: &mut impl NetworkWriteExt,
+) -> Result<(), WritingError> {
+    let NbtTag::Compound(value) = value else {
+        return Err(WritingError::Message(
+            "Adventure components must be a compound".into(),
+        ));
+    };
+    let exact = match value.get("components") {
+        None => None,
+        Some(NbtTag::Compound(value)) => Some(value),
+        Some(_) => {
+            return Err(WritingError::Message(
+                "Adventure exact components must be a compound".into(),
+            ));
+        }
+    };
+    let partial = match value.get("predicates") {
+        None => None,
+        Some(NbtTag::List(value)) => Some(value),
+        Some(_) => {
+            return Err(WritingError::Message(
+                "Adventure partial components must be a list".into(),
+            ));
+        }
+    };
+    if value
+        .child_tags
+        .keys()
+        .any(|key| key.as_ref() != "components" && key.as_ref() != "predicates")
+    {
+        return Err(WritingError::Message(
+            "Unknown adventure component matcher field".into(),
+        ));
+    }
+    let exact_len = exact.map_or(0, |value| value.child_tags.len());
+    if exact_len > MAX_ADVENTURE_COMPONENTS {
+        return Err(WritingError::Message(
+            "Too many adventure exact components".into(),
+        ));
+    }
+    seq.write_var_int(&VarInt(i32::try_from(exact_len).map_err(|_| {
+        WritingError::Message("Adventure exact component count overflow".into())
+    })?))?;
+    if let Some(exact) = exact {
+        for (name, component_value) in &exact.child_tags {
+            let id = adventure_component_name(name)?;
+            seq.write_var_int(&VarInt(i32::from(id.to_id())))?;
+            if id == DataComponent::TooltipDisplay {
+                if let NbtTag::Compound(tooltip) = component_value {
+                    let hidden = tooltip.get_list("hidden_components").ok_or_else(|| {
+                        WritingError::Message(
+                            "TooltipDisplay matcher is missing hidden_components".into(),
+                        )
+                    })?;
+                    let hide = tooltip.get_bool("hide_tooltip").ok_or_else(|| {
+                        WritingError::Message(
+                            "TooltipDisplay matcher is missing hide_tooltip".into(),
+                        )
+                    })?;
+                    if tooltip.child_tags.keys().any(|key| {
+                        key.as_ref() != "hide_tooltip" && key.as_ref() != "hidden_components"
+                    }) {
+                        return Err(WritingError::Message(
+                            "Unknown TooltipDisplay matcher field".into(),
+                        ));
+                    }
+                    seq.write_bool(hide)?;
+                    seq.write_var_int(&VarInt(i32::try_from(hidden.len()).map_err(|_| {
+                        WritingError::Message(
+                            "TooltipDisplay hidden component count overflow".into(),
+                        )
+                    })?))?;
+                    for item in hidden {
+                        let NbtTag::String(name) = item else {
+                            return Err(WritingError::Message(
+                                "TooltipDisplay hidden component ID must be a string".into(),
+                            ));
+                        };
+                        seq.write_var_int(&VarInt(i32::from(
+                            adventure_component_name(name)?.to_id(),
+                        )))?;
+                    }
+                    continue;
+                }
+            }
+            let component = pumpkin_data::data_component_impl::read_data(id, component_value)
+                .ok_or_else(|| {
+                    WritingError::Message(format!("Invalid data for component {name}"))
+                })?;
+            serialize(id, component.as_ref(), seq)?;
+        }
+    }
+    let partial_len = partial.map_or(0, |value| value.len());
+    if partial_len > MAX_ADVENTURE_COMPONENTS {
+        return Err(WritingError::Message(
+            "Too many adventure partial components".into(),
+        ));
+    }
+    seq.write_var_int(&VarInt(i32::try_from(partial_len).map_err(|_| {
+        WritingError::Message("Adventure partial component count overflow".into())
+    })?))?;
+    if let Some(partial) = partial {
+        for item in partial {
+            let NbtTag::String(name) = item else {
+                return Err(WritingError::Message(
+                    "Adventure partial component ID must be a string".into(),
+                ));
+            };
+            seq.write_var_int(&VarInt(i32::from(adventure_component_name(name)?.to_id())))?;
+        }
+    }
+    Ok(())
+}
+fn read_adventure_predicate(seq: &mut impl NetworkReadExt) -> Result<NbtTag, ReadingError> {
+    let blocks = if seq.get_bool()? {
+        Some(read_adventure_blocks(seq)?)
+    } else {
+        None
+    };
+    let state = if seq.get_bool()? {
+        Some(read_adventure_state(seq)?)
+    } else {
+        None
+    };
+    let nbt = if seq.get_bool()? {
+        Some(NbtTag::Compound(
+            seq.get_compound_nbt_with_version(&JavaMinecraftVersion::V_26_2)?
+                .ok_or_else(|| {
+                    ReadingError::Message("Adventure predicate NBT is missing".into())
+                })?,
+        ))
+    } else {
+        None
+    };
+    let components = read_adventure_components(seq);
+    let mut result = NbtCompound::new();
+    if let Some(value) = blocks {
+        result.put("blocks", value);
+    }
+    if let Some(value) = state {
+        result.put("state", value);
+    }
+    if let Some(value) = nbt {
+        result.put("nbt", value);
+    }
+    if let NbtTag::Compound(value) = components? {
+        if !value.child_tags.is_empty() {
+            result.put("components", NbtTag::Compound(value));
+        }
+    }
+    Ok(NbtTag::Compound(result))
+}
+fn write_adventure_predicate(
+    value: &NbtCompound,
+    seq: &mut impl NetworkWriteExt,
+) -> Result<(), WritingError> {
+    if value.child_tags.keys().any(|key| {
+        key.as_ref() != "blocks"
+            && key.as_ref() != "state"
+            && key.as_ref() != "nbt"
+            && key.as_ref() != "components"
+    }) {
+        return Err(WritingError::Message(
+            "Unknown adventure predicate field".into(),
+        ));
+    }
+    let blocks = value.get("blocks");
+    seq.write_bool(blocks.is_some())?;
+    if let Some(blocks) = blocks {
+        write_adventure_blocks(blocks, seq)?;
+    }
+    let state = value.get("state");
+    seq.write_bool(state.is_some())?;
+    if let Some(state) = state {
+        write_adventure_state(state, seq)?;
+    }
+    let nbt = value.get("nbt");
+    seq.write_bool(nbt.is_some())?;
+    if let Some(NbtTag::Compound(nbt)) = nbt {
+        seq.write_nbt_with_version(
+            Some(&NbtTag::Compound(nbt.clone())),
+            &JavaMinecraftVersion::V_26_2,
+        )?;
+    } else if nbt.is_some() {
+        return Err(WritingError::Message(
+            "Adventure predicate NBT must be a compound".into(),
+        ));
+    }
+    if let Some(components) = value.get("components") {
+        write_adventure_components(components, seq)
+    } else {
+        seq.write_var_int(&VarInt(0))?;
+        seq.write_var_int(&VarInt(0))
+    }
+}
+fn read_adventure_predicates(seq: &mut impl NetworkReadExt) -> Result<NbtTag, ReadingError> {
+    let count = adventure_count(seq, "adventure predicate", MAX_ADVENTURE_PREDICATES)?;
+    let mut values = Vec::with_capacity(count);
+    for _ in 0..count {
+        values.push(read_adventure_predicate(seq)?);
+    }
+    Ok(NbtTag::List(values))
+}
+fn write_adventure_predicates(
+    value: &NbtTag,
+    seq: &mut impl NetworkWriteExt,
+) -> Result<(), WritingError> {
+    match value {
+        NbtTag::List(values) => {
+            if values.len() > MAX_ADVENTURE_PREDICATES {
+                return Err(WritingError::Message(
+                    "Too many adventure predicates".into(),
+                ));
+            }
+            seq.write_var_int(&VarInt(i32::try_from(values.len()).map_err(|_| {
+                WritingError::Message("Adventure predicate count overflow".into())
+            })?))?;
+            for value in values {
+                let NbtTag::Compound(value) = value else {
+                    return Err(WritingError::Message(
+                        "Adventure predicate must be a compound".into(),
+                    ));
+                };
+                write_adventure_predicate(value, seq)?;
+            }
+            Ok(())
+        }
+        NbtTag::Compound(value) => {
+            seq.write_var_int(&VarInt(1))?;
+            write_adventure_predicate(value, seq)
+        }
+        _ => Err(WritingError::Message(
+            "Adventure predicate must be a compound or list".into(),
+        )),
+    }
+}
+impl DataComponentCodec<Self> for CanPlaceOnImpl {
+    fn serialize(&self, seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
+        write_adventure_predicates(&self.predicate, seq)
+    }
+    fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
         Ok(Self {
-            predicate: NbtTag::List(Vec::new()),
+            predicate: read_adventure_predicates(seq)?,
         })
     }
 }
-
 impl DataComponentCodec<Self> for CanBreakImpl {
     fn serialize(&self, seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
-        seq.write_var_int(&VarInt(0))
+        write_adventure_predicates(&self.predicate, seq)
     }
-
     fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
-        let count = seq.get_var_int()?.0;
-        for _ in 0..count {
-            let has_blocks = seq.get_bool()?;
-            if has_blocks {
-                let id_type = seq.get_var_int()?.0;
-                if id_type == 0 {
-                    let _ = seq.get_str()?;
-                } else if id_type > 0 {
-                    for _ in 0..(id_type - 1) {
-                        let _ = seq.get_var_int()?;
-                    }
-                }
-            }
-            let has_props = seq.get_bool()?;
-            if has_props {
-                let props_len = seq.get_var_int()?.0;
-                for _ in 0..props_len {
-                    let _ = seq.get_str()?;
-                    let is_exact = seq.get_bool()?;
-                    if is_exact {
-                        let _ = seq.get_str()?;
-                    } else {
-                        if seq.get_bool()? {
-                            let _ = seq.get_str()?;
-                        }
-                        if seq.get_bool()? {
-                            let _ = seq.get_str()?;
-                        }
-                    }
-                }
-            }
-            let has_nbt = seq.get_bool()?;
-            if has_nbt {
-                let _ = seq.get_nbt_with_version(&JavaMinecraftVersion::V_26_2)?;
-            }
-            let exact_len = seq.get_var_int()?.0;
-            for _ in 0..exact_len {
-                let comp_id = seq.get_var_int()?.0 as u8;
-                if let Some(comp) = DataComponent::try_from_id(comp_id) {
-                    let _ = deserialize(comp, seq)?;
-                }
-            }
-            let partial_len = seq.get_var_int()?.0;
-            for _ in 0..partial_len {
-                let _ = seq.get_var_int()?;
-            }
-        }
         Ok(Self {
-            predicate: NbtTag::List(Vec::new()),
+            predicate: read_adventure_predicates(seq)?,
         })
     }
 }
@@ -2807,5 +3173,123 @@ impl DataComponentCodec<Self> for BreakSoundImpl {
     fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
         let _ = seq.get_var_int()?;
         Ok(Self)
+    }
+}
+
+#[cfg(test)]
+mod adventure_predicate_tests {
+    use super::*;
+
+    #[test]
+    fn can_place_on_wire_round_trip_preserves_predicate_fields() {
+        let mut wire = Vec::new();
+        wire.write_var_int(&VarInt(1)).unwrap();
+        wire.write_bool(true).unwrap();
+        let stone = Block::from_name("minecraft:stone").unwrap();
+        wire.write_var_int(&VarInt(2)).unwrap();
+        wire.write_var_int(&VarInt(i32::from(stone.registry_id())))
+            .unwrap();
+        wire.write_bool(true).unwrap();
+        wire.write_var_int(&VarInt(2)).unwrap();
+        wire.write_string("facing").unwrap();
+        wire.write_bool(true).unwrap();
+        wire.write_string("north").unwrap();
+        wire.write_string("age").unwrap();
+        wire.write_bool(false).unwrap();
+        wire.write_bool(true).unwrap();
+        wire.write_string("1").unwrap();
+        wire.write_bool(true).unwrap();
+        wire.write_string("3").unwrap();
+        wire.write_bool(true).unwrap();
+        let mut nbt = NbtCompound::new();
+        nbt.put_string("id", "minecraft:chest".to_string());
+        wire.write_nbt(NbtTag::Compound(nbt)).unwrap();
+        wire.write_var_int(&VarInt(2)).unwrap();
+        wire.write_var_int(&VarInt(DataComponent::CustomData.to_id() as i32))
+            .unwrap();
+        let mut custom = NbtCompound::new();
+        custom.put_string("marker", "preserved".to_string());
+        wire.write_nbt(NbtTag::Compound(custom)).unwrap();
+        wire.write_var_int(&VarInt(DataComponent::TooltipDisplay.to_id() as i32))
+            .unwrap();
+        wire.write_bool(true).unwrap();
+        wire.write_var_int(&VarInt(1)).unwrap();
+        wire.write_var_int(&VarInt(DataComponent::TooltipStyle.to_id() as i32))
+            .unwrap();
+        wire.write_var_int(&VarInt(1)).unwrap();
+        wire.write_var_int(&VarInt(DataComponent::TooltipDisplay.to_id() as i32))
+            .unwrap();
+
+        let mut input = wire.as_slice();
+        let decoded = CanPlaceOnImpl::deserialize(&mut input).unwrap();
+        assert!(input.is_empty());
+        let mut encoded = Vec::new();
+        decoded.serialize(&mut encoded).unwrap();
+        let mut redecoded_input = encoded.as_slice();
+        let redecoded = CanPlaceOnImpl::deserialize(&mut redecoded_input).unwrap();
+        assert!(redecoded_input.is_empty());
+        assert_eq!(redecoded, decoded);
+    }
+
+    #[test]
+    fn can_break_rejects_negative_and_unknown_component_ids() {
+        let mut negative = &[0xff, 0xff, 0xff, 0xff, 0x0f][..];
+        assert!(CanBreakImpl::deserialize(&mut negative).is_err());
+        let unknown = vec![1, 0, 0, 0, 1, 0xff, 0xff, 0xff, 0x0f];
+        let mut input = unknown.as_slice();
+        assert!(CanBreakImpl::deserialize(&mut input).is_err());
+    }
+
+    #[test]
+    fn empty_predicate_lists_keep_the_official_zero_count_wire() {
+        let mut place_on = Vec::new();
+        CanPlaceOnImpl {
+            predicate: NbtTag::List(Vec::new()),
+        }
+        .serialize(&mut place_on)
+        .unwrap();
+        assert_eq!(place_on, [0]);
+
+        let mut breaks = Vec::new();
+        CanBreakImpl {
+            predicate: NbtTag::List(Vec::new()),
+        }
+        .serialize(&mut breaks)
+        .unwrap();
+        assert_eq!(breaks, [0]);
+    }
+
+    #[test]
+    fn adventure_predicate_limits_and_write_errors_are_rejected() {
+        let mut too_many = Vec::new();
+        too_many.write_var_int(&VarInt(257)).unwrap();
+        let mut input = too_many.as_slice();
+        assert!(CanPlaceOnImpl::deserialize(&mut input).is_err());
+
+        let mut unknown_block = NbtCompound::new();
+        unknown_block.put_string("blocks", "minecraft:not_a_block".to_owned());
+        let mut output = Vec::new();
+        assert!(
+            CanBreakImpl {
+                predicate: NbtTag::Compound(unknown_block),
+            }
+            .serialize(&mut output)
+            .is_err()
+        );
+
+        let mut unknown_component = NbtCompound::new();
+        unknown_component.put_string("minecraft:not_a_component", "value".to_owned());
+        let mut components = NbtCompound::new();
+        components.put("components", NbtTag::Compound(unknown_component));
+        let mut predicate = NbtCompound::new();
+        predicate.put("components", NbtTag::Compound(components));
+        let mut output = Vec::new();
+        assert!(
+            CanPlaceOnImpl {
+                predicate: NbtTag::Compound(predicate),
+            }
+            .serialize(&mut output)
+            .is_err()
+        );
     }
 }
