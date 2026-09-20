@@ -1,5 +1,7 @@
 use crate::argument_builder::{ArgumentBuilder, CommandArgumentBuilder};
-use crate::context::command_context::{CommandContext, CommandContextBuilder, ContextChain};
+use crate::context::command_context::{
+    CommandContext, CommandContextBuilder, CommandSigningContext, ContextChain,
+};
 use crate::errors::command_syntax_error::CommandSyntaxError;
 use crate::errors::error_types::{
     DISPATCHER_EXPECTED_ARGUMENT_SEPARATOR, DISPATCHER_UNKNOWN_ARGUMENT,
@@ -457,6 +459,24 @@ impl<S: CommandSource> CommandDispatcher<S> {
 
     /// Executes a given result that has already been parsed from an input.
     pub fn execute(&self, parsed: ParsingResult<'_, S>) -> Result<i32, CommandSyntaxError> {
+        self.execute_with_context(parsed, None)
+    }
+
+    /// Executes an already parsed command with its authenticated signing context.
+    /// The parse result is consumed exactly once; this does not re-parse input.
+    pub fn execute_with_signing_context(
+        &self,
+        parsed: ParsingResult<'_, S>,
+        signing_context: Arc<CommandSigningContext>,
+    ) -> Result<i32, CommandSyntaxError> {
+        self.execute_with_context(parsed, Some(signing_context))
+    }
+
+    fn execute_with_context(
+        &self,
+        parsed: ParsingResult<'_, S>,
+        signing_context: Option<Arc<CommandSigningContext>>,
+    ) -> Result<i32, CommandSyntaxError> {
         if parsed.reader.peek().is_some() {
             return if let Some(err) = parsed.errors.values().next() {
                 Err(err.clone())
@@ -469,6 +489,11 @@ impl<S: CommandSource> CommandDispatcher<S> {
 
         let command = parsed.reader.string();
         let original_context = parsed.context.build(command);
+        let original_context = if let Some(context) = signing_context {
+            original_context.with_signing_context(context)
+        } else {
+            original_context
+        };
 
         match ContextChain::try_flatten(&original_context) {
             None => {
@@ -1467,5 +1492,100 @@ mod signable_tests {
 
         let parsed = dispatcher.parse_input("say \"unterminated", &DummySource::dummy());
         assert_eq!(parsed.signable_arguments(), None);
+    }
+
+    #[test]
+    fn unsigned_context_is_not_presented_as_signed() {
+        use crate::context::command_context::CommandSigningContext;
+
+        let mut dispatcher = CommandDispatcher::new();
+        dispatcher.register(
+            command("say", "test")
+                .then(argument("message", StringArgumentType::SingleWord).signable()),
+        );
+        let input = "say hello";
+        let parsed = dispatcher.parse_input(input, &DummySource::dummy());
+        let signable = parsed.signable_arguments().expect("complete parse");
+        let context = CommandSigningContext::from_unsigned(&signable, input);
+        let unsigned_argument = context.resolve("message").expect("unsigned argument");
+        assert!(!unsigned_argument.is_signed());
+        assert_eq!(unsigned_argument.signature(), None);
+        assert_eq!(unsigned_argument.raw_value(), "hello");
+
+        #[derive(Clone)]
+        struct Denied;
+        impl crate::source::CommandSource for Denied {
+            fn send_message(&self, _message: pumpkin_util::text::TextComponent) {}
+            fn has_permission(&self, _permission: &str) -> bool {
+                false
+            }
+        }
+
+        let mut permission_dispatcher = CommandDispatcher::new();
+        permission_dispatcher.register(
+            command("admin", "test")
+                .requires("test.permission")
+                .then(argument("message", StringArgumentType::SingleWord).signable()),
+        );
+        let parsed = permission_dispatcher.parse_input("admin hello", &Denied);
+        assert_eq!(parsed.signable_arguments(), None);
+    }
+
+    #[test]
+    fn execute_once_uses_last_duplicate_signature_without_reparsing() {
+        use crate::context::command_context::CommandSigningContext;
+        use crate::node::{CommandExecutor, CommandExecutorResult};
+        use std::sync::{Arc, Mutex};
+
+        struct Executor(Arc<Mutex<Vec<Vec<u8>>>>);
+        impl CommandExecutor for Executor {
+            fn execute(
+                &self,
+                context: &crate::context::command_context::CommandContext,
+            ) -> CommandExecutorResult {
+                let argument = context
+                    .signing_context()
+                    .and_then(|signing| signing.resolve("message"))
+                    .expect("signed message reaches executor");
+                assert_eq!(argument.raw_value(), "hello");
+                assert!(
+                    context
+                        .nodes
+                        .iter()
+                        .any(|node| node.node == argument.node())
+                );
+                self.0
+                    .lock()
+                    .expect("test mutex")
+                    .push(argument.signature().expect("signed").to_vec());
+                Ok(1)
+            }
+        }
+
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut dispatcher = CommandDispatcher::new();
+        dispatcher.register(
+            command("say", "test").then(
+                argument("message", StringArgumentType::SingleWord)
+                    .signable()
+                    .executes(Executor(seen.clone())),
+            ),
+        );
+
+        let input = "say hello";
+        let parsed = dispatcher.parse_input(input, &DummySource::dummy());
+        let signable = parsed.signable_arguments().expect("complete parse");
+        let signing = CommandSigningContext::from_signed_entries(
+            &signable,
+            input,
+            [("message", &[1_u8][..]), ("message", &[2_u8][..])],
+        )
+        .expect("known duplicate name");
+
+        assert_eq!(
+            dispatcher.execute_with_signing_context(parsed, Arc::new(signing)),
+            Ok(1)
+        );
+        assert_eq!(*seen.lock().expect("test mutex"), vec![vec![2]]);
     }
 }

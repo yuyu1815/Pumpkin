@@ -7,6 +7,7 @@ use crate::command::argument_builder::{ArgumentBuilder, argument, command};
 use crate::command::argument_types::core::string::StringArgumentType;
 use crate::command::argument_types::entity::EntityArgumentType;
 use crate::command::context::command_context::CommandContext;
+use crate::command::errors::error_types::DISPATCHER_PARSE_EXCEPTION;
 use crate::command::node::dispatcher::CommandDispatcher;
 use crate::command::node::{CommandExecutor, CommandExecutorResult};
 use crate::entity::EntityBase;
@@ -21,6 +22,34 @@ impl CommandExecutor for MsgExecutor {
     fn execute(&self, context: &CommandContext) -> CommandExecutorResult {
         let targets = EntityArgumentType::get_players(context, "targets")?;
         let msg = StringArgumentType::get(context, "message")?;
+
+        // MessageArgument consumers must use the already authenticated parse.
+        // Do not substitute a typed/re-serialized value for the signed raw range.
+        if let Some(signing) = context.signing_context() {
+            let parsed = context.arguments.get("message").ok_or_else(|| {
+                DISPATCHER_PARSE_EXCEPTION
+                    .create_without_context(TextComponent::text("Missing parsed message argument"))
+            })?;
+            let signed = signing.resolve("message").ok_or_else(|| {
+                DISPATCHER_PARSE_EXCEPTION.create_without_context(TextComponent::text(
+                    "Message argument is missing from signing context",
+                ))
+            })?;
+            let node_is_in_context = context.nodes.iter().any(|parsed_node| {
+                parsed_node.node == signed.node() && parsed_node.range == parsed.range
+            });
+            if !node_is_in_context
+                || !signing.matches(
+                    "message",
+                    signed.node(),
+                    parsed.range.substring_slice(&context.input),
+                )
+            {
+                return Err(DISPATCHER_PARSE_EXCEPTION.create_without_context(
+                    TextComponent::text("Message argument does not match signing context"),
+                ));
+            }
+        }
 
         let sender_name = &context.source.display_name;
         let msg_text = TextComponent::text(msg.to_string());

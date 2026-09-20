@@ -1,6 +1,7 @@
 #[allow(clippy::wildcard_imports)]
 use super::*;
 use crate::command::{CommandSource, dispatcher::CommandDispatcher};
+use pumpkin_command::context::command_context::CommandSigningContext;
 use pumpkin_command::node::dispatcher::{ParsingResult, SignableArgument};
 use pumpkin_protocol::java::server::play::SChatCommandSigned;
 use std::collections::HashSet;
@@ -181,6 +182,7 @@ impl JavaClient {
         command: &str,
         dispatcher: &'a CommandDispatcher,
         parsed: ParsingResult<'a, CommandSource>,
+        signing_context: Arc<CommandSigningContext>,
     ) {
         player.update_last_action_time();
         if player.check_chat_spam(server, crate::entity::player::SpamType::Command) {
@@ -206,7 +208,7 @@ impl JavaClient {
         // Signed and unsigned-decoder paths must execute the parse result that
         // was already permission-filtered and validated above. Re-parsing here
         // would let command-tree changes alter the selected execution path.
-        if let Err(error) = dispatcher.execute(parsed) {
+        if let Err(error) = dispatcher.execute_with_signing_context(parsed, signing_context) {
             CommandDispatcher::send_error_to_source(
                 &player.get_command_source(server),
                 error,
@@ -279,7 +281,19 @@ impl JavaClient {
                 );
                 return;
             }
-            self.execute_parsed_chat_command(player, server, &packet.command, &dispatcher, parsed);
+            let signing_context = if signable.is_empty() {
+                CommandSigningContext::empty()
+            } else {
+                CommandSigningContext::from_unsigned(&signable, &packet.command)
+            };
+            self.execute_parsed_chat_command(
+                player,
+                server,
+                &packet.command,
+                &dispatcher,
+                parsed,
+                Arc::new(signing_context),
+            );
             return;
         }
 
@@ -379,9 +393,29 @@ impl JavaClient {
             return;
         }
 
-        // In reports-disabled mode entries are decoded as unsigned messages;
-        // their bytes are deliberately not treated as authenticated.
-        self.execute_parsed_chat_command(player, server, &packet.command, &dispatcher, parsed);
+        let signing_context = if secure {
+            CommandSigningContext::from_signed_entries(
+                &signable,
+                &packet.command,
+                packet
+                    .argument_signatures
+                    .iter()
+                    .map(|entry| (entry.name.as_str(), entry.signature.as_slice())),
+            )
+            .expect("validated signed command entries must map to parsed arguments")
+        } else {
+            // In reports-disabled mode entries are decoded as unsigned messages;
+            // their bytes are deliberately not treated as authenticated.
+            CommandSigningContext::from_unsigned(&signable, &packet.command)
+        };
+        self.execute_parsed_chat_command(
+            player,
+            server,
+            &packet.command,
+            &dispatcher,
+            parsed,
+            Arc::new(signing_context),
+        );
     }
 }
 

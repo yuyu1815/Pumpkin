@@ -2,7 +2,7 @@ use crate::context::string_range::StringRange;
 use crate::errors::command_syntax_error::CommandSyntaxError;
 use crate::errors::error_types::DISPATCHER_PARSE_EXCEPTION;
 use crate::node::attached::NodeId;
-use crate::node::dispatcher::{CommandDispatcher, ResultConsumer};
+use crate::node::dispatcher::{CommandDispatcher, ResultConsumer, SignableArgument};
 use crate::node::tree::Tree;
 use crate::node::{Command, RedirectModifier};
 use crate::source::{CommandSource, DummySource, ReturnValue};
@@ -49,11 +49,124 @@ impl ParsedArgument {
     }
 }
 
+/// The authenticated state of one signable command argument.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CommandSigningArgument {
+    /// The packet signature was verified for this raw argument value.
+    Signed {
+        node: NodeId,
+        raw_value: String,
+        signature: Vec<u8>,
+    },
+    /// This argument is legal but carries no authenticated signature.
+    Unsigned { node: NodeId, raw_value: String },
+}
+
+impl CommandSigningArgument {
+    #[must_use]
+    pub const fn node(&self) -> NodeId {
+        match self {
+            Self::Signed { node, .. } | Self::Unsigned { node, .. } => *node,
+        }
+    }
+
+    #[must_use]
+    pub fn raw_value(&self) -> &str {
+        match self {
+            Self::Signed { raw_value, .. } | Self::Unsigned { raw_value, .. } => raw_value,
+        }
+    }
+
+    #[must_use]
+    pub fn signature(&self) -> Option<&[u8]> {
+        match self {
+            Self::Signed { signature, .. } => Some(signature),
+            Self::Unsigned { .. } => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn is_signed(&self) -> bool {
+        matches!(self, Self::Signed { .. })
+    }
+}
+
+/// The small execution seam corresponding to vanilla's `CommandSigningContext`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CommandSigningContext {
+    arguments: FxHashMap<String, CommandSigningArgument>,
+}
+
+impl CommandSigningContext {
+    #[must_use]
+    pub fn empty() -> Self {
+        Self::default()
+    }
+
+    /// Builds the legal unsigned representation from the already selected parse.
+    #[must_use]
+    pub fn from_unsigned(parsed: &[SignableArgument], input: &str) -> Self {
+        let mut context = Self::default();
+        for argument in parsed {
+            context.arguments.insert(
+                argument.name.clone(),
+                CommandSigningArgument::Unsigned {
+                    node: argument.node,
+                    raw_value: argument.raw_value(input).to_owned(),
+                },
+            );
+        }
+        context
+    }
+
+    /// Maps verified packet entries onto the selected parse. Duplicate names
+    /// intentionally replace the previous value, matching vanilla's map.put.
+    /// Name lookup always takes the parsed node and raw range, never a typed or
+    /// re-serialized argument value.
+    #[must_use]
+    pub fn from_signed_entries<'a>(
+        parsed: &[SignableArgument],
+        input: &str,
+        entries: impl IntoIterator<Item = (&'a str, &'a [u8])>,
+    ) -> Option<Self> {
+        let mut context = Self::default();
+        for (name, signature) in entries {
+            let argument = parsed.iter().find(|argument| argument.name == name)?;
+            context.arguments.insert(
+                name.to_owned(),
+                CommandSigningArgument::Signed {
+                    node: argument.node,
+                    raw_value: argument.raw_value(input).to_owned(),
+                    signature: signature.to_vec(),
+                },
+            );
+        }
+        Some(context)
+    }
+
+    /// Vanilla's `CommandSigningContext.getArgument(name)` equivalent.
+    #[must_use]
+    pub fn resolve(&self, name: &str) -> Option<&CommandSigningArgument> {
+        self.arguments.get(name)
+    }
+
+    /// Keeps the name/node/raw-value correspondence at an executor boundary.
+    #[must_use]
+    pub fn matches(&self, name: &str, node: NodeId, raw_value: &str) -> bool {
+        self.resolve(name)
+            .is_some_and(|argument| argument.node() == node && argument.raw_value() == raw_value)
+    }
+}
+
 /// Represents the context used when commands are run.
 #[derive(Clone)]
 pub struct CommandContext<'a, S: CommandSource = DummySource> {
     /// The source running the commands.
     pub source: Arc<S>,
+
+    /// The authenticated command-signing context, when this parse came from a
+    /// signed-command path. Ordinary commands keep this as `None`.
+    pub signing_context: Option<Arc<CommandSigningContext>>,
 
     /// The input string ran as the command.
     pub input: String,
@@ -103,6 +216,7 @@ impl<S: CommandSource> CommandContext<'_, S> {
     pub fn with_source(&self, source: Arc<S>) -> Self {
         Self {
             source,
+            signing_context: self.signing_context.clone(),
             input: self.input.clone(),
             arguments: self.arguments.clone(),
             nodes: self.nodes.clone(),
@@ -114,6 +228,22 @@ impl<S: CommandSource> CommandContext<'_, S> {
             tree: self.tree,
             root: self.root,
         }
+    }
+
+    /// Attaches the authenticated signing context to this context chain.
+    #[must_use]
+    pub fn with_signing_context(mut self, signing_context: Arc<CommandSigningContext>) -> Self {
+        self.signing_context = Some(signing_context.clone());
+        self.child = self
+            .child
+            .map(|child| Arc::new((*child).clone().with_signing_context(signing_context)));
+        self
+    }
+
+    /// Returns the context's signing data for message-argument consumers.
+    #[must_use]
+    pub fn signing_context(&self) -> Option<&CommandSigningContext> {
+        self.signing_context.as_deref()
     }
 
     /// Returns the child immediately below this node.
@@ -445,6 +575,7 @@ impl<'a, S: CommandSource> CommandContextBuilder<'a, S> {
             modifier: self.modifier,
             forks: self.forks,
             command: self.command,
+            signing_context: None,
         }
     }
 
@@ -537,7 +668,8 @@ impl<'a, S: CommandSource> CommandContextBuilder<'a, S> {
 mod test {
     use crate::argument_builder::{ArgumentBuilder, CommandArgumentBuilder};
     use crate::context::command_context::{
-        CommandContext, CommandContextBuilder, ContextChain, ParsedArgument, Stage,
+        CommandContext, CommandContextBuilder, CommandSigningContext, ContextChain, ParsedArgument,
+        Stage,
     };
     use crate::context::string_range::StringRange;
     use crate::errors::command_syntax_error::CommandSyntaxError;
@@ -627,6 +759,36 @@ mod test {
             .expect("The context should have properly flattened, as it has a command to execute");
 
         assert_eq!(chain.execute_all(&source, &EmptyResultConsumer), Ok(10));
+    }
+
+    #[test]
+    fn signing_context_survives_redirect_and_source_clone() {
+        let mut dispatcher = CommandDispatcher::new();
+        dispatcher
+            .register(CommandArgumentBuilder::new("foo", "A test command").executes(TenExecutor));
+        dispatcher.register(
+            CommandArgumentBuilder::new("bar", "Another test command").redirect(Redirection::Root),
+        );
+
+        let result = dispatcher.parse_input("bar foo", &DummySource::dummy());
+        let context = result
+            .context
+            .build("bar foo")
+            .with_signing_context(Arc::new(CommandSigningContext::empty()));
+        assert!(context.signing_context().is_some());
+        assert!(
+            context
+                .child
+                .as_ref()
+                .is_some_and(|child| child.signing_context().is_some())
+        );
+        let cloned = context.with_source(Arc::new(DummySource::dummy()));
+        assert!(
+            cloned
+                .child
+                .as_ref()
+                .is_some_and(|child| child.signing_context().is_some())
+        );
     }
 
     #[test]
