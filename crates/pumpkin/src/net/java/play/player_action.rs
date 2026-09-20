@@ -25,9 +25,20 @@ impl JavaClient {
                         return;
                     }
                     let position = player_action.position;
+                    player.stop_mining_if_target_changed(position);
                     let entity = &player.get_entity();
                     let world = entity.world.load_full();
                     let (block, state) = world.get_block_and_state(&position);
+
+                    // Vanilla rejects mutation when mayBuild is false before firing block-damage
+                    // hooks. Adventure can_break predicates are not yet evaluated by the item
+                    // component owner, so do not let this path become an unrestricted bypass.
+                    if position.0.y > world.get_top_y() || !player.may_build() {
+                        player.stop_mining();
+                        self.sync_block_state_to_client(&world, position);
+                        self.update_sequence(player_action.sequence.0);
+                        return;
+                    }
 
                     if let Some(server_arc) = world.server.upgrade() {
                         let mut event =
@@ -73,6 +84,8 @@ impl JavaClient {
                     // TODO: do validation
                     // TODO: Config
                     if player.gamemode.load() == GameMode::Creative {
+                        // Creative START is an immediate replacement for any prior destroy state.
+                        player.stop_mining();
                         // Block break & play sound
                         let new_state = world.break_block(
                             &position,
@@ -95,7 +108,8 @@ impl JavaClient {
                     if !state.is_air() {
                         let speed = block::calc_block_breaking(player, state, block);
                         // Instant break
-                        if speed >= 1.0 {
+                        if speed.is_finite() && speed >= 1.0 {
+                            player.stop_mining();
                             let broken_state = world.get_block_state(&position);
                             let can_harvest = player.can_harvest(broken_state, block);
                             let flags = if can_harvest {
@@ -160,8 +174,13 @@ impl JavaClient {
                         self.update_sequence(player_action.sequence.0);
                         return;
                     }
-                    let entity = &player.get_entity();
-                    let world = entity.world.load_full();
+                    let world = player.world();
+                    if player_action.position.0.y > world.get_top_y() {
+                        player.stop_mining();
+                        self.sync_block_state_to_client(&world, player_action.position);
+                        self.update_sequence(player_action.sequence.0);
+                        return;
+                    }
                     if let Some(server_arc) = world.server.upgrade() {
                         let mut abort_event = crate::plugin::api::events::block::block_damage_abort::BlockDamageAbortEvent::new(
                             player.clone(),
@@ -174,16 +193,10 @@ impl JavaClient {
                             .fire_blocking(&server_arc, &mut abort_event);
                     }
 
-                    player.mining.store(false, Ordering::Relaxed);
-                    world.set_block_breaking(
-                        entity,
-                        player_action.position,
-                        BlockBreakingProgress::Stop,
-                    );
+                    player.stop_mining();
                     self.update_sequence(player_action.sequence.0);
                 }
                 Status::FinishedDigging => {
-                    // TODO: do validation
                     let location = player_action.position;
                     if !player.can_interact_with_block_at(&location, 1.0) {
                         warn!(
@@ -194,14 +207,67 @@ impl JavaClient {
                         return;
                     }
 
-                    // Block break & play sound
+                    // A STOP for another position must not destroy the active target. Vanilla
+                    // keeps that state so a later STOP for the original block can finish it.
+                    let active_pos = *player
+                        .mining_pos
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    let active = player.mining.load(Ordering::Relaxed);
+                    let delayed_pos = *player
+                        .delayed_destroy_pos
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    let delayed = player.delayed_destroy.load(Ordering::Relaxed);
+                    let matches_destroy =
+                        (active && active_pos == location) || (delayed && delayed_pos == location);
                     let entity = &player.get_entity();
                     let world = entity.world.load_full();
-
-                    player.mining.store(false, Ordering::Relaxed);
-                    world.set_block_breaking(entity, location, BlockBreakingProgress::Stop);
+                    if !matches_destroy {
+                        self.sync_block_state_to_client(&world, location);
+                        self.update_sequence(player_action.sequence.0);
+                        return;
+                    }
+                    if delayed {
+                        self.update_sequence(player_action.sequence.0);
+                        return;
+                    }
+                    if location.0.y > world.get_top_y() || !player.may_build() {
+                        player.stop_mining();
+                        self.sync_block_state_to_client(&world, location);
+                        self.update_sequence(player_action.sequence.0);
+                        return;
+                    }
 
                     let (block, state) = world.get_block_and_state(&location);
+                    if state.is_air() {
+                        player.stop_mining();
+                        self.sync_block_state_to_client(&world, location);
+                        self.update_sequence(player_action.sequence.0);
+                        return;
+                    }
+                    let elapsed = player
+                        .tick_counter
+                        .load(Ordering::Relaxed)
+                        .checked_sub(player.start_mining_time.load(Ordering::Relaxed))
+                        .unwrap_or(-1);
+                    let speed = block::calc_block_breaking(player, state, block);
+                    if !speed.is_finite() || speed < 0.0 || elapsed < 0 {
+                        player.stop_mining();
+                        self.sync_block_state_to_client(&world, location);
+                        self.update_sequence(player_action.sequence.0);
+                        return;
+                    }
+                    if !can_finish_digging(true, active_pos, location, elapsed, speed) {
+                        player.begin_delayed_destroy(
+                            location,
+                            player.start_mining_time.load(Ordering::Relaxed),
+                        );
+                        self.update_sequence(player_action.sequence.0);
+                        return;
+                    }
+
+                    player.stop_mining();
                     let block_drop = player.gamemode.load() != GameMode::Creative
                         && player.can_harvest(state, block);
 
@@ -287,5 +353,202 @@ impl JavaClient {
             position,
             VarInt(i32::from(synced_state_id.as_u16())),
         ));
+    }
+}
+
+/// Vanilla 26.2 accepts STOP once the server-side progress reaches 0.7; it does
+/// not accept a STOP without the matching START state.
+fn can_finish_digging(
+    mining: bool,
+    mining_pos: BlockPos,
+    requested_pos: BlockPos,
+    elapsed: i32,
+    speed: f32,
+) -> bool {
+    mining
+        && mining_pos == requested_pos
+        && elapsed >= 0
+        && speed.is_finite()
+        && speed * elapsed.saturating_add(1) as f32 >= 0.7
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use arc_swap::ArcSwap;
+    use pumpkin_config::{AdvancedConfiguration, BasicConfiguration, TelemetryConfig};
+    use pumpkin_protocol::java::server::play::SPlayerAction;
+    use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
+    use pumpkin_world::world::BlockFlags;
+    use std::net::SocketAddr;
+    use std::sync::Arc;
+    use tempfile::TempDir;
+    use tokio::net::{TcpListener, TcpStream};
+    use uuid::Uuid;
+
+    fn test_vanilla_data() -> crate::data::VanillaData {
+        crate::data::VanillaData {
+            banned_ip_list: std::sync::RwLock::new(Default::default()),
+            banned_player_list: std::sync::RwLock::new(Default::default()),
+            operator_config: std::sync::RwLock::new(Default::default()),
+            user_cache: std::sync::RwLock::new(Default::default()),
+            whitelist_config: std::sync::RwLock::new(Default::default()),
+        }
+    }
+
+    async fn runtime_java_client(
+        profile: &crate::net::GameProfile,
+    ) -> Arc<crate::net::ClientPlatform> {
+        let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
+            .await
+            .expect("player-action fixture listener");
+        let address = listener
+            .local_addr()
+            .expect("player-action fixture address");
+        let connector = tokio::spawn(TcpStream::connect(address));
+        let (server_stream, peer_address) = listener
+            .accept()
+            .await
+            .expect("player-action fixture accept");
+        let _peer = connector
+            .await
+            .expect("player-action connector task")
+            .expect("player-action fixture connect");
+        let pending = crate::net::java::pending::PendingConnection::new(
+            server_stream,
+            peer_address,
+            1,
+            crate::net::PacketRateLimiter::new(false, 0.0, 0.0),
+        );
+        Arc::new(crate::net::ClientPlatform::Java(
+            crate::net::java::JavaClient::from_pending(
+                pending,
+                profile.clone(),
+                crate::net::PlayerConfig::default(),
+            ),
+        ))
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn player_action_uses_real_client_mining_authority_and_stop_cutoff() {
+        let temp_world = TempDir::new().expect("temporary runtime world");
+        let mut basic = BasicConfiguration::default();
+        basic.default_level_name = temp_world.path().to_string_lossy().into_owned();
+        basic.allow_nether = false;
+        basic.allow_end = false;
+        basic.allow_chat_reports = false;
+        basic.use_favicon = false;
+
+        let mut advanced = AdvancedConfiguration::default();
+        advanced.logging.enabled = false;
+        advanced.plugins.enabled = false;
+        advanced.commands.use_console = false;
+        advanced.commands.use_tty = false;
+        advanced.networking.java.enabled = false;
+        advanced.networking.bedrock.enabled = false;
+        advanced.networking.query.enabled = false;
+        advanced.networking.lan_broadcast.enabled = false;
+        let server = crate::server::Server::new(
+            basic,
+            advanced,
+            TelemetryConfig {
+                enabled: false,
+                ..TelemetryConfig::default()
+            },
+            test_vanilla_data(),
+        )
+        .await;
+        let profile = crate::net::GameProfile {
+            id: Uuid::from_u128(0x2620_0004),
+            name: "player_action_fixture".to_owned(),
+            properties: ArcSwap::from_pointee(Vec::new()),
+            profile_actions: None,
+        };
+        let (player, world) = server
+            .add_player(
+                runtime_java_client(&profile).await,
+                profile,
+                Some(crate::net::PlayerConfig::default()),
+            )
+            .expect("fixture player published");
+        player.client_loaded.store(true, Ordering::Relaxed);
+
+        let position = BlockPos(Vector3::new(0, 100, 0));
+        world
+            .level
+            .get_or_fetch_chunk(position.chunk_position(), |_| ())
+            .await;
+        world.set_block_state(
+            &position,
+            pumpkin_data::Block::STONE.default_state.id,
+            BlockFlags::FORCE_STATE,
+        );
+        let java = player.client.java().expect("Java client fixture");
+        let packet_at = |status, position| SPlayerAction {
+            status: pumpkin_protocol::codec::var_int::VarInt(status),
+            position,
+            face: 0,
+            sequence: pumpkin_protocol::codec::var_int::VarInt(1),
+        };
+        let packet = |status| packet_at(status, position);
+
+        // STOP without a server-side START must not mutate the real world.
+        java.handle_player_action(&player, &packet(2), &server);
+        assert_eq!(
+            world.get_block_state(&position),
+            pumpkin_data::Block::STONE.default_state
+        );
+
+        // A non-building player is rejected before START creates mining state.
+        player
+            .abilities
+            .lock()
+            .expect("abilities lock")
+            .allow_modify_world = false;
+        java.handle_player_action(&player, &packet(0), &server);
+        assert!(!player.mining.load(Ordering::Relaxed));
+        assert_eq!(
+            world.get_block_state(&position),
+            pumpkin_data::Block::STONE.default_state
+        );
+
+        player
+            .abilities
+            .lock()
+            .expect("abilities lock")
+            .allow_modify_world = true;
+
+        // A mismatched STOP must preserve the active target for a later matching STOP.
+        let other_position = BlockPos(Vector3::new(0, 100, 1));
+        player.mining.store(true, Ordering::Relaxed);
+        *player.mining_pos.lock().expect("mining position lock") = position;
+        player.start_mining_time.store(0, Ordering::Relaxed);
+        player.tick_counter.store(0, Ordering::Relaxed);
+        java.handle_player_action(&player, &packet_at(2, other_position), &server);
+        assert!(player.mining.load(Ordering::Relaxed));
+
+        // A matching STOP below 0.7 enters vanilla delayed destroy instead of
+        // clearing the state and losing the eventual break.
+        java.handle_player_action(&player, &packet(2), &server);
+        assert!(!player.mining.load(Ordering::Relaxed));
+        assert!(player.delayed_destroy.load(Ordering::Relaxed));
+        assert_eq!(
+            world.get_block_state(&position),
+            pumpkin_data::Block::STONE.default_state
+        );
+
+        // The shared Player tick owns delayed completion; no further action packet is needed.
+        player.tick_counter.store(10_000, Ordering::Relaxed);
+        player.tick(&server);
+        assert!(!player.delayed_destroy.load(Ordering::Relaxed));
+        assert_eq!(
+            world.get_block_state(&position),
+            pumpkin_data::Block::AIR.default_state
+        );
+
+        world
+            .remove_player(&player, crate::world::PlayerRemovalReason::Disconnect)
+            .await;
+        server.remove_player(&player);
     }
 }

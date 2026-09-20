@@ -450,9 +450,12 @@ pub struct Player {
     pub synced_mining_efficiency_level: AtomicI32,
     /// Indicates if the player is currently mining a block.
     pub mining: AtomicBool,
+    pub delayed_destroy: AtomicBool,
     pub start_mining_time: AtomicI32,
+    pub delayed_destroy_start_time: AtomicI32,
     pub tick_counter: AtomicI32,
     pub mining_pos: Mutex<BlockPos>,
+    pub delayed_destroy_pos: Mutex<BlockPos>,
     pub last_input: AtomicI8,
     /// A counter for teleport IDs used to track pending teleports.
     pub teleport_id_count: AtomicI32,
@@ -744,12 +747,15 @@ impl Player {
             raid_omen_position: AtomicCell::new(None),
             tick_counter: AtomicI32::new(0),
             start_mining_time: AtomicI32::new(0),
+            delayed_destroy_start_time: AtomicI32::new(0),
             last_input: AtomicI8::new(0),
             carried_item: Mutex::new(None),
             experience_pick_up_delay: Mutex::new(0),
             teleport_id_count: AtomicI32::new(0),
             mining: AtomicBool::new(false),
+            delayed_destroy: AtomicBool::new(false),
             mining_pos: Mutex::new(BlockPos::ZERO),
+            delayed_destroy_pos: Mutex::new(BlockPos::ZERO),
             abilities: std::sync::Mutex::new(abilities),
             stats: std::sync::Mutex::new(statistics::Statistics::default()),
             gamemode: AtomicCell::new(gamemode),
@@ -1170,6 +1176,9 @@ impl Player {
         old_level: &Arc<pumpkin_world::level::Level>,
         new_world: &Arc<crate::world::World>,
     ) {
+        // Mining progress is bound to the old world. Clear it before the entity
+        // changes world so no later tick can continue against the new world.
+        self.stop_mining();
         self.clean_up_chunk_tickets(old_level);
         if let Ok(mut listener) = self.chunk_listener.lock() {
             *listener = new_world.level.chunk_listener.add_global_chunk_listener();
@@ -2758,52 +2767,63 @@ impl Player {
             self.sleeping_since.store(Some(sleeping_since + 1));
         }
 
-        if self.mining.load(Ordering::Relaxed)
+        if (self.mining.load(Ordering::Relaxed) || self.delayed_destroy.load(Ordering::Relaxed))
             && let Some(p) = self.world().get_player_by_uuid(self.gameprofile.id)
         {
+            let delayed = p.delayed_destroy.load(Ordering::Relaxed);
             let world_clone = p.world();
             let server_clone = world_clone.server.upgrade();
-            let pos = *p
-                .mining_pos
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let pos = if delayed {
+                *p.delayed_destroy_pos
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+            } else {
+                *p.mining_pos
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+            };
             let world = p.world();
             let state = world.get_block_state(&pos);
-            // Is the block broken?
-            if state.is_air() {
+            // Is the block broken or no longer valid for this state machine?
+            if state.is_air() || !p.may_build() {
                 p.stop_mining();
             } else {
-                let finished = p.continue_mining(
-                    pos,
-                    &world,
-                    state,
-                    p.start_mining_time.load(Ordering::Relaxed),
-                );
-                if finished && matches!(p.client.as_ref(), ClientPlatform::Bedrock(_)) {
-                    p.stop_mining();
+                let start_time = if delayed {
+                    p.delayed_destroy_start_time.load(Ordering::Relaxed)
+                } else {
+                    p.start_mining_time.load(Ordering::Relaxed)
+                };
+                if let Some(finished) = p.continue_mining(pos, &world, state, start_time) {
+                    if finished
+                        && (delayed || matches!(p.client.as_ref(), ClientPlatform::Bedrock(_)))
+                    {
+                        p.stop_mining();
 
-                    let block = Block::from_state_id(state.id);
-                    let can_harvest = p.can_harvest(state, block);
-                    let flags = if can_harvest {
-                        pumpkin_world::world::BlockFlags::NOTIFY_ALL
-                    } else {
-                        pumpkin_world::world::BlockFlags::SKIP_DROPS
-                            | pumpkin_world::world::BlockFlags::NOTIFY_ALL
-                    };
-                    if world.break_block(&pos, Some(&p), flags).is_some() {
-                        if let Some(server) = server_clone {
-                            server
-                                .block_registry
-                                .broken(&world, block, &p, &pos, &server, state);
+                        let block = Block::from_state_id(state.id);
+                        let can_harvest = p.can_harvest(state, block);
+                        let flags = if can_harvest {
+                            pumpkin_world::world::BlockFlags::NOTIFY_ALL
+                        } else {
+                            pumpkin_world::world::BlockFlags::SKIP_DROPS
+                                | pumpkin_world::world::BlockFlags::NOTIFY_ALL
+                        };
+                        if world.break_block(&pos, Some(&p), flags).is_some() {
+                            if let Some(server) = server_clone {
+                                server
+                                    .block_registry
+                                    .broken(&world, block, &p, &pos, &server, state);
+                            }
+                            p.apply_tool_damage_for_block_break(state);
+                            if can_harvest {
+                                p.add_exhaustion(MINE_BLOCK_EXHAUSTION);
+                            }
+                            let item_id = p.inventory().held_item().item.id;
+                            p.increment_stat(StatisticCategory::Used, item_id as i32, 1);
+                            p.increment_stat(StatisticCategory::Mined, state.id.as_u16() as i32, 1);
                         }
-                        p.apply_tool_damage_for_block_break(state);
-                        if can_harvest {
-                            p.add_exhaustion(MINE_BLOCK_EXHAUSTION);
-                        }
-                        let item_id = p.inventory().held_item().item.id;
-                        p.increment_stat(StatisticCategory::Used, item_id as i32, 1);
-                        p.increment_stat(StatisticCategory::Mined, state.id.as_u16() as i32, 1);
                     }
+                } else {
+                    p.stop_mining();
                 }
             }
         }
@@ -2885,10 +2905,19 @@ impl Player {
         world: &World,
         state: &BlockState,
         starting_time: i32,
-    ) -> bool {
-        let time = self.tick_counter.load(Ordering::Relaxed) - starting_time;
+    ) -> Option<bool> {
+        let time = self
+            .tick_counter
+            .load(Ordering::Relaxed)
+            .checked_sub(starting_time)?;
         let speed = block::calc_block_breaking(self, state, Block::from_state_id(state.id));
-        let total_progress = speed * (time + 1) as f32;
+        if !speed.is_finite() || speed < 0.0 {
+            return None;
+        }
+        let total_progress = speed * time.saturating_add(1) as f32;
+        if !total_progress.is_finite() {
+            return None;
+        }
         let stage = (total_progress * 10.0) as i32;
         let stage = stage.min(9);
         let old_speed = self
@@ -2907,20 +2936,52 @@ impl Player {
             self.current_block_destroy_stage
                 .store(stage, Ordering::Relaxed);
         }
-        total_progress >= 1.0
+        Some(total_progress >= 1.0)
+    }
+
+    pub(crate) fn begin_delayed_destroy(&self, position: BlockPos, start_time: i32) {
+        self.mining.store(false, Ordering::Relaxed);
+        *self
+            .delayed_destroy_pos
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = position;
+        self.delayed_destroy_start_time
+            .store(start_time, Ordering::Relaxed);
+        self.delayed_destroy.store(true, Ordering::Relaxed);
+    }
+
+    pub(crate) fn stop_mining_if_target_changed(&self, position: BlockPos) {
+        let active_mismatch = self.mining.load(Ordering::Relaxed)
+            && *self
+                .mining_pos
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                != position;
+        let delayed_active = self.delayed_destroy.load(Ordering::Relaxed);
+        if active_mismatch || delayed_active {
+            self.stop_mining();
+        }
     }
 
     pub(crate) fn stop_mining(&self) {
         let was_mining = self.mining.swap(false, Ordering::Relaxed);
+        let was_delayed = self.delayed_destroy.swap(false, Ordering::Relaxed);
         let stage = self.current_block_destroy_stage.swap(-1, Ordering::Relaxed);
         self.current_block_breaking_speed
             .store(0, Ordering::Relaxed);
 
-        if was_mining || stage >= 0 {
-            let pos = *self
-                .mining_pos
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if was_mining || was_delayed || stage >= 0 {
+            let pos = if was_delayed {
+                *self
+                    .delayed_destroy_pos
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+            } else {
+                *self
+                    .mining_pos
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+            };
             self.world().set_block_breaking(
                 &self.living_entity.entity,
                 pos,

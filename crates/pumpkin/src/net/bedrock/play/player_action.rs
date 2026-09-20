@@ -32,17 +32,18 @@ impl BedrockClient {
                 let world = entity.world.load_full();
                 let (block, state) = world.get_block_and_state(&location);
 
-                if player.mining.load(Ordering::Relaxed)
-                    && *player
-                        .mining_pos
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner)
-                        != location
-                {
+                if !player.may_build() {
                     player.stop_mining();
+                    self.try_enqueue_client_packet(&CUpdateBlock::new(
+                        location,
+                        pumpkin_data::BlockState::to_be_network_id(state.id),
+                    ));
+                    return;
                 }
+                player.stop_mining_if_target_changed(location);
 
                 if player.gamemode.load() == GameMode::Creative {
+                    player.stop_mining();
                     let new_state = world.break_block(
                         &location,
                         Some(player),
