@@ -618,11 +618,8 @@ impl BlockRegistry {
     ) -> Result<Option<(BlockPos, BlockStateId)>, BlockPlacingError> {
         let entity = &player.get_entity();
 
-        match player.gamemode.load() {
-            pumpkin_util::GameMode::Spectator | pumpkin_util::GameMode::Adventure => {
-                return Err(BlockPlacingError::InvalidGamemode);
-            }
-            _ => {}
+        if !player.may_build() {
+            return Err(BlockPlacingError::InvalidGamemode);
         }
 
         let clicked_block_pos = BlockPos(location.0);
