@@ -16,6 +16,7 @@ use pumpkin_util::identifier::Identifier;
 use pumpkin_util::version::JavaMinecraftVersion;
 
 const MAX_STATUS_EFFECTS: usize = 128;
+const MAX_TOOLTIP_HIDDEN_COMPONENTS: usize = 256;
 
 #[must_use]
 pub fn data_to_proto_sound(id_or: &IdOr<SoundEvent>) -> crate::IdOr<crate::SoundEvent> {
@@ -2158,17 +2159,47 @@ impl DataComponentCodec<Self> for CustomModelDataImpl {
 
 impl DataComponentCodec<Self> for TooltipDisplayImpl {
     fn serialize(&self, seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
-        seq.write_bool(false)?;
-        seq.write_var_int(&VarInt(0))
+        if self.hidden_components.len() > MAX_TOOLTIP_HIDDEN_COMPONENTS {
+            return Err(WritingError::Message(
+                "Too many hidden tooltip components".into(),
+            ));
+        }
+        seq.write_bool(self.hide_tooltip)?;
+        seq.write_var_int(&VarInt(
+            i32::try_from(self.hidden_components.len()).map_err(|_| {
+                WritingError::Message("Hidden tooltip component count overflow".into())
+            })?,
+        ))?;
+        for id in &self.hidden_components {
+            seq.write_var_int(&VarInt(i32::from(id.to_id())))?;
+        }
+        Ok(())
     }
 
     fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
-        let _hide_tooltip = seq.get_bool()?;
-        let len = seq.get_var_int()?.0 as usize;
-        for _ in 0..len {
-            let _comp_id = seq.get_var_int()?;
+        let hide_tooltip = seq.get_bool()?;
+        let count = usize::try_from(seq.get_var_int()?.0)
+            .map_err(|_| ReadingError::Message("Negative hidden tooltip component count".into()))?;
+        if count > MAX_TOOLTIP_HIDDEN_COMPONENTS {
+            return Err(ReadingError::Message(
+                "Too many hidden tooltip components".into(),
+            ));
         }
-        Ok(Self)
+        let mut hidden_components = Vec::with_capacity(count);
+        for _ in 0..count {
+            let id = u8::try_from(seq.get_var_int()?.0)
+                .map_err(|_| ReadingError::Message("Invalid hidden tooltip component ID".into()))?;
+            let id = DataComponent::try_from_id(id).ok_or_else(|| {
+                ReadingError::Message("Unknown hidden tooltip component ID".into())
+            })?;
+            if !hidden_components.contains(&id) {
+                hidden_components.push(id);
+            }
+        }
+        Ok(Self {
+            hide_tooltip,
+            hidden_components,
+        })
     }
 }
 
@@ -3280,6 +3311,76 @@ impl DataComponentCodec<Self> for BreakSoundImpl {
     fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
         let _ = seq.get_var_int()?;
         Ok(Self)
+    }
+}
+
+#[cfg(test)]
+mod tooltip_display_tests {
+    use super::*;
+
+    #[test]
+    fn tooltip_display_wire_round_trip_preserves_values_and_rejects_invalid_inputs() {
+        let mut wire = Vec::new();
+        wire.write_bool(true).unwrap();
+        wire.write_var_int(&VarInt(2)).unwrap();
+        wire.write_var_int(&VarInt(DataComponent::TooltipStyle.to_id() as i32))
+            .unwrap();
+        wire.write_var_int(&VarInt(DataComponent::Lore.to_id() as i32))
+            .unwrap();
+
+        let mut input = wire.as_slice();
+        let decoded = deserialize(DataComponent::TooltipDisplay, &mut input).unwrap();
+        assert!(input.is_empty());
+
+        let mut expected = NbtCompound::new();
+        expected.put_bool("hide_tooltip", true);
+        expected.put_list(
+            "hidden_components",
+            vec![
+                NbtTag::String(DataComponent::TooltipStyle.to_name().into()),
+                NbtTag::String(DataComponent::Lore.to_name().into()),
+            ],
+        );
+        let nbt_decoded = TooltipDisplayImpl::read_data(&NbtTag::Compound(expected.clone()))
+            .expect("TooltipDisplay NBT should decode");
+        assert!(nbt_decoded.hide_tooltip);
+        assert!(
+            nbt_decoded.hidden_components == vec![DataComponent::TooltipStyle, DataComponent::Lore]
+        );
+        assert_eq!(decoded.write_data(), NbtTag::Compound(expected.clone()));
+
+        let mut invalid_nbt = expected;
+        invalid_nbt.put_list(
+            "hidden_components",
+            vec![NbtTag::String("minecraft:not_a_component".into())],
+        );
+        assert!(TooltipDisplayImpl::read_data(&NbtTag::Compound(invalid_nbt)).is_none());
+
+        let mut encoded = Vec::new();
+        serialize(
+            DataComponent::TooltipDisplay,
+            decoded.as_ref(),
+            &mut encoded,
+        )
+        .unwrap();
+        assert_eq!(encoded, wire);
+
+        let mut unknown_id = Vec::new();
+        unknown_id.write_bool(false).unwrap();
+        unknown_id.write_var_int(&VarInt(1)).unwrap();
+        unknown_id.write_var_int(&VarInt(255)).unwrap();
+        assert!(deserialize(DataComponent::TooltipDisplay, &mut unknown_id.as_slice()).is_err());
+
+        let mut negative_count = Vec::new();
+        negative_count.write_bool(false).unwrap();
+        negative_count.write_var_int(&VarInt(-1)).unwrap();
+        assert!(
+            deserialize(
+                DataComponent::TooltipDisplay,
+                &mut negative_count.as_slice()
+            )
+            .is_err()
+        );
     }
 }
 

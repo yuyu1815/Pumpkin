@@ -3,7 +3,7 @@ use std::sync::atomic::Ordering;
 
 use crossbeam::atomic::AtomicCell;
 use pumpkin_data::{Block, BlockDirection, BlockState};
-use pumpkin_nbt::compound::NbtCompound;
+use pumpkin_nbt::{compound::NbtCompound, tag::NbtTag};
 use pumpkin_util::math::{boundingbox::BoundingBox, position::BlockPos, vector3::Vector3};
 
 use crate::world::{BlockFlags, World};
@@ -208,10 +208,171 @@ impl PistonBlockEntity {
     }
 }
 
+const BLOCK_STATE: &str = "blockState";
 const FACING: &str = "facing";
 const LAST_PROGRESS: &str = "progress";
 const EXTENDING: &str = "extending";
 const SOURCE: &str = "source";
+
+fn read_pushed_block_state(nbt: &NbtCompound) -> &'static BlockState {
+    let Some(block_state) = nbt.get_compound(BLOCK_STATE) else {
+        return Block::AIR.default_state;
+    };
+    let Some(name) = block_state.get_string("Name") else {
+        return Block::AIR.default_state;
+    };
+    let name = name.strip_prefix("minecraft:").unwrap_or(name);
+    let Some(block) = Block::from_registry_key(name) else {
+        return Block::AIR.default_state;
+    };
+    let Some(properties_tag) = block_state.get("Properties") else {
+        return block.default_state;
+    };
+    let NbtTag::Compound(properties) = properties_tag else {
+        return Block::AIR.default_state;
+    };
+    let mut values = Vec::with_capacity(properties.child_tags.len());
+    for (name, value) in &properties.child_tags {
+        let NbtTag::String(value) = value else {
+            return Block::AIR.default_state;
+        };
+        values.push((name.as_ref(), value.as_ref()));
+    }
+    block
+        .state_from_properties(&values)
+        .unwrap_or(Block::AIR.default_state)
+}
+
+fn write_pushed_block_state(state: &'static BlockState) -> NbtTag {
+    let block = Block::from_state_id(state.id);
+    let mut result = NbtCompound::new();
+    result.put_string("Name", format!("minecraft:{}", block.name));
+    if let Some(properties) = block.properties(state.id) {
+        let mut values = NbtCompound::new();
+        for (name, value) in properties.to_props() {
+            values.put_string(name, value.to_owned());
+        }
+        if !values.is_empty() {
+            result.put("Properties", NbtTag::Compound(values));
+        }
+    }
+    NbtTag::Compound(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn piston_from_nbt_restores_official_pushed_block_state() {
+        let mut block_state = NbtCompound::new();
+        block_state.put_string("Name", "minecraft:stone".to_owned());
+        let mut nbt = NbtCompound::new();
+        nbt.put("blockState", NbtTag::Compound(block_state));
+
+        let piston = PistonBlockEntity::from_nbt(&nbt, BlockPos::new(0, 0, 0));
+
+        assert_eq!(piston.pushed_block_state.id, Block::STONE.default_state.id);
+
+        let mut saved = NbtCompound::new();
+        piston.write_nbt(&mut saved);
+        assert_eq!(
+            saved
+                .get_compound("blockState")
+                .and_then(|state| state.get_string("Name")),
+            Some("minecraft:stone")
+        );
+        let chunk_data = piston.chunk_data_nbt().expect("piston chunk data");
+        assert!(chunk_data.get_compound("blockState").is_some());
+
+        let restored = PistonBlockEntity::from_nbt(&saved, BlockPos::new(0, 0, 0));
+        assert_eq!(
+            restored.pushed_block_state.id,
+            Block::STONE.default_state.id
+        );
+    }
+
+    #[test]
+    fn piston_from_nbt_round_trips_non_default_properties_through_both_save_paths() {
+        let mut properties = NbtCompound::new();
+        properties.put_string("facing", "east".to_owned());
+        let mut block_state = NbtCompound::new();
+        block_state.put_string("Name", "minecraft:end_rod".to_owned());
+        block_state.put("Properties", NbtTag::Compound(properties));
+        let mut nbt = NbtCompound::new();
+        nbt.put("blockState", NbtTag::Compound(block_state));
+
+        let expected = Block::END_ROD
+            .state_from_properties(&[("facing", "east")])
+            .expect("end rod facing=east state");
+        assert_ne!(expected.id, Block::END_ROD.default_state.id);
+
+        let piston = PistonBlockEntity::from_nbt(&nbt, BlockPos::new(0, 0, 0));
+        assert_eq!(piston.pushed_block_state.id, expected.id);
+
+        let mut saved = NbtCompound::new();
+        piston.write_nbt(&mut saved);
+        let saved_state = saved.get_compound("blockState").expect("saved block state");
+        assert_eq!(saved_state.get_string("Name"), Some("minecraft:end_rod"));
+        assert_eq!(
+            saved_state
+                .get_compound("Properties")
+                .and_then(|properties| properties.get_string("facing")),
+            Some("east")
+        );
+        assert_eq!(
+            PistonBlockEntity::from_nbt(&saved, BlockPos::new(0, 0, 0))
+                .pushed_block_state
+                .id,
+            expected.id
+        );
+
+        let chunk_data = piston.chunk_data_nbt().expect("piston chunk data");
+        assert_eq!(
+            PistonBlockEntity::from_nbt(&chunk_data, BlockPos::new(0, 0, 0))
+                .pushed_block_state
+                .id,
+            expected.id
+        );
+    }
+
+    #[test]
+    fn piston_from_nbt_falls_back_to_air_for_invalid_state_properties() {
+        let decode = |state: NbtCompound| {
+            let mut nbt = NbtCompound::new();
+            nbt.put("blockState", NbtTag::Compound(state));
+            PistonBlockEntity::from_nbt(&nbt, BlockPos::new(0, 0, 0))
+                .pushed_block_state
+                .id
+        };
+
+        let mut unknown_block = NbtCompound::new();
+        unknown_block.put_string("Name", "minecraft:not_a_block".to_owned());
+        assert_eq!(decode(unknown_block), Block::AIR.default_state.id);
+
+        let mut unknown_property = NbtCompound::new();
+        unknown_property.put_string("Name", "minecraft:end_rod".to_owned());
+        let mut properties = NbtCompound::new();
+        properties.put_string("unknown", "east".to_owned());
+        unknown_property.put("Properties", NbtTag::Compound(properties));
+        assert_eq!(decode(unknown_property), Block::AIR.default_state.id);
+
+        let mut unknown_value = NbtCompound::new();
+        unknown_value.put_string("Name", "minecraft:end_rod".to_owned());
+        let mut properties = NbtCompound::new();
+        properties.put_string("facing", "sideways".to_owned());
+        unknown_value.put("Properties", NbtTag::Compound(properties));
+        assert_eq!(decode(unknown_value), Block::AIR.default_state.id);
+
+        let mut invalid_name_type = NbtCompound::new();
+        invalid_name_type.put("Name", NbtTag::Byte(1));
+        assert_eq!(decode(invalid_name_type), Block::AIR.default_state.id);
+
+        let mut invalid_properties_type = NbtCompound::new();
+        invalid_properties_type.put_string("Name", "minecraft:end_rod".to_owned());
+        invalid_properties_type.put("Properties", NbtTag::String("not a compound".into()));
+        assert_eq!(decode(invalid_properties_type), Block::AIR.default_state.id);
+    }
+}
 
 impl BlockEntity for PistonBlockEntity {
     fn resource_location(&self) -> &'static str {
@@ -257,8 +418,7 @@ impl BlockEntity for PistonBlockEntity {
     where
         Self: Sized,
     {
-        // TODO
-        let pushed_block_state = Block::AIR.default_state;
+        let pushed_block_state = read_pushed_block_state(nbt);
         let facing = nbt.get_byte(FACING).unwrap_or(0);
         let last_progress = nbt.get_float(LAST_PROGRESS).unwrap_or(0.0);
         let extending = nbt.get_bool(EXTENDING).unwrap_or(false);
@@ -275,7 +435,10 @@ impl BlockEntity for PistonBlockEntity {
     }
 
     fn write_nbt(&self, nbt: &mut NbtCompound) {
-        // TODO: pushed_block_state
+        nbt.put(
+            BLOCK_STATE,
+            write_pushed_block_state(self.pushed_block_state),
+        );
         nbt.put_byte(FACING, self.facing.to_index() as i8);
         nbt.put_float(LAST_PROGRESS, self.last_progress.load());
         nbt.put_bool(EXTENDING, self.extending);
@@ -284,7 +447,10 @@ impl BlockEntity for PistonBlockEntity {
 
     fn chunk_data_nbt(&self) -> Option<NbtCompound> {
         let mut nbt = NbtCompound::new();
-        // TODO: pushed_block_state
+        nbt.put(
+            BLOCK_STATE,
+            write_pushed_block_state(self.pushed_block_state),
+        );
         nbt.put_byte(FACING, self.facing.to_index() as i8);
         nbt.put_float(LAST_PROGRESS, self.last_progress.load());
         nbt.put_bool(EXTENDING, self.extending);

@@ -673,7 +673,7 @@ impl World {
 
     /// Serializes the live block entities of a chunk back into that chunk's block
     /// entity data. The live map is the source of truth while a chunk is loaded -
-    /// `get_block_entity` takes the saved NBT out of the chunk when it wakes an
+    /// `get_block_entity` reads the saved NBT from the chunk when it wakes an
     /// entity up - so this has to run before the chunk is dropped, or everything
     /// the entity did since it was loaded is lost.
     fn save_block_entities(&self, chunk_pos: Vector2<i32>) {
@@ -6689,13 +6689,25 @@ impl World {
 
     pub fn remove_block_entity(&self, block_pos: &BlockPos) {
         let chunk_pos = block_pos.chunk_position();
-        let removed =
+        let removed_live =
             self.block_entities
                 .get_mut(&chunk_pos)
                 .is_some_and(|mut chunk_block_entities| {
                     chunk_block_entities.remove(block_pos).is_some()
                 });
-        if removed {
+        let removed_pending = self
+            .level
+            .read_chunk_sync(&chunk_pos, |chunk| {
+                chunk
+                    .pending_block_entities
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .remove(block_pos)
+                    .is_some()
+            })
+            .unwrap_or(false);
+
+        if removed_live || removed_pending {
             self.custom_block_entity_data.remove(block_pos);
             // Drop the chunk's map once its last block entity is gone.
             self.block_entities
@@ -7825,8 +7837,8 @@ mod tests {
     use pumpkin_nbt::compound::NbtCompound;
     use pumpkin_util::math::{position::BlockPos, vector2::Vector2, vector3::Vector3};
     use pumpkin_util::world_seed::Seed;
-    use pumpkin_world::level::Level;
     use pumpkin_world::world_info::LevelData;
+    use pumpkin_world::{chunk::format::anvil::SingleChunkDataSerializer, level::Level};
     use tempfile::TempDir;
     use tokio::time::{Duration, timeout};
     use uuid::Uuid;
@@ -7962,6 +7974,87 @@ mod tests {
         assert_eq!(uuids.len(), all_entities.len(), "reopened UUID duplicate");
 
         reopened.shutdown().await.expect("reopened world shutdown");
+    }
+
+    #[tokio::test]
+    async fn block_entity_replacement_removes_pending_nbt_before_new_block() {
+        let temp_dir = TempDir::new().expect("block entity persistence tempdir");
+        let world = test_world(temp_dir.path());
+        let position = BlockPos::new(1, 64, 1);
+        let chunk_pos = position.chunk_position();
+
+        world.level.loaded_chunks.insert(
+            chunk_pos,
+            pumpkin_world::chunk::ChunkData::empty_sync(chunk_pos.x, chunk_pos.y),
+        );
+        world.set_block_state(
+            &position,
+            Block::CHEST.default_state.id,
+            super::BlockFlags::FORCE_STATE,
+        );
+
+        let mut chest_nbt = NbtCompound::new();
+        chest_nbt.put_string("id", "minecraft:chest".to_owned());
+        chest_nbt.put_int("x", position.0.x);
+        chest_nbt.put_int("y", position.0.y);
+        chest_nbt.put_int("z", position.0.z);
+        world.add_block_entity_nbt(position, &chest_nbt);
+
+        world.set_block_state(
+            &position,
+            Block::AIR.default_state.id,
+            super::BlockFlags::FORCE_STATE,
+        );
+
+        let pending_after_removal = world.level.read_chunk_sync(&chunk_pos, |chunk| {
+            chunk
+                .pending_block_entities
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .get(&position)
+                .cloned()
+        });
+        world.set_block_state(
+            &position,
+            Block::FURNACE.default_state.id,
+            super::BlockFlags::FORCE_STATE,
+        );
+        assert_eq!(
+            world
+                .get_block_entity(&position)
+                .expect("furnace block entity")
+                .resource_location(),
+            "minecraft:furnace"
+        );
+
+        let serialized = world
+            .level
+            .read_chunk_sync(&chunk_pos, |chunk| {
+                chunk.to_bytes().expect("serialize chunk")
+            })
+            .expect("loaded chunk");
+        let reloaded = <pumpkin_world::chunk::ChunkData as SingleChunkDataSerializer>::from_bytes(
+            &serialized,
+            chunk_pos,
+        )
+        .expect("reload chunk");
+        let pending_after_reload = reloaded
+            .pending_block_entities
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&position)
+            .and_then(|nbt| nbt.get_string("id"))
+            .map(str::to_owned);
+
+        world
+            .shutdown()
+            .await
+            .expect("shutdown block entity replacement");
+        assert!(
+            pending_after_removal.flatten().is_none(),
+            "removed block entity left stale pending NBT"
+        );
+        assert_eq!(pending_after_reload.as_deref(), Some("minecraft:furnace"));
     }
 
     #[test]
