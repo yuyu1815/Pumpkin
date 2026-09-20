@@ -3,6 +3,7 @@ use crc_fast::CrcAlgorithm::Crc32Iscsi;
 use crc_fast::Digest;
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_nbt::tag::NbtTag;
+use pumpkin_util::identifier::Identifier;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BlockEntityDataImpl {
@@ -175,16 +176,32 @@ pub struct ContainerLootImpl {
 impl ContainerLootImpl {
     pub fn read_data(data: &NbtTag) -> Option<Self> {
         let compound = data.extract_compound()?;
-        let loot_table = compound.get_string("loot_table")?.to_string();
-        let seed = compound.get_long("seed").unwrap_or(0);
+        let loot_table = Identifier::parse(compound.get_string("loot_table")?)
+            .ok()?
+            .to_string();
+        let seed = compound.get("seed").map_or(Some(0), nbt_long)?;
         Some(Self { loot_table, seed })
+    }
+}
+
+fn nbt_long(tag: &NbtTag) -> Option<i64> {
+    match tag {
+        NbtTag::Byte(value) => Some(i64::from(*value)),
+        NbtTag::Short(value) => Some(i64::from(*value)),
+        NbtTag::Int(value) => Some(i64::from(*value)),
+        NbtTag::Long(value) => Some(*value),
+        NbtTag::Float(value) => Some(*value as i64),
+        NbtTag::Double(value) => Some(*value as i64),
+        _ => None,
     }
 }
 impl DataComponentImpl for ContainerLootImpl {
     fn write_data(&self) -> NbtTag {
         let mut compound = NbtCompound::new();
         compound.put_string("loot_table", self.loot_table.clone());
-        compound.put_long("seed", self.seed);
+        if self.seed != 0 {
+            compound.put_long("seed", self.seed);
+        }
         NbtTag::Compound(compound)
     }
     default_impl!(ContainerLoot);

@@ -37880,7 +37880,12 @@ impl Item {
                     rarity: crate::data_component_impl::Rarity::Epic,
                 },
             ),
-            (Recipes, &RecipesImpl),
+            (
+                Recipes,
+                &RecipesImpl {
+                    recipes: Vec::new(),
+                },
+            ),
             (RepairCost, &RepairCostImpl { cost: 0i32 }),
             (
                 SwingAnimation,

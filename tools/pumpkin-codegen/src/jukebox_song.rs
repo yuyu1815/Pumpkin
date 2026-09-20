@@ -74,6 +74,22 @@ pub fn build() -> TokenStream {
         })
         .collect::<TokenStream>();
 
+    let type_from_id = songs
+        .iter()
+        .map(|(name, id)| {
+            let variant_name = make_variant_ident(name);
+            quote! { #id => Some(Self::#variant_name), }
+        })
+        .collect::<TokenStream>();
+
+    let type_to_identifier = songs
+        .keys()
+        .map(|name| {
+            let variant_name = make_variant_ident(name);
+            quote! { Self::#variant_name => concat!("minecraft:", #name), }
+        })
+        .collect::<TokenStream>();
+
     let type_to_id = songs
         .iter()
         .map(|(name, id)| {
@@ -124,6 +140,23 @@ pub fn build() -> TokenStream {
             pub const fn to_name(&self) -> &'static str {
                 match self {
                     #type_to_name
+                }
+            }
+
+            #[doc = r" Returns the song for a numeric registry ID."]
+            #[must_use]
+            pub const fn from_id(id: u32) -> Option<Self> {
+                match id {
+                    #type_from_id
+                    _ => None
+                }
+            }
+
+            #[doc = r" Returns the namespaced identifier of the song."]
+            #[must_use]
+            pub const fn to_identifier(&self) -> &'static str {
+                match self {
+                    #type_to_identifier
                 }
             }
 

@@ -377,6 +377,7 @@ where
                     }
                 };
 
+                let mut cleared_dirty = Vec::new();
                 {
                     let mut writer = chunk_serializer.write().await;
                     for chunk in &chunk_locks {
@@ -387,9 +388,15 @@ where
                         chunk.mark_dirty(false);
 
                         if was_dirty {
-                            writer
-                                .update_chunk(chunk.clone(), &self.chunk_config)
-                                .await?;
+                            cleared_dirty.push(chunk.clone());
+                            if let Err(error) =
+                                writer.update_chunk(chunk.clone(), &self.chunk_config).await
+                            {
+                                for chunk in &cleared_dirty {
+                                    chunk.mark_dirty(true);
+                                }
+                                return Err(error);
+                            }
                         }
                     }
                     // Write-lock released here — flush can proceed under a read-lock.
@@ -410,10 +417,12 @@ where
                     {
                         let serializer = chunk_serializer.read().await;
                         debug!("Flushing {} to disk", path.display());
-                        serializer
-                            .write(&path)
-                            .await
-                            .map_err(ChunkWritingError::IoError)?;
+                        if let Err(error) = serializer.write(&path).await {
+                            for chunk in &cleared_dirty {
+                                chunk.mark_dirty(true);
+                            }
+                            return Err(ChunkWritingError::IoError(error));
+                        }
                         // Read-lock released here.
                     };
 
@@ -469,6 +478,143 @@ where
     Linear(ChunkFileManager<Linear>),
     Anvil(ChunkFileManager<Anvil>),
     Pump(ChunkFileManager<Pump>),
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use std::{fs, sync::Arc};
+
+    use bytes::Bytes;
+    use pumpkin_config::chunk::AnvilChunkConfig;
+    use tempfile::TempDir;
+
+    use super::ChunkFileManager;
+    use crate::chunk::format::anvil::{AnvilChunkFile, SingleChunkDataSerializer};
+    use crate::chunk::io::{Dirtiable, FileIO, LoadedData};
+    use crate::chunk::{ChunkData, ChunkReadingError, ChunkSerializingError};
+    use crate::level::LevelFolder;
+    use pumpkin_util::math::vector2::Vector2;
+
+    struct FailingChunk {
+        dirty: std::sync::atomic::AtomicBool,
+    }
+
+    impl Dirtiable for FailingChunk {
+        fn is_dirty(&self) -> bool {
+            self.dirty.load(std::sync::atomic::Ordering::Relaxed)
+        }
+
+        fn mark_dirty(&self, flag: bool) {
+            self.dirty.store(flag, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    impl super::PathFromLevelFolder for FailingChunk {
+        fn file_path(folder: &LevelFolder, file_name: &str) -> std::path::PathBuf {
+            folder.region_folder.join(file_name)
+        }
+    }
+
+    impl SingleChunkDataSerializer for FailingChunk {
+        fn to_bytes(&self) -> Result<Bytes, ChunkSerializingError> {
+            Err(ChunkSerializingError::ErrorSerializingChunk(
+                pumpkin_nbt::Error::UnsupportedType("test failure".into()),
+            ))
+        }
+
+        fn from_bytes(_bytes: &Bytes, _pos: Vector2<i32>) -> Result<Self, ChunkReadingError> {
+            Err(ChunkReadingError::ChunkNotExist)
+        }
+
+        fn position(&self) -> (i32, i32) {
+            (0, 0)
+        }
+    }
+
+    #[tokio::test]
+    async fn failed_update_keeps_chunk_dirty_for_retry() {
+        let temp_dir = TempDir::new().expect("temp directory");
+        let level_folder = LevelFolder {
+            root_folder: temp_dir.path().to_path_buf(),
+            dim_folder: temp_dir.path().to_path_buf(),
+            region_folder: temp_dir.path().join("region"),
+            entities_folder: temp_dir.path().join("entities"),
+            poi_folder: temp_dir.path().join("poi"),
+        };
+        fs::create_dir_all(&level_folder.region_folder).expect("region directory");
+
+        let chunk = Arc::new(FailingChunk {
+            dirty: std::sync::atomic::AtomicBool::new(true),
+        });
+        let saver =
+            ChunkFileManager::<AnvilChunkFile<FailingChunk>>::new(AnvilChunkConfig::default());
+        let error = saver
+            .save_chunks(&level_folder, vec![(Vector2::new(0, 0), chunk.clone())])
+            .await
+            .expect_err("update failure must surface");
+
+        assert!(matches!(
+            error,
+            crate::chunk::ChunkWritingError::ChunkSerializingError(_)
+        ));
+        assert!(chunk.is_dirty(), "failed update must remain retryable");
+        assert!(!level_folder.region_folder.join("r.0.0.mca").exists());
+    }
+
+    #[tokio::test]
+    async fn failed_region_write_keeps_chunk_dirty_for_retry() {
+        let temp_dir = TempDir::new().expect("temp directory");
+        let level_folder = LevelFolder {
+            root_folder: temp_dir.path().to_path_buf(),
+            dim_folder: temp_dir.path().to_path_buf(),
+            region_folder: temp_dir.path().join("region"),
+            entities_folder: temp_dir.path().join("entities"),
+            poi_folder: temp_dir.path().join("poi"),
+        };
+        fs::create_dir_all(&level_folder.region_folder).expect("region directory");
+
+        let position = Vector2::new(0, 0);
+        let chunk = Arc::new(ChunkData::empty(0, 0));
+        chunk.mark_dirty(true);
+        let saver = ChunkFileManager::<AnvilChunkFile<ChunkData>>::new(AnvilChunkConfig::default());
+
+        saver
+            .save_chunks(&level_folder, vec![(position, chunk.clone())])
+            .await
+            .expect("initial region write");
+        let region_path = level_folder.region_folder.join("r.0.0.mca");
+        let original = fs::read(&region_path).expect("initial region bytes");
+
+        chunk.mark_dirty(true);
+        let temp_path = region_path.with_extension("tmp");
+        fs::create_dir(&temp_path).expect("blocking temp path");
+        let error = saver
+            .save_chunks(&level_folder, vec![(position, chunk.clone())])
+            .await
+            .expect_err("blocked temp path must fail the write");
+
+        assert!(matches!(error, crate::chunk::ChunkWritingError::IoError(_)));
+        assert!(chunk.is_dirty(), "failed write must remain retryable");
+        assert_eq!(fs::read(&region_path).expect("region bytes"), original);
+
+        fs::remove_dir(&temp_path).expect("remove blocking temp path");
+        saver
+            .save_chunks(&level_folder, vec![(position, chunk)])
+            .await
+            .expect("retry region write");
+
+        let retry_saver =
+            ChunkFileManager::<AnvilChunkFile<ChunkData>>::new(AnvilChunkConfig::default());
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+        retry_saver
+            .fetch_chunks(&level_folder, &[position], sender)
+            .await;
+        let loaded = receiver.recv().await.expect("terminal load result");
+        let LoadedData::Loaded(loaded) = loaded else {
+            panic!("retry must reload the saved chunk");
+        };
+        assert_eq!((loaded.x, loaded.z), (0, 0));
+    }
 }
 
 impl<P, Linear, Anvil, Pump> FileIO for LevelFileIO<Linear, Anvil, Pump>

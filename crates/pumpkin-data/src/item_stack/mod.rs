@@ -900,7 +900,7 @@ mod tests {
     use crate::data_component::DataComponent;
     use crate::data_component_impl::{
         ConsumableImpl, CustomDataImpl, CustomNameImpl, DataComponentImpl, EnchantmentsImpl,
-        ItemNameImpl, LoreImpl, UnbreakableImpl,
+        ItemNameImpl, JukeboxPlayableImpl, LoreImpl, RecipesImpl, UnbreakableImpl,
     };
 
     /// Helper: creates a fresh Iron Sword (max_damage 250, damage 0).
@@ -1187,6 +1187,129 @@ mod tests {
         consumable.put_list("on_consume_effects", vec![NbtTag::Compound(invalid_effect)]);
 
         assert!(ConsumableImpl::read_data(&NbtTag::Compound(consumable)).is_none());
+    }
+
+    #[test]
+    fn jukebox_playable_nbt_round_trip_preserves_song() {
+        let mut component = NbtCompound::new();
+        component.put_string("song", "minecraft:13".to_owned());
+        let mut components = NbtCompound::new();
+        components.put(
+            "minecraft:jukebox_playable",
+            NbtTag::Compound(component.clone()),
+        );
+        let mut input = NbtCompound::new();
+        input.put_string("id", "minecraft:music_disc_13".to_owned());
+        input.put_int("count", 1);
+        input.put_compound("components", components.clone());
+
+        let stack = ItemStack::read_item_stack(&input).expect("jukebox component should decode");
+        assert_eq!(
+            stack
+                .get_data_component::<JukeboxPlayableImpl>()
+                .expect("jukebox component")
+                .song,
+            "minecraft:13"
+        );
+
+        let mut output = NbtCompound::new();
+        stack.write_item_stack(&mut output);
+        assert_eq!(output.get_compound("components"), Some(&components));
+    }
+
+    #[test]
+    fn jukebox_playable_rejects_unknown_song_and_wrong_type() {
+        let mut component = NbtCompound::new();
+        component.put_string("song", "minecraft:not_a_song".to_owned());
+        assert!(JukeboxPlayableImpl::read_data(&NbtTag::Compound(component)).is_none());
+        assert!(JukeboxPlayableImpl::read_data(&NbtTag::String("minecraft:13".into())).is_none());
+    }
+
+    #[test]
+    fn recipes_nbt_round_trip_preserves_identifier_list() {
+        let input = NbtTag::List(vec![
+            NbtTag::String("minecraft:iron_ingot_from_nuggets".into()),
+            NbtTag::String("example:custom_recipe".into()),
+        ]);
+        let decoded = RecipesImpl::read_data(&input).expect("recipes list should decode");
+        assert_eq!(
+            decoded.recipes,
+            vec![
+                "minecraft:iron_ingot_from_nuggets".to_owned(),
+                "example:custom_recipe".to_owned(),
+            ]
+        );
+        assert_eq!(decoded.write_data(), input);
+
+        let empty = NbtTag::List(Vec::new());
+        assert_eq!(
+            RecipesImpl::read_data(&empty)
+                .expect("empty recipes list should decode")
+                .write_data(),
+            empty
+        );
+    }
+
+    #[test]
+    fn recipes_item_stack_nbt_round_trip_preserves_component_shape() {
+        let mut components = NbtCompound::new();
+        components.put_list(
+            "minecraft:recipes",
+            vec![NbtTag::String("minecraft:iron_ingot_from_nuggets".into())],
+        );
+        let mut input = NbtCompound::new();
+        input.put_string("id", "minecraft:knowledge_book".to_owned());
+        input.put_int("count", 1);
+        input.put_compound("components", components.clone());
+
+        let stack = ItemStack::read_item_stack(&input).expect("knowledge book should decode");
+        assert_eq!(
+            stack
+                .get_data_component::<RecipesImpl>()
+                .expect("recipes component")
+                .recipes,
+            vec!["minecraft:iron_ingot_from_nuggets".to_owned()]
+        );
+        let mut output = NbtCompound::new();
+        stack.write_item_stack(&mut output);
+        assert_eq!(output.get_compound("components"), Some(&components));
+    }
+
+    #[test]
+    fn recipes_nbt_rejects_missing_invalid_and_wrong_entries() {
+        assert!(RecipesImpl::read_data(&NbtTag::End).is_none());
+        assert!(RecipesImpl::read_data(&NbtTag::Int(0)).is_none());
+        assert!(RecipesImpl::read_data(&NbtTag::List(vec![NbtTag::Int(1)])).is_none());
+        assert!(
+            RecipesImpl::read_data(&NbtTag::List(vec![NbtTag::String("a:b:c".into())])).is_none()
+        );
+        assert!(
+            RecipesImpl::read_data(&NbtTag::List(vec![NbtTag::String(
+                "bad namespace:path".into()
+            )]))
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn recipes_nbt_uses_official_identifier_parse_defaults() {
+        let input = NbtTag::List(vec![
+            NbtTag::String(":custom_recipe".into()),
+            NbtTag::String("unqualified_recipe".into()),
+            NbtTag::String("example:".into()),
+            NbtTag::String(":".into()),
+            NbtTag::String("".into()),
+        ]);
+        assert_eq!(
+            RecipesImpl::read_data(&input).unwrap().recipes,
+            vec![
+                "minecraft:custom_recipe".to_owned(),
+                "minecraft:unqualified_recipe".to_owned(),
+                "example:".to_owned(),
+                "minecraft:".to_owned(),
+                "minecraft:".to_owned(),
+            ]
+        );
     }
 
     #[test]

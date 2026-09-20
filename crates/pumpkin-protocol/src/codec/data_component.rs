@@ -6,6 +6,7 @@ use crate::codec::var_int::VarInt;
 use crate::ser::{NetworkReadExt, NetworkWriteExt, ReadingError, WritingError};
 use pumpkin_data::data_component::DataComponent;
 use pumpkin_data::data_component_impl::*;
+use pumpkin_data::jukebox_song::JukeboxSong;
 use pumpkin_data::{Block, BlockId, Enchantment};
 
 use pumpkin_data::effect::StatusEffect;
@@ -273,6 +274,25 @@ fn serialize_consume_effect(
 pub(crate) trait DataComponentCodec<Impl: DataComponentImpl> {
     fn serialize(&self, seq: &mut impl NetworkWriteExt) -> Result<(), WritingError>;
     fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Impl, ReadingError>;
+}
+
+fn serialize_nbt_fallback<T: DataComponentImpl>(
+    value: &T,
+    seq: &mut impl NetworkWriteExt,
+) -> Result<(), WritingError> {
+    seq.write_nbt(value.write_data())
+}
+
+fn deserialize_nbt_fallback<T>(
+    seq: &mut impl NetworkReadExt,
+    component_name: &str,
+    read_data: fn(&NbtTag) -> Option<T>,
+) -> Result<T, ReadingError> {
+    let tag = seq
+        .get_nbt_with_version(&JavaMinecraftVersion::V_26_2)?
+        .ok_or_else(|| ReadingError::Message(format!("Missing {component_name} component NBT")))?;
+    read_data(&tag)
+        .ok_or_else(|| ReadingError::Message(format!("Invalid {component_name} component NBT")))
 }
 
 impl DataComponentCodec<Self> for MaxStackSizeImpl {
@@ -2309,12 +2329,12 @@ impl DataComponentCodec<Self> for EnchantmentGlintOverrideImpl {
 }
 
 impl DataComponentCodec<Self> for IntangibleProjectileImpl {
-    fn serialize(&self, _seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
-        Ok(())
+    fn serialize(&self, seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
+        serialize_nbt_fallback(self, seq)
     }
 
-    fn deserialize(_seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
-        Ok(Self)
+    fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
+        deserialize_nbt_fallback(seq, "intangible_projectile", Self::read_data)
     }
 }
 
@@ -3027,13 +3047,33 @@ impl DataComponentCodec<Self> for OminousBottleAmplifierImpl {
 
 impl DataComponentCodec<Self> for JukeboxPlayableImpl {
     fn serialize(&self, seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
-        let song_id = Sound::from_name(self.song).map_or(0, |s| s as i32);
-        seq.write_var_int(&VarInt::from(song_id))
+        let song_name = self.song.strip_prefix("minecraft:").unwrap_or(self.song);
+        let song = JukeboxSong::from_name(song_name)
+            .ok_or_else(|| WritingError::Message(format!("Unknown jukebox song: {}", self.song)))?;
+        // Holder codecs reserve 0 for a direct inline holder; registry IDs are offset by one.
+        seq.write_var_int(&VarInt::from(song.get_id() as i32 + 1))
     }
 
     fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
-        let _ = seq.get_var_int()?;
-        Ok(Self { song: "" })
+        let wire_id = seq.get_var_int()?.0;
+        if wire_id == 0 {
+            // Direct JukeboxSong holders are legal, but this model only retains registry references.
+            return Err(ReadingError::Message(
+                "Direct inline jukebox song holders are unsupported".into(),
+            ));
+        }
+        if wire_id < 0 {
+            return Err(ReadingError::Message(
+                "Negative jukebox song holder ID".into(),
+            ));
+        }
+        let registry_id = (wire_id - 1) as u32;
+        let song = JukeboxSong::from_id(registry_id).ok_or_else(|| {
+            ReadingError::Message(format!("Unknown jukebox song registry ID: {registry_id}"))
+        })?;
+        Ok(Self {
+            song: song.to_identifier(),
+        })
     }
 }
 
@@ -3056,12 +3096,12 @@ impl DataComponentCodec<Self> for ProvidesBannerPatternsImpl {
 }
 
 impl DataComponentCodec<Self> for RecipesImpl {
-    fn serialize(&self, _seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
-        Ok(())
+    fn serialize(&self, seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
+        serialize_nbt_fallback(self, seq)
     }
 
-    fn deserialize(_seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
-        Ok(Self)
+    fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
+        deserialize_nbt_fallback(seq, "recipes", Self::read_data)
     }
 }
 
@@ -3391,15 +3431,12 @@ impl DataComponentCodec<Self> for LockImpl {
 }
 
 impl DataComponentCodec<Self> for ContainerLootImpl {
-    fn serialize(&self, _seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
-        Ok(())
+    fn serialize(&self, seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
+        serialize_nbt_fallback(self, seq)
     }
 
-    fn deserialize(_seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
-        Ok(Self {
-            loot_table: String::new(),
-            seed: 0,
-        })
+    fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
+        deserialize_nbt_fallback(seq, "container_loot", Self::read_data)
     }
 }
 
@@ -3411,6 +3448,262 @@ impl DataComponentCodec<Self> for BreakSoundImpl {
     fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
         let _ = seq.get_var_int()?;
         Ok(Self)
+    }
+}
+
+#[cfg(test)]
+mod jukebox_playable_tests {
+    use super::*;
+
+    #[test]
+    fn recipes_codec_consumes_official_nbt_wire_and_preserves_following_component() {
+        // DataComponentType.Builder.build() falls back to ByteBufCodecs.fromCodecWithRegistries:
+        // FriendlyByteBuf.writeNbt(List<String>) => 0x09, element type 0x08, big-endian count,
+        // then UTF-8 strings. The trailing 64 is the next MaxStackSize component value.
+        let mut wire = vec![9, 8, 0, 0, 0, 2, 0, 33];
+        wire.extend_from_slice(b"minecraft:iron_ingot_from_nuggets");
+        wire.extend_from_slice(&[0, 21]);
+        wire.extend_from_slice(b"example:custom_recipe");
+        wire.push(64);
+
+        let mut input = wire.as_slice();
+        let decoded = RecipesImpl::deserialize(&mut input).unwrap();
+        assert_eq!(
+            decoded.recipes,
+            vec![
+                "minecraft:iron_ingot_from_nuggets".to_owned(),
+                "example:custom_recipe".to_owned(),
+            ]
+        );
+        assert_eq!(MaxStackSizeImpl::deserialize(&mut input).unwrap().size, 64);
+        assert!(input.is_empty());
+
+        let mut encoded = Vec::new();
+        decoded.serialize(&mut encoded).unwrap();
+        assert_eq!(encoded, &wire[..wire.len() - 1]);
+    }
+
+    #[test]
+    fn jukebox_playable_wire_round_trip_covers_all_registry_indices() {
+        for registry_id in 0..=21u32 {
+            let song = JukeboxSong::from_id(registry_id).unwrap();
+            assert_eq!(song.get_id(), registry_id);
+            assert_eq!(
+                song.to_identifier(),
+                format!("minecraft:{}", song.to_name())
+            );
+
+            let wire = [(registry_id + 1) as u8];
+            let mut input = wire.as_slice();
+            let decoded = JukeboxPlayableImpl::deserialize(&mut input).unwrap();
+            assert!(input.is_empty());
+            assert_eq!(decoded.song, song.to_identifier());
+
+            let mut encoded = Vec::new();
+            decoded.serialize(&mut encoded).unwrap();
+            assert_eq!(encoded, wire);
+        }
+    }
+
+    #[test]
+    fn jukebox_playable_wire_rejects_direct_and_unknown_holders() {
+        let mut direct = [0].as_slice();
+        assert!(JukeboxPlayableImpl::deserialize(&mut direct).is_err());
+
+        let mut unknown = [0x17].as_slice();
+        assert!(JukeboxPlayableImpl::deserialize(&mut unknown).is_err());
+    }
+}
+
+#[cfg(test)]
+mod persistent_codec_fallback_tests {
+    use super::*;
+
+    #[test]
+    fn intangible_projectile_accepts_unknown_compound_fields_and_preserves_next_component() {
+        let expected = [
+            0x0a, 0x08, 0x00, 0x07, b'u', b'n', b'k', b'n', b'o', b'w', b'n', 0x00, 0x07, b'p',
+            b'a', b'y', b'l', b'o', b'a', b'd', 0x00, 0x40,
+        ];
+        let mut input = expected.as_slice();
+        let decoded = deserialize(DataComponent::IntangibleProjectile, &mut input)
+            .expect("intangible projectile fallback should decode");
+        assert!(
+            decoded
+                .as_any()
+                .downcast_ref::<IntangibleProjectileImpl>()
+                .is_some()
+        );
+        assert_eq!(
+            MaxStackSizeImpl::deserialize(&mut input)
+                .expect("following component should remain aligned")
+                .size,
+            64
+        );
+        assert!(input.is_empty());
+
+        let mut encoded = Vec::new();
+        serialize(
+            DataComponent::IntangibleProjectile,
+            decoded.as_ref(),
+            &mut encoded,
+        )
+        .expect("intangible projectile fallback should encode");
+        assert_eq!(encoded, [0x0a, 0x00]);
+    }
+
+    #[test]
+    fn container_loot_uses_official_nbt_fallback_and_preserves_next_component() {
+        let mut expected = vec![0x0a, 0x08, 0x00, 0x0a];
+        expected.extend_from_slice(b"loot_table");
+        expected.extend_from_slice(&[0x00, 0x1f]);
+        expected.extend_from_slice(b"minecraft:chests/simple_dungeon");
+        expected.extend_from_slice(&[0x04, 0x00, 0x04]);
+        expected.extend_from_slice(b"seed");
+        expected.extend_from_slice(&123_456_789i64.to_be_bytes());
+        expected.extend_from_slice(&[0x00, 0x40]);
+
+        let mut input = expected.as_slice();
+        let decoded = deserialize(DataComponent::ContainerLoot, &mut input)
+            .expect("container loot fallback should decode");
+        let decoded = decoded
+            .as_any()
+            .downcast_ref::<ContainerLootImpl>()
+            .expect("container loot implementation");
+        assert_eq!(decoded.loot_table, "minecraft:chests/simple_dungeon");
+        assert_eq!(decoded.seed, 123_456_789);
+        assert_eq!(
+            MaxStackSizeImpl::deserialize(&mut input)
+                .expect("following component should remain aligned")
+                .size,
+            64
+        );
+        assert!(input.is_empty());
+
+        let mut encoded = Vec::new();
+        serialize(DataComponent::ContainerLoot, decoded, &mut encoded)
+            .expect("container loot fallback should encode");
+        let round_trip = deserialize(DataComponent::ContainerLoot, &mut encoded.as_slice())
+            .expect("encoded container loot should decode");
+        let round_trip = round_trip
+            .as_any()
+            .downcast_ref::<ContainerLootImpl>()
+            .unwrap();
+        assert_eq!(round_trip.loot_table, decoded.loot_table);
+        assert_eq!(round_trip.seed, decoded.seed);
+    }
+
+    #[test]
+    fn container_loot_omits_official_default_seed() {
+        let mut expected = vec![0x0a, 0x08, 0x00, 0x0a];
+        expected.extend_from_slice(b"loot_table");
+        expected.extend_from_slice(&[0x00, 0x1f]);
+        expected.extend_from_slice(b"minecraft:chests/simple_dungeon");
+        expected.push(0x00);
+
+        let value = ContainerLootImpl {
+            loot_table: "minecraft:chests/simple_dungeon".to_owned(),
+            seed: 0,
+        };
+        let mut encoded = Vec::new();
+        serialize(DataComponent::ContainerLoot, &value, &mut encoded)
+            .expect("default container loot should encode");
+        assert_eq!(encoded, expected);
+
+        let mut input = encoded.as_slice();
+        let decoded = deserialize(DataComponent::ContainerLoot, &mut input)
+            .expect("default container loot should decode");
+        let decoded = decoded
+            .as_any()
+            .downcast_ref::<ContainerLootImpl>()
+            .unwrap();
+        assert_eq!(decoded.seed, 0);
+        assert!(input.is_empty());
+    }
+
+    #[test]
+    fn persistent_fallback_rejects_nbt_end_and_wrong_types() {
+        let mut end = [0x00].as_slice();
+        assert!(deserialize(DataComponent::IntangibleProjectile, &mut end).is_err());
+
+        let mut wrong_type = [0x08, 0x00, 0x40].as_slice();
+        assert!(deserialize(DataComponent::IntangibleProjectile, &mut wrong_type).is_err());
+
+        let mut primitive_root = [0x03, 0x00, 0x00, 0x00, 0x07, 0x40].as_slice();
+        assert!(deserialize(DataComponent::IntangibleProjectile, &mut primitive_root).is_err());
+
+        let mut invalid_loot = [0x08, 0x00, 0x40].as_slice();
+        assert!(deserialize(DataComponent::ContainerLoot, &mut invalid_loot).is_err());
+
+        let mut missing_loot_table = [0x0a, 0x00, 0x40].as_slice();
+        assert!(deserialize(DataComponent::ContainerLoot, &mut missing_loot_table).is_err());
+
+        let mut invalid_seed = Vec::new();
+        let mut compound = NbtCompound::new();
+        compound.put_string("loot_table", "minecraft:chests/simple_dungeon".to_owned());
+        compound.put_string("seed", "not a long".to_owned());
+        invalid_seed.write_nbt(NbtTag::Compound(compound)).unwrap();
+        invalid_seed.push(64);
+        assert!(deserialize(DataComponent::ContainerLoot, &mut invalid_seed.as_slice()).is_err());
+    }
+
+    #[test]
+    fn container_loot_accepts_all_nbt_numeric_seed_tags_like_codec_long() {
+        let cases = vec![
+            (NbtTag::Byte(-7), -7),
+            (NbtTag::Short(1234), 1234),
+            (NbtTag::Int(-56789), -56789),
+            (NbtTag::Long(i64::MAX), i64::MAX),
+            (NbtTag::Float(1.75), 1),
+            (NbtTag::Double(-1.75), -1),
+            (NbtTag::Float(f32::INFINITY), i64::MAX),
+            (NbtTag::Double(f64::NEG_INFINITY), i64::MIN),
+            (NbtTag::Double(f64::NAN), 0),
+        ];
+
+        for (seed, expected_seed) in cases {
+            let mut compound = NbtCompound::new();
+            compound.put_string("loot_table", "custom/loot".to_owned());
+            compound.put("seed", seed);
+            let mut wire = Vec::new();
+            wire.write_nbt(NbtTag::Compound(compound)).unwrap();
+
+            let decoded = deserialize(DataComponent::ContainerLoot, &mut wire.as_slice())
+                .expect("numeric seed should match Codec.LONG conversion");
+            let decoded = decoded
+                .as_any()
+                .downcast_ref::<ContainerLootImpl>()
+                .unwrap();
+            assert_eq!(decoded.loot_table, "minecraft:custom/loot");
+            assert_eq!(decoded.seed, expected_seed);
+        }
+    }
+
+    #[test]
+    fn adventure_exact_match_uses_persistent_fallback_codec() {
+        let mut wire = Vec::new();
+        wire.write_var_int(&VarInt(1)).unwrap();
+        wire.write_var_int(&VarInt(DataComponent::IntangibleProjectile.to_id() as i32))
+            .unwrap();
+        wire.extend_from_slice(&[0x0a, 0x00]);
+        wire.write_var_int(&VarInt(0)).unwrap();
+
+        let mut input = wire.as_slice();
+        let decoded = read_adventure_components(&mut input).unwrap();
+        assert!(input.is_empty());
+        let components = decoded
+            .extract_compound()
+            .unwrap()
+            .get_compound("components")
+            .unwrap();
+        assert_eq!(
+            components.get_compound("minecraft:intangible_projectile"),
+            Some(&NbtCompound::new())
+        );
+
+        let mut encoded = Vec::new();
+        write_adventure_components(&decoded, &mut encoded).unwrap();
+        assert_eq!(encoded, wire);
     }
 }
 

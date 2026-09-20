@@ -3,6 +3,7 @@ use crc_fast::CrcAlgorithm::Crc32Iscsi;
 use crc_fast::Digest;
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_nbt::tag::NbtTag;
+use pumpkin_util::identifier::Identifier;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct DyeImpl;
@@ -611,22 +612,54 @@ impl JukeboxPlayableImpl {
         let song = compound.get_string("song")?;
         let static_song = crate::jukebox_song::JukeboxSong::from_name(
             song.strip_prefix("minecraft:").unwrap_or(song),
-        )
-        .map_or("", |s| s.to_name());
+        )?
+        .to_identifier();
         Some(Self { song: static_song })
     }
 }
 impl DataComponentImpl for JukeboxPlayableImpl {
+    fn write_data(&self) -> NbtTag {
+        let mut compound = NbtCompound::new();
+        compound.put_string(
+            "song",
+            format!(
+                "minecraft:{}",
+                self.song.strip_prefix("minecraft:").unwrap_or(self.song)
+            ),
+        );
+        NbtTag::Compound(compound)
+    }
+
     default_impl!(JukeboxPlayable);
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct RecipesImpl;
+pub struct RecipesImpl {
+    pub recipes: Vec<String>,
+}
 impl RecipesImpl {
-    pub const fn read_data(_data: &NbtTag) -> Option<Self> {
-        Some(Self)
+    pub fn read_data(data: &NbtTag) -> Option<Self> {
+        let NbtTag::List(values) = data else {
+            return None;
+        };
+        let recipes = values
+            .iter()
+            .map(|value| {
+                let value = value.extract_string()?;
+                Some(Identifier::parse(value).ok()?.to_string())
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(Self { recipes })
     }
 }
 impl DataComponentImpl for RecipesImpl {
+    fn write_data(&self) -> NbtTag {
+        NbtTag::List(
+            self.recipes
+                .iter()
+                .map(|recipe| NbtTag::String(recipe.clone().into_boxed_str()))
+                .collect(),
+        )
+    }
     default_impl!(Recipes);
 }

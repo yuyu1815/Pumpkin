@@ -332,8 +332,8 @@ impl DataComponentImpl for RepairCostImpl {
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct IntangibleProjectileImpl;
 impl IntangibleProjectileImpl {
-    pub const fn read_data(_data: &NbtTag) -> Option<Self> {
-        Some(Self)
+    pub fn read_data(data: &NbtTag) -> Option<Self> {
+        matches!(data, NbtTag::Compound(_)).then_some(Self)
     }
 }
 impl DataComponentImpl for IntangibleProjectileImpl {

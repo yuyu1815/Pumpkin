@@ -949,8 +949,12 @@ impl ToTokens for ItemComponents {
             };
             tokens.extend(quote! { (Rarity, &RarityImpl { rarity: #rarity_variant }), });
         }
-        if self.recipes.is_some() {
-            tokens.extend(quote! { (Recipes, &RecipesImpl), });
+        if let Some(recipes) = &self.recipes {
+            assert!(
+                matches!(recipes, serde_json::Value::Array(values) if values.is_empty()),
+                "non-empty knowledge-book recipes need generated owned values"
+            );
+            tokens.extend(quote! { (Recipes, &RecipesImpl { recipes: Vec::new() }), });
         }
         if let Some(cost) = self.repair_cost {
             tokens.extend(quote! { (RepairCost, &RepairCostImpl { cost: #cost }), });
