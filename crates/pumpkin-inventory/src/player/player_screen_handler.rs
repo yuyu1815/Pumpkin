@@ -352,7 +352,7 @@ mod tests {
     fn new_inventory() -> Arc<PlayerInventory> {
         Arc::new(PlayerInventory::new(
             Arc::new(Mutex::new(EntityEquipment::new())),
-            Arc::new(rustc_hash::FxHashMap::default()),
+            Arc::new(crate::build_equipment_slots()),
         ))
     }
 
@@ -692,6 +692,31 @@ mod tests {
         invalid_handler.on_slot_click(0, 0, SlotActionType::QuickMove, &invalid_player);
         assert!(
             invalid_handler
+                .get_behaviour()
+                .cursor_stack
+                .lock()
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn binding_curse_armor_cannot_be_removed_in_survival() {
+        use pumpkin_data::{Enchantment, item::Item};
+
+        let inventory = new_inventory();
+        let player = DropRecorder::new(inventory.clone());
+        let mut helmet = ItemStack::new(1, &Item::DIAMOND_HELMET);
+        helmet.add_enchantment(&Enchantment::BINDING_CURSE, 1);
+        inventory.set_slot(39, helmet);
+        let mut handler = new_handler(false, &inventory);
+
+        assert!(!handler.get_behaviour().slots[5].can_take_items(&player));
+        handler.on_slot_click(5, 0, SlotActionType::Pickup, &player);
+
+        assert!(!handler.get_behaviour().slots[5].get_stack().is_empty());
+        assert!(
+            handler
                 .get_behaviour()
                 .cursor_stack
                 .lock()

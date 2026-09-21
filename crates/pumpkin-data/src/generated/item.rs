@@ -27818,7 +27818,7 @@ impl Item {
             ),
             (Lore, &LoreImpl { lines: Vec::new() }),
             (MapColor, &MapColorImpl),
-            (MapDecorations, &MapDecorationsImpl),
+            (MapDecorations, &MapDecorationsImpl::EMPTY),
             (
                 Rarity,
                 &RarityImpl {

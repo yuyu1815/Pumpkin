@@ -65,15 +65,137 @@ impl DataComponentImpl for MapIdImpl {
     default_impl!(MapId);
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct MapDecorationsImpl;
-impl MapDecorationsImpl {
-    pub const fn read_data(_data: &NbtTag) -> Option<Self> {
-        Some(Self)
+#[derive(Clone, Debug, PartialEq)]
+pub struct MapDecorationEntry {
+    pub decoration_type: Identifier,
+    pub x: f64,
+    pub z: f64,
+    pub rotation: f32,
+}
+
+#[derive(Clone, Debug)]
+pub struct MapDecorationsImpl {
+    pub decorations: Vec<(String, MapDecorationEntry)>,
+}
+
+impl PartialEq for MapDecorationsImpl {
+    fn eq(&self, other: &Self) -> bool {
+        self.canonical_entries() == other.canonical_entries()
     }
 }
+
+impl MapDecorationsImpl {
+    pub const EMPTY: Self = Self {
+        decorations: Vec::new(),
+    };
+
+    fn canonical_entries(&self) -> Vec<(&str, &MapDecorationEntry)> {
+        let mut entries = Vec::new();
+        for (key, entry) in &self.decorations {
+            if let Some(existing) = entries.iter_mut().find(|(existing, _)| *existing == key) {
+                existing.1 = entry;
+            } else {
+                entries.push((key.as_str(), entry));
+            }
+        }
+        entries.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
+        entries
+    }
+
+    pub fn read_data(data: &NbtTag) -> Option<Self> {
+        let root = data.extract_compound()?;
+        let decorations = root
+            .child_tags
+            .iter()
+            .map(|(key, value)| {
+                let entry = value.extract_compound()?;
+                Some((
+                    key.to_string(),
+                    MapDecorationEntry {
+                        decoration_type: Identifier::parse(entry.get_string("type")?).ok()?,
+                        x: nbt_number_as_f64(entry.get("x")?)?,
+                        z: nbt_number_as_f64(entry.get("z")?)?,
+                        rotation: nbt_number_as_f32(entry.get("rotation")?)?,
+                    },
+                ))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(Self { decorations })
+    }
+}
+
+fn nbt_number_as_f64(value: &NbtTag) -> Option<f64> {
+    Some(match value {
+        NbtTag::Byte(value) => *value as f64,
+        NbtTag::Short(value) => *value as f64,
+        NbtTag::Int(value) => *value as f64,
+        NbtTag::Long(value) => *value as f64,
+        NbtTag::Float(value) => *value as f64,
+        NbtTag::Double(value) => *value,
+        _ => return None,
+    })
+}
+
+fn nbt_number_as_f32(value: &NbtTag) -> Option<f32> {
+    Some(match value {
+        NbtTag::Byte(value) => *value as f32,
+        NbtTag::Short(value) => *value as f32,
+        NbtTag::Int(value) => *value as f32,
+        NbtTag::Long(value) => *value as f32,
+        NbtTag::Float(value) => *value,
+        NbtTag::Double(value) => *value as f32,
+        _ => return None,
+    })
+}
+
 impl DataComponentImpl for MapDecorationsImpl {
+    fn write_data(&self) -> NbtTag {
+        let mut root = NbtCompound::new();
+        for (key, entry) in self.canonical_entries() {
+            let mut value = NbtCompound::new();
+            value.put_string("type", entry.decoration_type.to_string());
+            value.put_double("x", entry.x);
+            value.put_double("z", entry.z);
+            value.put_float("rotation", entry.rotation);
+            root.put_compound(key, value);
+        }
+        NbtTag::Compound(root)
+    }
+
+    fn get_hash(&self) -> i32 {
+        let mut digest = Digest::new(Crc32Iscsi);
+        digest.update(&[13u8]);
+        for (key, entry) in self.canonical_entries() {
+            digest.update(&get_str_hash(key).to_le_bytes());
+            digest.update(&get_str_hash(&entry.decoration_type.to_string()).to_le_bytes());
+            digest.update(&canonical_f64_bits(entry.x).to_le_bytes());
+            digest.update(&canonical_f64_bits(entry.z).to_le_bytes());
+            digest.update(&canonical_f32_bits(entry.rotation).to_le_bytes());
+        }
+        digest.finalize() as i32
+    }
+
     default_impl!(MapDecorations);
+}
+
+fn canonical_f64_bits(value: f64) -> u64 {
+    if value == 0.0 {
+        0
+    } else if value.is_nan() {
+        f64::NAN.to_bits()
+    } else {
+        value.to_bits()
+    }
+}
+
+fn canonical_f32_bits(value: f32) -> u32 {
+    if value == 0.0 {
+        0
+    } else if value.is_nan() {
+        f32::NAN.to_bits()
+    } else {
+        value.to_bits()
+    }
 }
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]

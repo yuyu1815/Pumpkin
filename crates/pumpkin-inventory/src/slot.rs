@@ -371,8 +371,16 @@ impl Slot for ArmorSlot {
         1
     }
 
-    /// TODO: Check for curse of binding enchantment.
-    fn can_take_items(&self, _player: &dyn InventoryPlayer) -> bool {
-        true
+    fn can_take_items(&self, player: &dyn InventoryPlayer) -> bool {
+        let stack = self.get_cloned_stack();
+        stack.is_empty()
+            || player.is_creative()
+            || !stack
+                .get_data_component::<pumpkin_data::data_component_impl::EnchantmentsImpl>()
+                .is_some_and(|enchantments| {
+                    enchantments.enchantment.iter().any(|(enchantment, level)| {
+                        *level > 0 && enchantment.effects.prevent_armor_change
+                    })
+                })
     }
 }

@@ -8,7 +8,7 @@ impl JavaClient {
         packet: SSetCreativeSlot,
     ) -> Result<(), InventoryError> {
         if player.gamemode.load() != GameMode::Creative {
-            return Err(InventoryError::PermissionError);
+            return Ok(());
         }
         let is_negative = packet.slot < 0;
         let valid_slot = packet.slot >= 1 && packet.slot as usize <= 45;

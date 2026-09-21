@@ -377,7 +377,9 @@ mod tests {
     use super::*;
     use arc_swap::ArcSwap;
     use pumpkin_config::{AdvancedConfiguration, BasicConfiguration, TelemetryConfig};
-    use pumpkin_protocol::java::server::play::SPlayerAction;
+    use pumpkin_data::item_stack::ItemStack;
+    use pumpkin_protocol::codec::item_stack_seralizer::ItemStackSerializer;
+    use pumpkin_protocol::java::server::play::{SPlayerAction, SSetCreativeSlot};
     use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
     use pumpkin_world::world::BlockFlags;
     use std::net::SocketAddr;
@@ -430,7 +432,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn player_action_uses_real_client_mining_authority_and_stop_cutoff() {
+    async fn player_action_and_creative_slot_use_real_client_authority_and_stop_cutoff() {
         let temp_world = TempDir::new().expect("temporary runtime world");
         let mut basic = BasicConfiguration::default();
         basic.default_level_name = temp_world.path().to_string_lossy().into_owned();
@@ -566,6 +568,93 @@ mod tests {
             0
         );
 
+        let empty_slot_packet =
+            |slot| SSetCreativeSlot::new(slot, ItemStackSerializer::from(ItemStack::EMPTY.clone()));
+        let stone = || ItemStack::new(1, &pumpkin_data::item::Item::STONE);
+
+        for gamemode in [
+            pumpkin_util::GameMode::Survival,
+            pumpkin_util::GameMode::Adventure,
+            pumpkin_util::GameMode::Spectator,
+        ] {
+            player.gamemode.store(gamemode);
+            player.inventory.set_held_item(stone());
+            assert!(
+                java.handle_set_creative_slot(&player, empty_slot_packet(36))
+                    .is_ok(),
+                "{gamemode:?} creative-slot packet must be a no-op"
+            );
+            assert_eq!(
+                player.inventory.held_item().item.id,
+                pumpkin_data::item::Item::STONE.id
+            );
+        }
+
+        player.gamemode.store(pumpkin_util::GameMode::Creative);
+        player.inventory.set_held_item(stone());
+        assert!(
+            java.handle_set_creative_slot(&player, empty_slot_packet(36))
+                .is_ok()
+        );
+        assert!(player.inventory.held_item().is_empty());
+
+        for slot in [0, 46] {
+            player.inventory.set_held_item(stone());
+            assert!(
+                java.handle_set_creative_slot(&player, empty_slot_packet(slot))
+                    .is_ok(),
+                "creative boundary slot {slot} must not mutate inventory"
+            );
+            assert_eq!(
+                player.inventory.held_item().item.id,
+                pumpkin_data::item::Item::STONE.id
+            );
+        }
+
+        let composter_position = BlockPos(Vector3::new(1, 100, 0));
+        world
+            .level
+            .get_or_fetch_chunk(composter_position.chunk_position(), |_| ())
+            .await;
+        world.set_block_state(
+            &composter_position,
+            pumpkin_data::Block::COMPOSTER.default_state.id,
+            BlockFlags::FORCE_STATE,
+        );
+        player.gamemode.store(pumpkin_util::GameMode::Survival);
+        player
+            .inventory
+            .set_held_item(ItemStack::new(1, &pumpkin_data::item::Item::WHEAT_SEEDS));
+        let mut held_item = player.inventory.held_item();
+        let cursor_pos = Vector3::new(0.5, 0.5, 0.5);
+        let hit = crate::block::BlockHitResult {
+            face: &pumpkin_data::BlockDirection::Up,
+            cursor_pos: &cursor_pos,
+        };
+        let use_result = server.block_registry.use_with_item(
+            &pumpkin_data::Block::COMPOSTER,
+            &player,
+            &composter_position,
+            &hit,
+            &mut held_item,
+            &pumpkin_data::data_component_impl::EquipmentSlot::MAIN_HAND,
+            &server,
+            &world,
+        );
+        assert!(use_result.consumes_action());
+        assert_eq!(held_item.item_count, 0);
+        crate::net::bedrock::play::inventory_action::commit_held_item(&player, held_item);
+        assert!(player.inventory.held_item().is_empty());
+        assert_eq!(
+            pumpkin_data::block_properties::ComposterLikeProperties::from_state_id(
+                world.get_block_state_id(&composter_position),
+            )
+            .level,
+            1
+        );
+
+        player.inventory.set_held_item(ItemStack::EMPTY.clone());
+        player.gamemode.store(pumpkin_util::GameMode::Survival);
         world
             .remove_player(&player, crate::world::PlayerRemovalReason::Disconnect)
             .await;

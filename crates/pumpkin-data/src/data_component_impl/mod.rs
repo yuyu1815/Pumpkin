@@ -723,6 +723,29 @@ mod tests {
         assert_eq!(MapIdImpl { id: 10 }.get_hash(), -919192125i32);
     }
 
+    #[test]
+    fn map_decorations_equality_and_hash_ignore_key_order_but_track_values() {
+        let entry = |x| MapDecorationEntry {
+            decoration_type: pumpkin_util::identifier::Identifier::parse("player").unwrap(),
+            x,
+            z: 2.0,
+            rotation: 0.5,
+        };
+        let first = MapDecorationsImpl {
+            decorations: vec![("a".to_owned(), entry(1.0)), ("b".to_owned(), entry(3.0))],
+        };
+        let second = MapDecorationsImpl {
+            decorations: vec![("b".to_owned(), entry(3.0)), ("a".to_owned(), entry(1.0))],
+        };
+        assert!(first.equal(&second));
+        assert_eq!(first.get_hash(), second.get_hash());
+
+        let mut changed = second.clone();
+        changed.decorations[0].1.x = 4.0;
+        assert!(!first.equal(&changed));
+        assert_ne!(first.get_hash(), changed.get_hash());
+    }
+
     fn assert_round_trip<T: DataComponentImpl + Clone + 'static>(
         value: T,
         read: impl Fn(&NbtTag) -> Option<T>,
@@ -958,6 +981,13 @@ mod tests {
                 },
             ]),
         };
+        let written = value.write_data();
+        assert!(
+            !written.extract_list().unwrap()[0]
+                .extract_compound()
+                .unwrap()
+                .has("slot")
+        );
         assert_round_trip(value, AttributeModifiersImpl::read_data);
     }
 

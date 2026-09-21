@@ -1,5 +1,66 @@
 #[allow(clippy::wildcard_imports)]
 use super::*;
+fn physical_slot(
+    screen_handler: &dyn ScreenHandler,
+    slot_info: &pumpkin_protocol::bedrock::server::item_stack_request::ItemStackRequestSlotInfo,
+) -> Option<usize> {
+    (slot_info.container_name.container_name != ContainerName::Cursor).then(|| {
+        map_bedrock_container_slot(
+            screen_handler,
+            slot_info.container_name.container_name,
+            slot_info.slot_id,
+        )
+    })?
+}
+
+fn same_slot(
+    screen_handler: &dyn ScreenHandler,
+    first: &pumpkin_protocol::bedrock::server::item_stack_request::ItemStackRequestSlotInfo,
+    second: &pumpkin_protocol::bedrock::server::item_stack_request::ItemStackRequestSlotInfo,
+) -> bool {
+    if first.container_name.container_name == ContainerName::Cursor
+        || second.container_name.container_name == ContainerName::Cursor
+    {
+        return first.container_name.container_name == ContainerName::Cursor
+            && second.container_name.container_name == ContainerName::Cursor;
+    }
+    physical_slot(screen_handler, first)
+        .zip(physical_slot(screen_handler, second))
+        .is_some_and(|(first, second)| first == second)
+}
+
+fn can_craft_creative(gamemode: GameMode) -> bool {
+    gamemode == GameMode::Creative
+}
+
+fn can_take_slot(
+    player: &dyn InventoryPlayer,
+    screen_handler: &dyn ScreenHandler,
+    slot_info: &pumpkin_protocol::bedrock::server::item_stack_request::ItemStackRequestSlotInfo,
+) -> bool {
+    if slot_info.container_name.container_name == ContainerName::Cursor {
+        return true;
+    }
+    physical_slot(screen_handler, slot_info).is_some_and(|screen_slot| {
+        screen_handler.get_behaviour().slots[screen_slot].can_take_items(player)
+    })
+}
+
+fn can_insert_slot(
+    screen_handler: &dyn ScreenHandler,
+    slot_info: &pumpkin_protocol::bedrock::server::item_stack_request::ItemStackRequestSlotInfo,
+    stack: &ItemStack,
+) -> bool {
+    if slot_info.container_name.container_name == ContainerName::Cursor {
+        return true;
+    }
+    physical_slot(screen_handler, slot_info).is_some_and(|screen_slot| {
+        let slot = &screen_handler.get_behaviour().slots[screen_slot];
+        stack.is_empty()
+            || (slot.can_insert(stack)
+                && stack.item_count <= slot.get_max_item_count_for_stack(stack))
+    })
+}
 
 impl BedrockClient {
     #[allow(clippy::too_many_lines)]
@@ -38,6 +99,10 @@ impl BedrockClient {
                             creative_item_id,
                             repetitions,
                         } => {
+                            if !can_craft_creative(player.gamemode.load()) {
+                                result = 1;
+                                break;
+                            }
                             let index = (creative_item_id.0.saturating_sub(1)) as usize;
                             if index < pumpkin_data::bedrock_creative::CREATIVE_ENTRIES.len() {
                                 let entry = pumpkin_data::bedrock_creative::CREATIVE_ENTRIES[index];
@@ -92,122 +157,86 @@ impl BedrockClient {
                                 break;
                             }
                             let count = count.min(source_stack.item_count);
-                            if count > 0 {
-                                let mut dest_stack = get_slot_stack(
-                                    &*screen_handler,
-                                    &destination,
-                                    created_item.as_ref(),
+                            let mut dest_stack = get_slot_stack(
+                                &*screen_handler,
+                                &destination,
+                                created_item.as_ref(),
+                            );
+                            if count == 0
+                                || same_slot(&*screen_handler, &source, &destination)
+                                || !can_take_slot(player.as_ref(), &*screen_handler, &source)
+                            {
+                                result = 1;
+                                break;
+                            }
+                            if dest_stack.is_empty() {
+                                dest_stack = source_stack.copy_with_count(count);
+                            } else if dest_stack.are_items_and_components_equal(&source_stack) {
+                                dest_stack.item_count = dest_stack.item_count.saturating_add(count);
+                            } else {
+                                tracing::debug!(
+                                    "Destination stack is not compatible with source stack"
                                 );
-                                if dest_stack.is_empty() {
-                                    dest_stack = source_stack.copy_with_count(count);
-                                } else if dest_stack.are_items_and_components_equal(&source_stack) {
-                                    dest_stack.item_count =
-                                        dest_stack.item_count.saturating_add(count);
-                                } else {
-                                    tracing::debug!(
-                                        "Destination stack is not compatible with source stack"
-                                    );
+                                result = 1;
+                                break;
+                            }
+                            if !can_insert_slot(&*screen_handler, &destination, &dest_stack) {
+                                result = 1;
+                                break;
+                            }
+                            let merchant_result = screen_handler.window_type()
+                                == Some(pumpkin_data::screen::WindowType::Merchant)
+                                && matches!(
+                                    source.container_name.container_name,
+                                    ContainerName::CreatedOutput
+                                        | ContainerName::TradeResultPreview
+                                        | ContainerName::Trade2ResultPreview
+                                );
+                            if merchant_result {
+                                if count != source_stack.item_count {
                                     result = 1;
                                     break;
                                 }
-
-                                let merchant_result = screen_handler.window_type()
-                                    == Some(pumpkin_data::screen::WindowType::Merchant)
-                                    && matches!(
-                                        source.container_name.container_name,
-                                        ContainerName::CreatedOutput
-                                            | ContainerName::TradeResultPreview
-                                            | ContainerName::Trade2ResultPreview
-                                    );
-                                if merchant_result {
-                                    if count != source_stack.item_count {
-                                        result = 1;
-                                        break;
-                                    }
-                                    let Some(handler) = screen_handler
+                                let Some(handler) = screen_handler
                                     .as_any_mut()
                                     .downcast_mut::<pumpkin_inventory::merchant::merchant_screen_handler::MerchantScreenHandler>()
                                 else {
                                     result = 1;
                                     break;
                                 };
-                                    if !handler.complete_bedrock_trade(player.as_ref()) {
-                                        result = 1;
-                                        break;
-                                    }
-
-                                    update_slot_stack(
-                                        player,
-                                        handler,
-                                        &destination,
-                                        dest_stack.clone(),
-                                    );
-                                    for (container_name, slot_id, screen_slot) in [
-                                        (ContainerName::Trade2Ingredient1, 4, 0),
-                                        (ContainerName::Trade2Ingredient2, 5, 1),
-                                        (ContainerName::Trade2ResultPreview, 50, 2),
-                                    ] {
-                                        let stack = handler.get_behaviour().slots[screen_slot]
-                                            .get_cloned_stack();
-                                        record_update(
-                                            &mut updates,
-                                            FullContainerName {
-                                                container_name,
-                                                dynamic_id: None,
-                                            },
-                                            slot_id,
-                                            &stack,
-                                        );
-                                    }
-                                    record_update(
-                                        &mut updates,
-                                        source.container_name.clone(),
-                                        source.slot_id,
-                                        ItemStack::EMPTY,
-                                    );
-                                    record_update(
-                                        &mut updates,
-                                        destination.container_name.clone(),
-                                        destination.slot_id,
-                                        &dest_stack,
-                                    );
-                                    continue;
+                                if !handler.complete_bedrock_trade(player.as_ref()) {
+                                    result = 1;
+                                    break;
                                 }
-
-                                source_stack.decrement(count);
-                                if source.container_name.container_name
-                                    == ContainerName::CreatedOutput
-                                    && let Some(ref mut stack) = created_item
-                                {
-                                    stack.decrement(count);
-                                    if stack.is_empty() {
-                                        created_item = None;
-                                    }
-                                }
-                                let source_stack = if source_stack.is_empty() {
-                                    ItemStack::EMPTY.clone()
-                                } else {
-                                    source_stack
-                                };
 
                                 update_slot_stack(
                                     player,
-                                    &mut *screen_handler,
-                                    &source,
-                                    source_stack.clone(),
-                                );
-                                update_slot_stack(
-                                    player,
-                                    &mut *screen_handler,
+                                    handler,
                                     &destination,
                                     dest_stack.clone(),
                                 );
-
+                                for (container_name, slot_id, screen_slot) in [
+                                    (ContainerName::Trade2Ingredient1, 4, 0),
+                                    (ContainerName::Trade2Ingredient2, 5, 1),
+                                    (ContainerName::Trade2ResultPreview, 50, 2),
+                                ] {
+                                    let stack = handler.get_behaviour().slots[screen_slot]
+                                        .get_cloned_stack();
+                                    record_update(
+                                        &mut updates,
+                                        FullContainerName {
+                                            container_name,
+                                            dynamic_id: None,
+                                        },
+                                        slot_id,
+                                        &stack,
+                                    );
+                                }
                                 record_update(
                                     &mut updates,
                                     source.container_name.clone(),
                                     source.slot_id,
-                                    &source_stack,
+                                    ItemStack::EMPTY,
                                 );
                                 record_update(
                                     &mut updates,
@@ -215,13 +244,64 @@ impl BedrockClient {
                                     destination.slot_id,
                                     &dest_stack,
                                 );
+                                continue;
                             }
+
+                            source_stack.decrement(count);
+                            if source.container_name.container_name == ContainerName::CreatedOutput
+                                && let Some(ref mut stack) = created_item
+                            {
+                                stack.decrement(count);
+                                if stack.is_empty() {
+                                    created_item = None;
+                                }
+                            }
+                            let source_stack = if source_stack.is_empty() {
+                                ItemStack::EMPTY.clone()
+                            } else {
+                                source_stack
+                            };
+
+                            update_slot_stack(
+                                player,
+                                &mut *screen_handler,
+                                &source,
+                                source_stack.clone(),
+                            );
+                            update_slot_stack(
+                                player,
+                                &mut *screen_handler,
+                                &destination,
+                                dest_stack.clone(),
+                            );
+
+                            record_update(
+                                &mut updates,
+                                source.container_name.clone(),
+                                source.slot_id,
+                                &source_stack,
+                            );
+                            record_update(
+                                &mut updates,
+                                destination.container_name.clone(),
+                                destination.slot_id,
+                                &dest_stack,
+                            );
                         }
                         ItemStackRequestAction::Swap { slot1, slot2 } => {
                             let stack1 =
                                 get_slot_stack(&*screen_handler, &slot1, created_item.as_ref());
                             let stack2 =
                                 get_slot_stack(&*screen_handler, &slot2, created_item.as_ref());
+                            if same_slot(&*screen_handler, &slot1, &slot2)
+                                || !can_take_slot(player.as_ref(), &*screen_handler, &slot1)
+                                || !can_take_slot(player.as_ref(), &*screen_handler, &slot2)
+                                || !can_insert_slot(&*screen_handler, &slot1, &stack2)
+                                || !can_insert_slot(&*screen_handler, &slot2, &stack1)
+                            {
+                                result = 1;
+                                break;
+                            }
 
                             update_slot_stack(player, &mut *screen_handler, &slot1, stack2.clone());
                             update_slot_stack(player, &mut *screen_handler, &slot2, stack1.clone());
@@ -246,7 +326,9 @@ impl BedrockClient {
                         } => {
                             let mut source_stack =
                                 get_slot_stack(&*screen_handler, &source, created_item.as_ref());
-                            if source_stack.is_empty() {
+                            if source_stack.is_empty()
+                                || !can_take_slot(player.as_ref(), &*screen_handler, &source)
+                            {
                                 result = 1;
                                 break;
                             }
@@ -256,6 +338,15 @@ impl BedrockClient {
                                 player.drop_item(dropped_stack);
 
                                 source_stack.decrement(count);
+                                if source.container_name.container_name
+                                    == ContainerName::CreatedOutput
+                                    && let Some(ref mut stack) = created_item
+                                {
+                                    stack.decrement(count);
+                                    if stack.is_empty() {
+                                        created_item = None;
+                                    }
+                                }
                                 let source_stack = if source_stack.is_empty() {
                                     ItemStack::EMPTY.clone()
                                 } else {
@@ -313,13 +404,24 @@ impl BedrockClient {
 
                             let mut source_stack =
                                 get_slot_stack(&*screen_handler, &source, created_item.as_ref());
-                            if source_stack.is_empty() {
+                            if source_stack.is_empty()
+                                || !can_take_slot(player.as_ref(), &*screen_handler, &source)
+                            {
                                 result = 1;
                                 break;
                             }
                             let count = count.min(source_stack.item_count);
                             if count > 0 {
                                 source_stack.decrement(count);
+                                if source.container_name.container_name
+                                    == ContainerName::CreatedOutput
+                                    && let Some(ref mut stack) = created_item
+                                {
+                                    stack.decrement(count);
+                                    if stack.is_empty() {
+                                        created_item = None;
+                                    }
+                                }
                                 let source_stack = if source_stack.is_empty() {
                                     ItemStack::EMPTY.clone()
                                 } else {
@@ -558,13 +660,13 @@ pub(crate) fn map_bedrock_container_slot(
         .saturating_sub(PlayerInventory::MAIN_SIZE);
 
     match container_name {
-        ContainerName::HotBar => {
+        ContainerName::HotBar => (slot_id < 9).then(|| {
             if is_player_screen {
-                Some(36 + slot_id as usize)
+                36 + slot_id as usize
             } else {
-                Some(container_slots + 27 + slot_id as usize)
+                container_slots + 27 + slot_id as usize
             }
-        }
+        }),
         ContainerName::Inventory | ContainerName::CombinedHotBarAndInventory => {
             if slot_id < 9 {
                 if is_player_screen {
@@ -952,6 +1054,12 @@ mod tests {
             map_bedrock_container_slot(&handler, ContainerName::CraftingInput, 40),
             Some(9)
         );
+    }
+
+    #[test]
+    fn survival_cannot_use_creative_craft_action() {
+        assert!(!can_craft_creative(GameMode::Survival));
+        assert!(can_craft_creative(GameMode::Creative));
     }
 
     #[test]

@@ -900,12 +900,52 @@ mod tests {
     use crate::data_component::DataComponent;
     use crate::data_component_impl::{
         ConsumableImpl, CustomDataImpl, CustomNameImpl, DataComponentImpl, EnchantmentsImpl,
-        ItemNameImpl, JukeboxPlayableImpl, LoreImpl, RecipesImpl, UnbreakableImpl,
+        ItemNameImpl, JukeboxPlayableImpl, LoreImpl, MapDecorationsImpl, RecipesImpl,
+        UnbreakableImpl,
     };
 
     /// Helper: creates a fresh Iron Sword (max_damage 250, damage 0).
     fn iron_sword() -> ItemStack {
         ItemStack::new(1, &Item::IRON_SWORD)
+    }
+
+    #[test]
+    fn map_decorations_item_stack_nbt_round_trip_preserves_entries() {
+        let mut player = NbtCompound::new();
+        player.put_string("type", "minecraft:player".to_owned());
+        player.put_double("x", 1234.5);
+        player.put_double("z", -987.25);
+        player.put_float("rotation", 1.5);
+
+        let mut custom = NbtCompound::new();
+        custom.put_string("type", "custom:marker".to_owned());
+        custom.put_double("x", -0.25);
+        custom.put_double("z", 4.0);
+        custom.put_float("rotation", -2.25);
+
+        let mut decorations = NbtCompound::new();
+        decorations.put_compound("player", player);
+        decorations.put_compound("custom marker", custom);
+        let mut components = NbtCompound::new();
+        components.put(
+            "minecraft:map_decorations",
+            NbtTag::Compound(decorations.clone()),
+        );
+
+        let mut input = NbtCompound::new();
+        input.put_string("id", "minecraft:filled_map".to_owned());
+        input.put_int("count", 1);
+        input.put_compound("components", components.clone());
+
+        let decoded = ItemStack::read_item_stack(&input).expect("map stack should decode");
+        let map = decoded
+            .get_data_component::<MapDecorationsImpl>()
+            .expect("map decorations should decode");
+        assert_eq!(map.decorations.len(), 2);
+
+        let mut output = NbtCompound::new();
+        decoded.write_item_stack(&mut output);
+        assert_eq!(output.get_compound("components"), Some(&components));
     }
 
     #[test]

@@ -2816,12 +2816,12 @@ impl DataComponentCodec<Self> for MapColorImpl {
 }
 
 impl DataComponentCodec<Self> for MapDecorationsImpl {
-    fn serialize(&self, _seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
-        Ok(())
+    fn serialize(&self, seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
+        serialize_nbt_fallback(self, seq)
     }
 
-    fn deserialize(_seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
-        Ok(Self)
+    fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
+        deserialize_nbt_fallback(seq, "map_decorations", Self::read_data)
     }
 }
 
@@ -3619,6 +3619,131 @@ mod persistent_codec_fallback_tests {
             .unwrap();
         assert_eq!(decoded.seed, 0);
         assert!(input.is_empty());
+    }
+
+    #[test]
+    fn map_decorations_fallback_preserves_entries_and_next_component() {
+        let mut player = NbtCompound::new();
+        player.put_string("type", "minecraft:player".to_owned());
+        player.put_double("x", 1234.5);
+        player.put_double("z", -987.25);
+        player.put_float("rotation", 1.5);
+
+        let mut custom = NbtCompound::new();
+        custom.put_string("type", "custom:marker".to_owned());
+        custom.put_double("x", -0.25);
+        custom.put_double("z", 4.0);
+        custom.put_float("rotation", -2.25);
+
+        let mut root = NbtCompound::new();
+        root.put_compound("player", player);
+        root.put_compound("custom marker", custom);
+
+        let expected = NbtTag::Compound(root);
+        let mut wire = Vec::new();
+        wire.write_nbt(expected.clone()).unwrap();
+        wire.push(64); // following MaxStackSize component
+
+        let mut input = wire.as_slice();
+        let decoded = deserialize(DataComponent::MapDecorations, &mut input)
+            .expect("map decorations fallback should decode");
+        assert_eq!(decoded.write_data(), expected);
+        assert_eq!(
+            MaxStackSizeImpl::deserialize(&mut input)
+                .expect("following component should remain aligned")
+                .size,
+            64
+        );
+        assert!(input.is_empty());
+    }
+
+    #[test]
+    fn map_decorations_accepts_numeric_tags_and_ignores_extra_fields() {
+        let mut entry = NbtCompound::new();
+        entry.put_string("type", "player".to_owned());
+        entry.put_byte("x", -7);
+        entry.put_long("z", 123);
+        entry.put_double("rotation", 1.75);
+        entry.put("future_field", NbtTag::List(Vec::new()));
+
+        let mut root = NbtCompound::new();
+        root.put_compound("future marker", entry);
+
+        let mut wire = Vec::new();
+        wire.write_nbt(NbtTag::Compound(root)).unwrap();
+        let decoded = deserialize(DataComponent::MapDecorations, &mut wire.as_slice())
+            .expect("numeric map decoration fields should decode");
+        let encoded = decoded.write_data();
+        let entry = encoded
+            .extract_compound()
+            .and_then(|root| root.get_compound("future marker"))
+            .expect("decoded map decoration entry");
+        assert_eq!(entry.get_string("type"), Some("minecraft:player"));
+        assert_eq!(entry.get("x"), Some(&NbtTag::Double(-7.0)));
+        assert_eq!(entry.get("z"), Some(&NbtTag::Double(123.0)));
+        assert_eq!(entry.get("rotation"), Some(&NbtTag::Float(1.75)));
+        assert!(!entry.has("future_field"));
+    }
+
+    #[test]
+    fn map_decorations_rejects_invalid_shape_and_identifier() {
+        let mut end = [0].as_slice();
+        assert!(deserialize(DataComponent::MapDecorations, &mut end).is_err());
+        let mut list = Vec::new();
+        list.write_nbt(NbtTag::List(Vec::new())).unwrap();
+        assert!(deserialize(DataComponent::MapDecorations, &mut list.as_slice()).is_err());
+
+        let mut root = NbtCompound::new();
+        root.put_string("marker", "not an entry".to_owned());
+        let mut wrong_entry = Vec::new();
+        wrong_entry.write_nbt(NbtTag::Compound(root)).unwrap();
+        assert!(deserialize(DataComponent::MapDecorations, &mut wrong_entry.as_slice()).is_err());
+
+        let mut entry = NbtCompound::new();
+        entry.put_string("type", "bad:id:extra".to_owned());
+        entry.put_double("x", 0.0);
+        entry.put_double("z", 0.0);
+        entry.put_float("rotation", 0.0);
+        let mut root = NbtCompound::new();
+        root.put_compound("marker", entry);
+        let mut invalid_id = Vec::new();
+        invalid_id.write_nbt(NbtTag::Compound(root)).unwrap();
+        assert!(deserialize(DataComponent::MapDecorations, &mut invalid_id.as_slice()).is_err());
+    }
+
+    #[test]
+    fn map_decorations_adventure_exact_round_trip_uses_same_fallback() {
+        let mut entry = NbtCompound::new();
+        entry.put_string("type", "minecraft:player".to_owned());
+        entry.put_double("x", 1234.5);
+        entry.put_double("z", -987.25);
+        entry.put_float("rotation", 1.5);
+        let mut decorations = NbtCompound::new();
+        decorations.put_compound("player", entry);
+
+        let mut component = NbtCompound::new();
+        component.put(
+            "minecraft:map_decorations",
+            NbtTag::Compound(decorations.clone()),
+        );
+        let value = NbtTag::Compound({
+            let mut value = NbtCompound::new();
+            value.put_compound("components", component);
+            value
+        });
+
+        let mut wire = Vec::new();
+        write_adventure_components(&value, &mut wire).unwrap();
+        let expected_prefix = [1, DataComponent::MapDecorations.to_id()];
+        assert_eq!(&wire[..expected_prefix.len()], expected_prefix);
+        assert_eq!(*wire.last().unwrap(), 0);
+
+        let decoded = read_adventure_components(&mut wire.as_slice()).unwrap();
+        assert_eq!(decoded, value);
+        let mut encoded = Vec::new();
+        write_adventure_components(&decoded, &mut encoded).unwrap();
+        let redecoded = read_adventure_components(&mut encoded.as_slice()).unwrap();
+        assert_eq!(redecoded, value);
     }
 
     #[test]

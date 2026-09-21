@@ -177,24 +177,21 @@ impl AttributeModifiersImpl {
                     }
                     .into(),
                 );
-                if !matches!(modifier.slot, crate::AttributeModifierSlot::Any) {
-                    entry.put_string(
-                        "slot",
-                        match modifier.slot {
-                            crate::AttributeModifierSlot::MainHand => "mainhand",
-                            crate::AttributeModifierSlot::OffHand => "offhand",
-                            crate::AttributeModifierSlot::Hand => "hand",
-                            crate::AttributeModifierSlot::Feet => "feet",
-                            crate::AttributeModifierSlot::Legs => "legs",
-                            crate::AttributeModifierSlot::Chest => "chest",
-                            crate::AttributeModifierSlot::Head => "head",
-                            crate::AttributeModifierSlot::Armor => "armor",
-                            crate::AttributeModifierSlot::Body => "body",
-                            crate::AttributeModifierSlot::Saddle => "saddle",
-                            crate::AttributeModifierSlot::Any => unreachable!(),
-                        }
-                        .into(),
-                    );
+                let slot = match modifier.slot {
+                    crate::AttributeModifierSlot::Any => None,
+                    crate::AttributeModifierSlot::MainHand => Some("mainhand"),
+                    crate::AttributeModifierSlot::OffHand => Some("offhand"),
+                    crate::AttributeModifierSlot::Hand => Some("hand"),
+                    crate::AttributeModifierSlot::Feet => Some("feet"),
+                    crate::AttributeModifierSlot::Legs => Some("legs"),
+                    crate::AttributeModifierSlot::Chest => Some("chest"),
+                    crate::AttributeModifierSlot::Head => Some("head"),
+                    crate::AttributeModifierSlot::Armor => Some("armor"),
+                    crate::AttributeModifierSlot::Body => Some("body"),
+                    crate::AttributeModifierSlot::Saddle => Some("saddle"),
+                };
+                if let Some(slot) = slot {
+                    entry.put_string("slot", slot.into());
                 }
                 match &modifier.display {
                     ModifierDisplay::Default => {}
