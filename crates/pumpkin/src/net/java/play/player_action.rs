@@ -71,8 +71,14 @@ impl JavaClient {
                     }
 
                     let inventory = player.inventory();
-                    let held = inventory.held_item();
-                    if !server.item_registry.can_mine(held.item, player) {
+                    let mut held = inventory.held_item();
+                    let before = held.clone();
+                    if !server.item_registry.can_mine(&mut held, player) {
+                        if !held.are_equal(&before) {
+                            let slot = inventory.get_selected_slot() as usize;
+                            player.sync_hand_slot(slot, held.clone());
+                            inventory.set_held_item(held);
+                        }
                         player.try_send_client_packet(&CBlockUpdate::new(
                             position,
                             VarInt(i32::from(state.id.as_u16())),
@@ -377,11 +383,13 @@ mod tests {
     use super::*;
     use arc_swap::ArcSwap;
     use pumpkin_config::{AdvancedConfiguration, BasicConfiguration, TelemetryConfig};
+    use pumpkin_data::data_component_impl::DebugStickStateImpl;
     use pumpkin_data::item_stack::ItemStack;
     use pumpkin_protocol::codec::item_stack_seralizer::ItemStackSerializer;
     use pumpkin_protocol::java::server::play::{SPlayerAction, SSetCreativeSlot};
     use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
     use pumpkin_world::world::BlockFlags;
+    use std::collections::BTreeMap;
     use std::net::SocketAddr;
     use std::sync::Arc;
     use tempfile::TempDir;
@@ -610,6 +618,89 @@ mod tests {
                 pumpkin_data::item::Item::STONE.id
             );
         }
+
+        let debug_position = BlockPos(Vector3::new(0, 100, 2));
+        world
+            .level
+            .get_or_fetch_chunk(debug_position.chunk_position(), |_| ())
+            .await;
+        world.set_block_state(
+            &debug_position,
+            pumpkin_data::Block::OAK_DOOR.default_state.id,
+            BlockFlags::FORCE_STATE,
+        );
+        player.get_entity().pos.store(Vector3::new(0.5, 100.0, 0.5));
+        player.get_entity().set_rotation(0.0, 15.0);
+        player.gamemode.store(pumpkin_util::GameMode::Creative);
+        player
+            .permission_lvl
+            .store(pumpkin_util::permission::PermissionLvl::One);
+        player
+            .inventory
+            .set_held_item(ItemStack::new(1, &pumpkin_data::item::Item::DEBUG_STICK));
+        let debug_names: Vec<&'static str> = pumpkin_data::Block::OAK_DOOR
+            .properties(pumpkin_data::Block::OAK_DOOR.default_state.id)
+            .expect("debug-stick fixture block properties")
+            .to_props()
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect();
+        assert!(debug_names.len() > 2);
+
+        // Game-master permission rejection must not write the item-local component or mutate the block.
+        java.handle_player_action(&player, &packet_at(0, debug_position), &server);
+        assert!(player.inventory.held_item().patch.is_empty());
+        assert_eq!(
+            world.get_block_state(&debug_position),
+            pumpkin_data::Block::OAK_DOOR.default_state
+        );
+
+        player
+            .permission_lvl
+            .store(pumpkin_util::permission::PermissionLvl::Two);
+        java.handle_player_action(&player, &packet_at(0, debug_position), &server);
+        let first_debug_stack = player.inventory.held_item();
+        assert_eq!(
+            first_debug_stack
+                .get_data_component::<DebugStickStateImpl>()
+                .and_then(|state| state
+                    .properties
+                    .get("minecraft:oak_door")
+                    .map(String::as_str)),
+            Some(debug_names[1])
+        );
+        assert_eq!(
+            world.get_block_state(&debug_position),
+            pumpkin_data::Block::OAK_DOOR.default_state
+        );
+
+        let mut restored_properties = BTreeMap::new();
+        restored_properties.insert("minecraft:oak_door".to_owned(), debug_names[1].to_owned());
+        let mut second_debug_stack = ItemStack::new(1, &pumpkin_data::item::Item::DEBUG_STICK);
+        second_debug_stack.set_data_component(DebugStickStateImpl {
+            properties: restored_properties,
+        });
+        player.inventory.set_held_item(second_debug_stack);
+        java.handle_player_action(&player, &packet_at(0, debug_position), &server);
+        let second_debug_stack = player.inventory.held_item();
+        assert_eq!(
+            second_debug_stack
+                .get_data_component::<DebugStickStateImpl>()
+                .and_then(|state| state
+                    .properties
+                    .get("minecraft:oak_door")
+                    .map(String::as_str)),
+            Some(debug_names[2])
+        );
+        assert_eq!(
+            first_debug_stack
+                .get_data_component::<DebugStickStateImpl>()
+                .and_then(|state| state
+                    .properties
+                    .get("minecraft:oak_door")
+                    .map(String::as_str)),
+            Some(debug_names[1])
+        );
 
         let composter_position = BlockPos(Vector3::new(1, 100, 0));
         world

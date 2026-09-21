@@ -40,6 +40,22 @@ impl BedrockClient {
                     ));
                     return;
                 }
+
+                let inventory = player.inventory();
+                let mut held = inventory.held_item();
+                let before = held.clone();
+                if !server.item_registry.can_mine(&mut held, player) {
+                    if !held.are_equal(&before) {
+                        super::inventory_action::commit_held_item(player, held);
+                    }
+                    player.stop_mining();
+                    self.try_enqueue_client_packet(&CUpdateBlock::new(
+                        location,
+                        pumpkin_data::BlockState::to_be_network_id(state.id),
+                    ));
+                    return;
+                }
+
                 player.stop_mining_if_target_changed(location);
 
                 if player.gamemode.load() == GameMode::Creative {

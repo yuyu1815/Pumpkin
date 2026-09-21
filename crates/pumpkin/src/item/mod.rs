@@ -65,6 +65,10 @@ pub trait ItemBehaviour: Send + Sync {
         true
     }
 
+    fn can_mine_with_stack(&self, _stack: &mut ItemStack, player: &Player) -> bool {
+        self.can_mine(player)
+    }
+
     fn get_start_and_end_pos(&self, player: &Player) -> (Vector3<f64>, Vector3<f64>) {
         let start_pos = player.eye_position();
         let (yaw, pitch) = player.rotation();

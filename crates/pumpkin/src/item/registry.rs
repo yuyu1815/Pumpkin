@@ -4,7 +4,6 @@ use crate::entity::player::Player;
 use crate::server::Server;
 use pumpkin_data::Block;
 use pumpkin_data::BlockDirection;
-use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
 use pumpkin_util::math::position::BlockPos;
 use pumpkin_util::math::vector3::Vector3;
@@ -143,10 +142,10 @@ impl ItemRegistry {
         }
     }
 
-    pub fn can_mine(&self, item: &Item, player: &Player) -> bool {
-        let pumpkin_block = self.get_pumpkin_item(item.id);
-        if let Some(pumpkin_block) = pumpkin_block {
-            return pumpkin_block.can_mine(player);
+    pub fn can_mine(&self, stack: &mut ItemStack, player: &Player) -> bool {
+        let pumpkin_item = self.get_pumpkin_item(stack.item.id);
+        if let Some(pumpkin_item) = pumpkin_item {
+            return pumpkin_item.can_mine_with_stack(stack, player);
         }
         true
     }
