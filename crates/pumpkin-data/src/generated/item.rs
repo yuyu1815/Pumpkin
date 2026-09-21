@@ -3984,7 +3984,12 @@ impl Item {
             ),
             (TooltipDisplay, &TooltipDisplayImpl),
             (UseEffects, &UseEffectsImpl),
-            (UseRemainder, &UseRemainderImpl),
+            (
+                UseRemainder,
+                &UseRemainderImpl {
+                    convert_into: crate::item_stack::ItemStack::static_new_java(1, &Item::BOWL),
+                },
+            ),
         ],
     };
     pub const BELL: Self = Self {
@@ -34116,7 +34121,15 @@ impl Item {
             ),
             (TooltipDisplay, &TooltipDisplayImpl),
             (UseEffects, &UseEffectsImpl),
-            (UseRemainder, &UseRemainderImpl),
+            (
+                UseRemainder,
+                &UseRemainderImpl {
+                    convert_into: crate::item_stack::ItemStack::static_new_java(
+                        1,
+                        &Item::GLASS_BOTTLE,
+                    ),
+                },
+            ),
         ],
     };
     pub const HONEYCOMB: Self = Self {
@@ -44083,7 +44096,12 @@ impl Item {
             ),
             (TooltipDisplay, &TooltipDisplayImpl),
             (UseEffects, &UseEffectsImpl),
-            (UseRemainder, &UseRemainderImpl),
+            (
+                UseRemainder,
+                &UseRemainderImpl {
+                    convert_into: crate::item_stack::ItemStack::static_new_java(1, &Item::BUCKET),
+                },
+            ),
         ],
     };
     pub const MINECART: Self = Self {
@@ -45281,7 +45299,12 @@ impl Item {
             ),
             (TooltipDisplay, &TooltipDisplayImpl),
             (UseEffects, &UseEffectsImpl),
-            (UseRemainder, &UseRemainderImpl),
+            (
+                UseRemainder,
+                &UseRemainderImpl {
+                    convert_into: crate::item_stack::ItemStack::static_new_java(1, &Item::BOWL),
+                },
+            ),
         ],
     };
     pub const MUSIC_DISC_11: Self = Self {
@@ -57241,7 +57264,15 @@ impl Item {
             ),
             (TooltipDisplay, &TooltipDisplayImpl),
             (UseEffects, &UseEffectsImpl),
-            (UseRemainder, &UseRemainderImpl),
+            (
+                UseRemainder,
+                &UseRemainderImpl {
+                    convert_into: crate::item_stack::ItemStack::static_new_java(
+                        1,
+                        &Item::GLASS_BOTTLE,
+                    ),
+                },
+            ),
         ],
     };
     pub const POWDER_SNOW_BUCKET: Self = Self {
@@ -59748,7 +59779,12 @@ impl Item {
             ),
             (TooltipDisplay, &TooltipDisplayImpl),
             (UseEffects, &UseEffectsImpl),
-            (UseRemainder, &UseRemainderImpl),
+            (
+                UseRemainder,
+                &UseRemainderImpl {
+                    convert_into: crate::item_stack::ItemStack::static_new_java(1, &Item::BOWL),
+                },
+            ),
         ],
     };
     pub const RAIL: Self = Self {
@@ -71105,7 +71141,12 @@ impl Item {
             ),
             (TooltipDisplay, &TooltipDisplayImpl),
             (UseEffects, &UseEffectsImpl),
-            (UseRemainder, &UseRemainderImpl),
+            (
+                UseRemainder,
+                &UseRemainderImpl {
+                    convert_into: crate::item_stack::ItemStack::static_new_java(1, &Item::BOWL),
+                },
+            ),
         ],
     };
     pub const SWEET_BERRIES: Self = Self {

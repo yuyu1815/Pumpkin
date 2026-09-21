@@ -169,7 +169,7 @@ impl ItemStack {
     #[must_use]
     pub fn get_data_component<T: DataComponentImpl + 'static>(&self) -> Option<&T> {
         let to_get_id = &T::get_enum();
-        for (id, component) in &self.patch {
+        for (id, component) in self.patch.iter().rev() {
             if id == to_get_id {
                 return component
                     .as_ref()
@@ -186,7 +186,7 @@ impl ItemStack {
     #[must_use]
     pub fn get_data_component_mut<T: DataComponentImpl + 'static>(&mut self) -> Option<&mut T> {
         let to_get_id = T::get_enum();
-        if let Some(index) = self.patch.iter().position(|(id, _)| *id == to_get_id) {
+        if let Some(index) = self.patch.iter().rposition(|(id, _)| *id == to_get_id) {
             return self.patch[index]
                 .1
                 .as_mut()
@@ -215,7 +215,7 @@ impl ItemStack {
 
     #[must_use]
     pub fn has_data_component(&self, to_get_id: DataComponent) -> bool {
-        for (id, component) in &self.patch {
+        for (id, component) in self.patch.iter().rev() {
             if *id == to_get_id {
                 return component.is_some();
             }
@@ -730,45 +730,67 @@ impl ItemStack {
         }
     }
 
+    fn effective_patch_value(&self, id: DataComponent) -> Option<Option<&dyn DataComponentImpl>> {
+        self.patch
+            .iter()
+            .rev()
+            .find(|(patch_id, _)| *patch_id == id)
+            .map(|(_, value)| value.as_deref())
+    }
+
     #[must_use]
     pub fn are_items_and_components_equal(&self, other: &Self) -> bool {
-        // Items must match
         if self.item != other.item {
             return false;
         }
 
-        if self.patch.len() != other.patch.len() {
-            return false;
-        }
-
-        for (id, data) in &self.patch {
-            let mut not_found = true;
-            'out: for (other_id, other_data) in &other.patch {
-                if id == other_id {
-                    if let (Some(data), Some(other_data)) = (data, other_data) {
-                        if !data.equal(other_data.as_ref()) {
-                            return false;
-                        }
-                        not_found = false;
-                        break 'out;
-                    } else if data.is_none() && other_data.is_none() {
-                        not_found = false;
-                        break 'out;
-                    }
-                    return false;
-                }
-            }
-            if not_found {
-                return false;
+        let mut ids = Vec::new();
+        for (id, _) in self.patch.iter().chain(&other.patch) {
+            if !ids.contains(id) {
+                ids.push(*id);
             }
         }
-
-        true
+        ids.into_iter().all(|id| {
+            match (
+                self.effective_patch_value(id),
+                other.effective_patch_value(id),
+            ) {
+                (None, None) => true,
+                (Some(None), Some(None)) => true,
+                (Some(Some(left)), Some(Some(right))) => left.equal(right),
+                _ => false,
+            }
+        })
     }
 
     #[must_use]
     pub fn are_equal(&self, other: &Self) -> bool {
         self.item_count == other.item_count && self.are_items_and_components_equal(other)
+    }
+
+    #[must_use]
+    pub fn get_hash(&self) -> i32 {
+        let mut digest = crc_fast::Digest::new(crc_fast::CrcAlgorithm::Crc32Iscsi);
+        digest.update(&self.item.id.to_le_bytes());
+        digest.update(&[self.item_count]);
+        let mut values = Vec::new();
+        for (id, _) in &self.patch {
+            if !values.iter().any(|(seen_id, _, _)| *seen_id == *id) {
+                if let Some(value) = self.effective_patch_value(*id) {
+                    values.push((
+                        *id,
+                        value.is_some(),
+                        value.map_or(0, |value| value.get_hash()),
+                    ));
+                }
+            }
+        }
+        values.sort_unstable_by_key(|(id, _, _)| id.to_id());
+        for (id, present, hash) in values {
+            digest.update(&[id.to_id(), u8::from(present)]);
+            digest.update(&hash.to_le_bytes());
+        }
+        digest.finalize() as i32
     }
 
     /// Determines the mining speed for a block based on tool rules.
@@ -852,22 +874,27 @@ impl ItemStack {
 
     #[must_use]
     pub fn read_item_stack(compound: &NbtCompound) -> Option<Self> {
-        // Get ID, which is a string like "minecraft:diamond_sword"
+        // Get ID, which is a string like "minecraft:diamond_sword".
         let full_id = compound.get_string("id")?;
-
-        // Remove the "minecraft:" prefix if present
         let registry_key = full_id.strip_prefix("minecraft:").unwrap_or(full_id);
-
-        // Try to get item by registry key
         let item = Item::from_registry_key(registry_key)?;
+        if item.id == Item::AIR.id {
+            return None;
+        }
 
-        let count = compound.get_int("count")? as u8;
+        // ItemStack.CODEC defaults a missing count to one and accepts 1..=99.
+        let count = match compound.child_tags.get("count") {
+            None => 1,
+            Some(count) => u8::try_from(crate::data_component_impl::food::nbt_i32(count)?)
+                .ok()
+                .filter(|count| (1..=99).contains(count))?,
+        };
 
-        // Create the item stack
         let mut item_stack = Self::new(count, item);
 
-        // Process any additional data in the components compound
-        if let Some(tag) = compound.get_compound("components") {
+        // components is optional, but a present value must be a compound.
+        if let Some(components) = compound.child_tags.get("components") {
+            let tag = components.extract_compound()?;
             for (name, data) in &tag.child_tags {
                 if let Some(name) = name.strip_prefix("!") {
                     item_stack
@@ -881,6 +908,22 @@ impl ItemStack {
         }
 
         Some(item_stack)
+    }
+
+    /// Reads the ItemStackTemplate NBT alternative: a bare item identifier is
+    /// count one with an empty component patch; ordinary ItemStack callers stay
+    /// compound-only and retain their optional-empty semantics.
+    #[must_use]
+    pub fn read_item_stack_template(data: &NbtTag) -> Option<Self> {
+        match data {
+            NbtTag::String(id) => {
+                let registry_key = id.strip_prefix("minecraft:").unwrap_or(id);
+                let item = Item::from_registry_key(registry_key)?;
+                (item.id != Item::AIR.id).then(|| Self::new(1, item))
+            }
+            NbtTag::Compound(compound) => Self::read_item_stack(compound),
+            _ => None,
+        }
     }
 }
 
@@ -899,9 +942,9 @@ mod tests {
     use super::*;
     use crate::data_component::DataComponent;
     use crate::data_component_impl::{
-        ConsumableImpl, CustomDataImpl, CustomNameImpl, DataComponentImpl, EnchantmentsImpl,
-        ItemNameImpl, JukeboxPlayableImpl, LoreImpl, MapDecorationsImpl, RecipesImpl,
-        UnbreakableImpl,
+        BundleContentsImpl, ConsumableImpl, ContainerImpl, CustomDataImpl, CustomNameImpl,
+        DataComponentImpl, EnchantmentsImpl, ItemNameImpl, JukeboxPlayableImpl, LoreImpl,
+        MapDecorationsImpl, RecipesImpl, UnbreakableImpl, UseRemainderImpl, get,
     };
 
     /// Helper: creates a fresh Iron Sword (max_damage 250, damage 0).
@@ -1557,6 +1600,153 @@ mod tests {
             Some(NbtTag::String("pos1".into()))
         );
         assert!(decoded.get_data_component::<UnbreakableImpl>().is_some());
+    }
+
+    #[test]
+    fn use_remainder_nbt_preserves_template_and_custom_components() {
+        let mut custom_data = NbtCompound::new();
+        custom_data.put_int("x", 7);
+        let mut components = NbtCompound::new();
+        components.put("minecraft:custom_data", NbtTag::Compound(custom_data));
+
+        let mut template = NbtCompound::new();
+        template.put_string("id", "minecraft:bowl".to_owned());
+        template.put_int("count", 2);
+        template.put_compound("components", components.clone());
+
+        let remainder = UseRemainderImpl::read_data(&NbtTag::Compound(template))
+            .expect("official remainder template should decode");
+        assert_eq!(remainder.convert_into.item, &Item::BOWL);
+        assert_eq!(remainder.convert_into.item_count, 2);
+        assert_eq!(
+            remainder
+                .convert_into
+                .get_data_component::<CustomDataImpl>()
+                .expect("custom data should survive")
+                .data
+                .get_int("x"),
+            Some(7)
+        );
+
+        let mut encoded = NbtCompound::new();
+        remainder.convert_into.write_item_stack(&mut encoded);
+        assert_eq!(encoded.get_compound("components"), Some(&components));
+    }
+
+    #[test]
+    fn use_remainder_accepts_official_bare_item_template() {
+        let remainder = UseRemainderImpl::read_data(&NbtTag::String("minecraft:bowl".into()))
+            .expect("bare item template should decode");
+        assert_eq!(remainder.convert_into.item, &Item::BOWL);
+        assert_eq!(remainder.convert_into.item_count, 1);
+        assert!(remainder.convert_into.patch.is_empty());
+    }
+
+    #[test]
+    fn item_stack_count_uses_java_number_narrowing_before_range() {
+        for tag in [
+            NbtTag::Byte(2),
+            NbtTag::Short(2),
+            NbtTag::Long(2),
+            NbtTag::Float(2.9),
+            NbtTag::Double(2.9),
+        ] {
+            let mut stack = NbtCompound::new();
+            stack.put_string("id", "minecraft:bucket".to_owned());
+            stack.put("count", tag);
+            assert_eq!(ItemStack::read_item_stack(&stack).unwrap().item_count, 2);
+        }
+        for tag in [NbtTag::String("2".into()), NbtTag::List(Vec::new())] {
+            let mut stack = NbtCompound::new();
+            stack.put_string("id", "minecraft:bucket".to_owned());
+            stack.put("count", tag);
+            assert!(ItemStack::read_item_stack(&stack).is_none());
+        }
+    }
+
+    #[test]
+    fn item_stack_nbt_uses_official_defaults_and_rejects_invalid_templates() {
+        let mut missing_count = NbtCompound::new();
+        missing_count.put_string("id", "minecraft:bucket".to_owned());
+        let decoded = ItemStack::read_item_stack(&missing_count).expect("count defaults to one");
+        assert_eq!(decoded.item_count, 1);
+        assert!(decoded.patch.is_empty());
+
+        let mut wrong_shape = NbtCompound::new();
+        wrong_shape.put_string("id", "minecraft:bucket".to_owned());
+        wrong_shape.put_string("count", "one".to_owned());
+        assert!(ItemStack::read_item_stack(&wrong_shape).is_none());
+
+        let mut wrong_components = NbtCompound::new();
+        wrong_components.put_string("id", "minecraft:bucket".to_owned());
+        wrong_components.put_string("components", "not a compound".to_owned());
+        assert!(ItemStack::read_item_stack(&wrong_components).is_none());
+
+        for count in [0, -1, 100] {
+            let mut invalid = NbtCompound::new();
+            invalid.put_string("id", "minecraft:bucket".to_owned());
+            invalid.put_int("count", count);
+            assert!(
+                ItemStack::read_item_stack(&invalid).is_none(),
+                "count={count}"
+            );
+        }
+
+        for id in ["minecraft:air", "minecraft:not_an_item"] {
+            let mut invalid = NbtCompound::new();
+            invalid.put_string("id", id.to_owned());
+            assert!(ItemStack::read_item_stack(&invalid).is_none(), "id={id}");
+        }
+    }
+
+    #[test]
+    fn generated_use_remainder_defaults_keep_official_templates() {
+        for (item, remainder, count) in [
+            (&Item::MILK_BUCKET, &Item::BUCKET, 1),
+            (&Item::HONEY_BOTTLE, &Item::GLASS_BOTTLE, 1),
+            (&Item::MUSHROOM_STEW, &Item::BOWL, 1),
+            (&Item::BEETROOT_SOUP, &Item::BOWL, 1),
+        ] {
+            let component = item
+                .components
+                .iter()
+                .find(|(id, _)| *id == DataComponent::UseRemainder)
+                .map(|(_, component)| get::<UseRemainderImpl>(*component))
+                .expect("generated use_remainder component");
+            assert_eq!(component.convert_into.item, remainder);
+            assert_eq!(component.convert_into.item_count, count);
+            assert!(component.convert_into.patch.is_empty());
+        }
+    }
+
+    #[test]
+    fn nested_item_stack_components_are_reflexive_and_hash_consistent() {
+        let nested = ItemStack::new(1, &Item::BOWL);
+        let mut first = ItemStack::new(1, &Item::CROSSBOW);
+        first.patch.push((
+            DataComponent::Container,
+            Some(Box::new(ContainerImpl {
+                items: vec![(0, nested.clone())],
+            })),
+        ));
+        first.patch.push((
+            DataComponent::BundleContents,
+            Some(Box::new(BundleContentsImpl {
+                items: vec![nested.clone()],
+            })),
+        ));
+        let second = first.clone();
+        assert!(first.are_equal(&first));
+        assert!(first.are_equal(&second));
+        assert_eq!(first.get_hash(), second.get_hash());
+        assert_eq!(
+            UseRemainderImpl {
+                convert_into: first.clone(),
+            },
+            UseRemainderImpl {
+                convert_into: second,
+            }
+        );
     }
 
     #[test]

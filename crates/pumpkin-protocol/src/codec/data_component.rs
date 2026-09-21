@@ -1,6 +1,7 @@
 #![allow(clippy::wildcard_imports)]
 
 use std::borrow::Cow;
+use std::cell::Cell;
 
 use crate::codec::var_int::VarInt;
 use crate::ser::{NetworkReadExt, NetworkWriteExt, ReadingError, WritingError};
@@ -22,6 +23,31 @@ const MAX_EFFECT_DEPTH: usize = 32;
 const MAX_IDSET_ELEMENTS: usize = 256;
 const MAX_DEATH_EFFECTS: usize = 256;
 const MAX_TOOLTIP_HIDDEN_COMPONENTS: usize = 256;
+// Implementation ceilings for recursive ItemStack templates; these are not official maxima.
+const MAX_ITEM_STACK_TEMPLATE_DEPTH: usize = 64;
+
+thread_local! {
+    static ITEM_STACK_TEMPLATE_DEPTH: Cell<usize> = const { Cell::new(0) };
+}
+
+struct ItemStackTemplateDepth;
+impl ItemStackTemplateDepth {
+    fn enter() -> Result<Self, ()> {
+        ITEM_STACK_TEMPLATE_DEPTH.with(|depth| {
+            let current = depth.get();
+            if current >= MAX_ITEM_STACK_TEMPLATE_DEPTH {
+                return Err(());
+            }
+            depth.set(current + 1);
+            Ok(Self)
+        })
+    }
+}
+impl Drop for ItemStackTemplateDepth {
+    fn drop(&mut self) {
+        ITEM_STACK_TEMPLATE_DEPTH.with(|depth| depth.set(depth.get() - 1));
+    }
+}
 
 #[must_use]
 pub fn data_to_proto_sound(id_or: &IdOr<SoundEvent>) -> crate::IdOr<crate::SoundEvent> {
@@ -837,6 +863,193 @@ mod hidden_effect_tests {
     }
 }
 
+#[cfg(test)]
+mod item_stack_template_tests {
+    use super::{
+        ChargedProjectilesImpl, ContainerImpl, CustomDataImpl, DataComponent, DataComponentCodec,
+        ReadingError, SulfurCubeContentImpl, UnbreakableImpl, UseRemainderImpl,
+        deserialize_item_stack_template, serialize_item_stack_template,
+    };
+    use pumpkin_data::data_component_impl::DataComponentImpl;
+    use pumpkin_data::item::Item;
+    use pumpkin_data::item_stack::ItemStack;
+    use pumpkin_nbt::compound::NbtCompound;
+
+    fn custom_stack() -> ItemStack {
+        let mut data = NbtCompound::new();
+        data.put_int("x", 7);
+        ItemStack::new_with_component(
+            2,
+            &Item::BOWL,
+            vec![(
+                DataComponent::CustomData,
+                Some(CustomDataImpl { data }.to_dyn()),
+            )],
+        )
+    }
+
+    #[test]
+    fn nested_template_preserves_custom_data_and_following_sentinel() {
+        let mut bytes = Vec::new();
+        serialize_item_stack_template(&custom_stack(), &mut bytes).expect("encode");
+        bytes.push(0x7f);
+
+        let expected = [
+            0x98, 0x07, 0x02, 0x01, 0x00, 0x00, 0x0a, 0x03, 0x00, 0x01, 0x78, 0x00, 0x00, 0x00,
+            0x07, 0x00, 0x7f,
+        ];
+        assert_eq!(bytes, expected);
+
+        let mut input = bytes.as_slice();
+        let decoded = deserialize_item_stack_template(&mut input).expect("decode");
+        assert_eq!(decoded.item, &Item::BOWL);
+        assert_eq!(decoded.item_count, 2);
+        assert_eq!(
+            decoded
+                .get_data_component::<CustomDataImpl>()
+                .expect("custom data")
+                .data
+                .get_int("x"),
+            Some(7)
+        );
+        assert_eq!(input, &[0x7f]);
+    }
+
+    fn nested_use_remainder_wire(depth: usize) -> Vec<u8> {
+        if depth == 0 {
+            return vec![0x98, 0x07, 0x01, 0x00, 0x00];
+        }
+        let mut bytes = vec![0x98, 0x07, 0x01, 0x01, 0x00, 0x19];
+        bytes.extend(nested_use_remainder_wire(depth - 1));
+        bytes
+    }
+
+    #[test]
+    fn nested_template_depth_has_checked_boundary() {
+        let at_limit_bytes = nested_use_remainder_wire(63);
+        let mut at_limit = at_limit_bytes.as_slice();
+        assert!(deserialize_item_stack_template(&mut at_limit).is_ok());
+        assert!(at_limit.is_empty());
+
+        let over_limit_bytes = nested_use_remainder_wire(64);
+        let mut over_limit = over_limit_bytes.as_slice();
+        assert!(matches!(
+            deserialize_item_stack_template(&mut over_limit),
+            Err(ReadingError::TooLarge(_))
+        ));
+        let mut after_error = [0x98, 0x07, 0x01, 0x00, 0x00].as_slice();
+        assert!(deserialize_item_stack_template(&mut after_error).is_ok());
+    }
+
+    #[test]
+    fn use_remainder_wire_roundtrip_keeps_template() {
+        let expected = UseRemainderImpl {
+            convert_into: custom_stack(),
+        };
+        let mut encoded = Vec::new();
+        expected.serialize(&mut encoded).expect("encode");
+        let mut input = encoded.as_slice();
+        let decoded = UseRemainderImpl::deserialize(&mut input).expect("decode");
+        assert!(input.is_empty());
+        assert_eq!(decoded, expected);
+    }
+
+    #[test]
+    fn nested_template_rejects_empty_unknown_and_negative_values() {
+        for bytes in [
+            vec![0x00, 0x01, 0x00, 0x00],
+            vec![0x8f, 0x4e, 0x01, 0x00, 0x00],
+            vec![0x98, 0x07, 0x00, 0x00, 0x00],
+            vec![0x98, 0x07, 0xff, 0xff, 0xff, 0xff, 0x0f, 0x00, 0x00],
+            vec![0x98, 0x07, 0x01, 0x01, 0x00, 0x80, 0x01],
+        ] {
+            let mut input = bytes.as_slice();
+            assert!(deserialize_item_stack_template(&mut input).is_err());
+        }
+    }
+
+    #[test]
+    fn stream_template_accepts_positive_count_above_nbt_range() {
+        let mut input = [0x98, 0x07, 0x64, 0x00, 0x00].as_slice();
+        let decoded = deserialize_item_stack_template(&mut input).expect("wire count 100");
+        assert_eq!(decoded.item, &Item::BOWL);
+        assert_eq!(decoded.item_count, 100);
+        assert!(input.is_empty());
+    }
+
+    #[test]
+    fn official_nested_component_shapes_have_independent_wire_fixtures() {
+        let container = ContainerImpl {
+            items: vec![(5, ItemStack::new(1, &Item::BOWL))],
+        };
+        let mut encoded = Vec::new();
+        container.serialize(&mut encoded).expect("container encode");
+        assert_eq!(encoded, [0x06, 0, 0, 0, 0, 0, 1, 0x98, 0x07, 1, 0, 0]);
+        let decoded =
+            ContainerImpl::deserialize(&mut encoded.as_slice()).expect("container decode");
+        assert_eq!(decoded.items[0].0, 5);
+
+        let charged = ChargedProjectilesImpl {
+            projectiles: vec![ItemStack::new(1, &Item::ARROW)],
+        };
+        let mut encoded = Vec::new();
+        charged.serialize(&mut encoded).expect("charged encode");
+        assert_eq!(encoded, [1, 0x9b, 0x07, 1, 0, 0]);
+        let decoded =
+            ChargedProjectilesImpl::deserialize(&mut encoded.as_slice()).expect("charged decode");
+        assert_eq!(decoded.projectiles[0].item, &Item::ARROW);
+
+        let sulfur = SulfurCubeContentImpl {
+            absorbed_block_item_stack: ItemStack::new(1, &Item::STONE),
+        };
+        let mut encoded = Vec::new();
+        sulfur.serialize(&mut encoded).expect("sulfur encode");
+        assert_eq!(encoded, [1, 1, 0, 0]);
+        let decoded =
+            SulfurCubeContentImpl::deserialize(&mut encoded.as_slice()).expect("sulfur decode");
+        assert_eq!(decoded.absorbed_block_item_stack.item, &Item::STONE);
+    }
+
+    #[test]
+    fn duplicate_patch_ids_are_last_write_wins_and_encode_once() {
+        let mut stack = ItemStack::new(1, &Item::BOWL);
+        stack
+            .patch
+            .push((DataComponent::Unbreakable, Some(UnbreakableImpl.to_dyn())));
+        stack.patch.push((DataComponent::Unbreakable, None));
+        let mut encoded = Vec::new();
+        serialize_item_stack_template(&stack, &mut encoded).expect("encode");
+        assert_eq!(encoded, [0x98, 0x07, 1, 0, 1, 4]);
+
+        let mut input = [0x98, 0x07, 1, 1, 1, 4, 4].as_slice();
+        let decoded = deserialize_item_stack_template(&mut input).expect("decode");
+        assert!(!decoded.has_data_component(DataComponent::Unbreakable));
+        assert!(input.is_empty());
+    }
+
+    #[test]
+    fn generated_known_remainder_defaults_roundtrip() {
+        for item in [
+            &Item::MILK_BUCKET,
+            &Item::HONEY_BOTTLE,
+            &Item::MUSHROOM_STEW,
+        ] {
+            let (_, value) = item
+                .components
+                .iter()
+                .find(|(id, _)| *id == DataComponent::UseRemainder)
+                .expect("generated remainder");
+            let remainder = super::get::<UseRemainderImpl>(*value);
+            let mut bytes = Vec::new();
+            remainder.serialize(&mut bytes).expect("encode");
+            let mut input = bytes.as_slice();
+            let decoded = UseRemainderImpl::deserialize(&mut input).expect("decode");
+            assert!(input.is_empty());
+            assert_eq!(decoded, *remainder);
+        }
+    }
+}
+
 impl DataComponentCodec<Self> for FireworkExplosionImpl {
     fn serialize(&self, seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
         // Shape (VarInt enum)
@@ -1365,10 +1578,24 @@ fn deserialize_item_stack_template(
     seq: &mut impl NetworkReadExt,
 ) -> Result<pumpkin_data::item_stack::ItemStack, ReadingError> {
     const MAX_COMPONENTS: i32 = 256;
+    let _depth = ItemStackTemplateDepth::enter()
+        .map_err(|()| ReadingError::TooLarge("ItemStackTemplate nesting exceeded".into()))?;
 
-    let item_id = seq.get_var_int()?.0 as u16;
+    let item_id = u16::try_from(seq.get_var_int()?.0)
+        .map_err(|_| ReadingError::Message("Invalid item ID in ItemStackTemplate".into()))?;
+    let item = pumpkin_data::item::Item::from_id(item_id)
+        .filter(|item| item.id != pumpkin_data::item::Item::AIR.id)
+        .ok_or_else(|| {
+            ReadingError::Message("Unknown or empty item ID in ItemStackTemplate".into())
+        })?;
 
-    let count = seq.get_var_int()?.0 as u8;
+    // The NBT codec has a 1..=99 range; STREAM_CODEC carries the raw
+    // positive count. ItemStack stores u8, so values above 255 remain an
+    // explicit Pumpkin representation ceiling rather than an official reject.
+    let count = u8::try_from(seq.get_var_int()?.0)
+        .ok()
+        .filter(|count| *count > 0)
+        .ok_or_else(|| ReadingError::Message("Invalid ItemStackTemplate count".into()))?;
 
     let num_to_add = seq.get_var_int()?.0;
     let num_to_remove = seq.get_var_int()?.0;
@@ -1391,26 +1618,34 @@ fn deserialize_item_stack_template(
 
     for _ in 0..num_to_add {
         let id_val = seq.get_var_int()?.0;
-        let id = DataComponent::try_from_id(id_val as u8)
+        let id = u8::try_from(id_val)
+            .ok()
+            .and_then(DataComponent::try_from_id)
             .ok_or_else(|| ReadingError::Message(format!("Unknown component ID: {id_val}")))?;
 
-        let _byte_len = seq.get_var_int()?;
-
         let component_impl = deserialize(id, seq)?;
-        patch.push((id, Some(component_impl)));
+        if let Some((_, value)) = patch.iter_mut().find(|(patch_id, _)| *patch_id == id) {
+            *value = Some(component_impl);
+        } else {
+            patch.push((id, Some(component_impl)));
+        }
     }
 
     for _ in 0..num_to_remove {
         let id_val = seq.get_var_int()?.0;
-        let id = DataComponent::try_from_id(id_val as u8)
+        let id = u8::try_from(id_val)
+            .ok()
+            .and_then(DataComponent::try_from_id)
             .ok_or_else(|| ReadingError::Message("Unknown component ID".into()))?;
-        patch.push((id, None));
+        if let Some((_, value)) = patch.iter_mut().find(|(patch_id, _)| *patch_id == id) {
+            *value = None;
+        } else {
+            patch.push((id, None));
+        }
     }
 
     Ok(pumpkin_data::item_stack::ItemStack::new_with_component(
-        count,
-        pumpkin_data::item::Item::from_id(item_id).unwrap_or(&pumpkin_data::item::Item::AIR),
-        patch,
+        count, item, patch,
     ))
 }
 
@@ -1418,30 +1653,52 @@ fn serialize_item_stack_template(
     stack: &pumpkin_data::item_stack::ItemStack,
     seq: &mut impl NetworkWriteExt,
 ) -> Result<(), WritingError> {
+    let _depth = ItemStackTemplateDepth::enter()
+        .map_err(|()| WritingError::Message("ItemStackTemplate nesting exceeded".into()))?;
+    if stack.item.id == pumpkin_data::item::Item::AIR.id || stack.item_count == 0 {
+        return Err(WritingError::Message(
+            "Invalid ItemStackTemplate item/count".into(),
+        ));
+    }
+
     seq.write_var_int(&VarInt::from(stack.item.id))?;
     seq.write_var_int(&VarInt::from(stack.item_count))?;
 
-    let mut to_add = 0u8;
-    let mut to_remove = 0u8;
-    for (_id, data) in &stack.patch {
-        if data.is_none() {
-            to_remove += 1;
-        } else {
-            to_add += 1;
-        }
+    let effective = stack
+        .patch
+        .iter()
+        .enumerate()
+        .filter(|(index, (id, _))| {
+            !stack.patch[index + 1..]
+                .iter()
+                .any(|(later_id, _)| later_id == id)
+        })
+        .map(|(_, entry)| entry)
+        .collect::<Vec<_>>();
+    let to_add = effective.iter().filter(|(_, data)| data.is_some()).count();
+    let to_remove = effective.iter().filter(|(_, data)| data.is_none()).count();
+    if to_add + to_remove > 256 {
+        return Err(WritingError::Message(
+            "Too many ItemStackTemplate components".into(),
+        ));
     }
 
-    seq.write_var_int(&VarInt::from(to_add))?;
-    seq.write_var_int(&VarInt::from(to_remove))?;
+    seq.write_var_int(&VarInt::from(
+        i32::try_from(to_add).map_err(|_| WritingError::Message("Too many components".into()))?,
+    ))?;
+    seq.write_var_int(&VarInt::from(
+        i32::try_from(to_remove)
+            .map_err(|_| WritingError::Message("Too many components".into()))?,
+    ))?;
 
-    for (id, data) in &stack.patch {
+    for (id, data) in &effective {
         if let Some(data) = data {
             seq.write_var_int(&VarInt::from(id.to_id()))?;
             serialize(*id, data.as_ref(), seq)?;
         }
     }
 
-    for (id, data) in &stack.patch {
+    for (id, data) in &effective {
         if data.is_none() {
             seq.write_var_int(&VarInt::from(id.to_id()))?;
         }
@@ -1452,7 +1709,17 @@ fn serialize_item_stack_template(
 
 impl DataComponentCodec<Self> for BundleContentsImpl {
     fn serialize(&self, seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
-        seq.write_var_int(&VarInt::from(self.items.len() as i32))?;
+        // Pumpkin defense ceiling; the official generic list codec has no
+        // component-specific 64-item maximum.
+        const MAX_BUNDLE_ITEMS: usize = 64;
+        if self.items.len() > MAX_BUNDLE_ITEMS {
+            return Err(WritingError::Message(
+                "Too many BundleContents items for Pumpkin limit".into(),
+            ));
+        }
+        seq.write_var_int(&VarInt::from(i32::try_from(self.items.len()).map_err(
+            |_| WritingError::Message("Too many BundleContents items for Pumpkin limit".into()),
+        )?))?;
         for item in &self.items {
             serialize_item_stack_template(item, seq)?;
         }
@@ -1460,13 +1727,16 @@ impl DataComponentCodec<Self> for BundleContentsImpl {
     }
 
     fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
+        // Pumpkin defense ceiling; this is not an official BundleContents
+        // wire maximum.
         const MAX_BUNDLE_ITEMS: usize = 64;
 
-        let len = seq.get_var_int()?.0 as usize;
+        let len = usize::try_from(seq.get_var_int()?.0)
+            .map_err(|_| ReadingError::Message("Negative BundleContents count".into()))?;
 
         if len > MAX_BUNDLE_ITEMS {
             return Err(ReadingError::Message(
-                "Too many items in BundleContents".into(),
+                "Too many BundleContents items for Pumpkin limit".into(),
             ));
         }
 
@@ -2360,15 +2630,13 @@ impl DataComponentCodec<Self> for FoodImpl {
 
 impl DataComponentCodec<Self> for UseRemainderImpl {
     fn serialize(&self, seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
-        seq.write_var_int(&VarInt(0))?;
-        seq.write_var_int(&VarInt(0))?;
-        seq.write_var_int(&VarInt(0))?;
-        seq.write_var_int(&VarInt(0))
+        serialize_item_stack_template(&self.convert_into, seq)
     }
 
     fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
-        let _ = deserialize_item_stack_template(seq)?;
-        Ok(Self)
+        Ok(Self {
+            convert_into: deserialize_item_stack_template(seq)?,
+        })
     }
 }
 
@@ -2844,22 +3112,34 @@ impl DataComponentCodec<Self> for MapPostProcessingImpl {
 
 impl DataComponentCodec<Self> for ChargedProjectilesImpl {
     fn serialize(&self, seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
-        seq.write_var_int(&VarInt::from(self.projectiles.len() as i32))?;
-        for _ in &self.projectiles {
-            seq.write_var_int(&VarInt(0))?;
-            seq.write_var_int(&VarInt(0))?;
-            seq.write_var_int(&VarInt(0))?;
-            seq.write_var_int(&VarInt(0))?;
+        const MAX_CHARGED_PROJECTILES: usize = 1024;
+        if self.projectiles.len() > MAX_CHARGED_PROJECTILES {
+            return Err(WritingError::Message(
+                "Too many ChargedProjectiles items for official limit".into(),
+            ));
+        }
+        seq.write_var_int(&VarInt::from(
+            i32::try_from(self.projectiles.len())
+                .map_err(|_| WritingError::Message("Too many ChargedProjectiles items".into()))?,
+        ))?;
+        for item in &self.projectiles {
+            serialize_item_stack_template(item, seq)?;
         }
         Ok(())
     }
 
     fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
-        let len = seq.get_var_int()?.0 as usize;
+        const MAX_CHARGED_PROJECTILES: usize = 1024;
+        let len = usize::try_from(seq.get_var_int()?.0)
+            .map_err(|_| ReadingError::Message("Negative ChargedProjectiles count".into()))?;
+        if len > MAX_CHARGED_PROJECTILES {
+            return Err(ReadingError::TooLarge(
+                "Too many ChargedProjectiles items for official limit".into(),
+            ));
+        }
         let mut projectiles = Vec::with_capacity(len);
         for _ in 0..len {
-            let _ = deserialize_item_stack_template(seq)?;
-            projectiles.push(pumpkin_nbt::compound::NbtCompound::new());
+            projectiles.push(deserialize_item_stack_template(seq)?);
         }
         Ok(Self { projectiles })
     }
@@ -3343,21 +3623,51 @@ impl DataComponentCodec<Self> for PotDecorationsImpl {
 
 impl DataComponentCodec<Self> for ContainerImpl {
     fn serialize(&self, seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
-        seq.write_var_int(&VarInt::from(self.items.len() as i32))?;
-        for (_slot, stack) in &self.items {
-            seq.write_bool(true)?;
-            serialize_item_stack_template(stack, seq)?;
+        const MAX_CONTAINER_SLOTS: usize = 256;
+        let len = self
+            .items
+            .iter()
+            .map(|(slot, _)| usize::from(*slot) + 1)
+            .max()
+            .unwrap_or(0);
+        if len > MAX_CONTAINER_SLOTS {
+            return Err(WritingError::Message(
+                "Too many Container slots for official limit".into(),
+            ));
+        }
+        seq.write_var_int(&VarInt::from(
+            i32::try_from(len)
+                .map_err(|_| WritingError::Message("Too many Container slots".into()))?,
+        ))?;
+        for slot in 0..len {
+            if let Some((_, stack)) = self
+                .items
+                .iter()
+                .rev()
+                .find(|(item_slot, _)| usize::from(*item_slot) == slot)
+            {
+                seq.write_bool(true)?;
+                serialize_item_stack_template(stack, seq)?;
+            } else {
+                seq.write_bool(false)?;
+            }
         }
         Ok(())
     }
 
     fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
-        let len = seq.get_var_int()?.0 as usize;
-        let mut items = Vec::with_capacity(len);
+        const MAX_CONTAINER_SLOTS: usize = 256;
+        let len = usize::try_from(seq.get_var_int()?.0)
+            .map_err(|_| ReadingError::Message("Negative Container count".into()))?;
+        if len > MAX_CONTAINER_SLOTS {
+            return Err(ReadingError::TooLarge(
+                "Too many Container slots for official limit".into(),
+            ));
+        }
+        let mut items = Vec::new();
         for slot in 0..len {
             if seq.get_bool()? {
-                let stack = deserialize_item_stack_template(seq)?;
-                items.push((slot as u8, stack));
+                items.push((slot as u8, deserialize_item_stack_template(seq)?));
             }
         }
         Ok(Self { items })
@@ -3407,15 +3717,13 @@ impl DataComponentCodec<Self> for BeesImpl {
 
 impl DataComponentCodec<Self> for SulfurCubeContentImpl {
     fn serialize(&self, seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
-        seq.write_var_int(&VarInt(0))?;
-        seq.write_var_int(&VarInt(0))?;
-        seq.write_var_int(&VarInt(0))?;
-        seq.write_var_int(&VarInt(0))
+        serialize_item_stack_template(&self.absorbed_block_item_stack, seq)
     }
 
     fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
-        let _ = deserialize_item_stack_template(seq)?;
-        Ok(Self)
+        Ok(Self {
+            absorbed_block_item_stack: deserialize_item_stack_template(seq)?,
+        })
     }
 }
 

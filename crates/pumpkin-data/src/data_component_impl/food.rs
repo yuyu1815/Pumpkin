@@ -4,6 +4,7 @@ use crate::data_component_impl::{
     get_idset_hash, get_str_hash, put_idor,
 };
 use crate::effect::StatusEffect;
+use crate::item_stack::ItemStack;
 use crate::sound::Sound;
 use crc_fast::CrcAlgorithm::Crc32Iscsi;
 use crc_fast::Digest;
@@ -62,7 +63,7 @@ fn nbt_number(tag: &NbtTag) -> Option<f64> {
     }
 }
 
-fn nbt_i32(tag: &NbtTag) -> Option<i32> {
+pub(crate) fn nbt_i32(tag: &NbtTag) -> Option<i32> {
     match tag {
         NbtTag::Byte(value) => Some(i32::from(*value)),
         NbtTag::Short(value) => Some(i32::from(*value)),
@@ -587,15 +588,48 @@ impl DataComponentImpl for UseEffectsImpl {
     default_impl!(UseEffects);
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct UseRemainderImpl;
+#[derive(Clone)]
+pub struct UseRemainderImpl {
+    pub convert_into: ItemStack,
+}
+impl std::fmt::Debug for UseRemainderImpl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UseRemainderImpl")
+            .field("item", &self.convert_into.item.registry_key)
+            .field("count", &self.convert_into.item_count)
+            .finish()
+    }
+}
+impl PartialEq for UseRemainderImpl {
+    fn eq(&self, other: &Self) -> bool {
+        self.convert_into.are_equal(&other.convert_into)
+    }
+}
+impl Eq for UseRemainderImpl {}
 impl UseRemainderImpl {
-    pub const fn read_data(_data: &NbtTag) -> Option<Self> {
-        Some(Self)
+    pub fn read_data(data: &NbtTag) -> Option<Self> {
+        Some(Self {
+            convert_into: ItemStack::read_item_stack_template(data)?,
+        })
     }
 }
 impl DataComponentImpl for UseRemainderImpl {
+    fn write_data(&self) -> NbtTag {
+        let mut compound = NbtCompound::new();
+        self.convert_into.write_item_stack(&mut compound);
+        NbtTag::Compound(compound)
+    }
+    fn get_hash(&self) -> i32 {
+        self.convert_into.get_hash()
+    }
     default_impl!(UseRemainder);
+}
+impl Hash for UseRemainderImpl {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.convert_into.item.id.hash(state);
+        self.convert_into.item_count.hash(state);
+        self.convert_into.get_hash().hash(state);
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]

@@ -250,17 +250,35 @@ impl DataComponentImpl for MapPostProcessingImpl {
     default_impl!(MapPostProcessing);
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone)]
 pub struct ChargedProjectilesImpl {
-    pub projectiles: Vec<NbtCompound>,
+    pub projectiles: Vec<crate::item_stack::ItemStack>,
 }
+impl std::fmt::Debug for ChargedProjectilesImpl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ChargedProjectilesImpl")
+            .field("count", &self.projectiles.len())
+            .finish()
+    }
+}
+impl PartialEq for ChargedProjectilesImpl {
+    fn eq(&self, other: &Self) -> bool {
+        self.projectiles.len() == other.projectiles.len()
+            && self
+                .projectiles
+                .iter()
+                .zip(&other.projectiles)
+                .all(|(left, right)| left.are_equal(right))
+    }
+}
+impl Eq for ChargedProjectilesImpl {}
 impl ChargedProjectilesImpl {
     pub fn read_data(data: &NbtTag) -> Option<Self> {
         let list = data.extract_list()?;
-        let mut projectiles = Vec::new();
-        for item in list {
-            projectiles.push(item.extract_compound()?.clone());
-        }
+        let projectiles = list
+            .iter()
+            .map(crate::item_stack::ItemStack::read_item_stack_template)
+            .collect::<Option<Vec<_>>>()?;
         Some(Self { projectiles })
     }
 }
@@ -268,12 +286,18 @@ impl DataComponentImpl for ChargedProjectilesImpl {
     fn write_data(&self) -> NbtTag {
         let mut list = Vec::new();
         for item in &self.projectiles {
-            list.push(NbtTag::Compound(item.clone()));
+            let mut compound = NbtCompound::new();
+            item.write_item_stack(&mut compound);
+            list.push(NbtTag::Compound(compound));
         }
         NbtTag::List(list)
     }
     fn get_hash(&self) -> i32 {
-        0
+        let mut digest = Digest::new(Crc32Iscsi);
+        for item in &self.projectiles {
+            digest.update(&item.get_hash().to_le_bytes());
+        }
+        digest.finalize() as i32
     }
     default_impl!(ChargedProjectiles);
 }
@@ -283,8 +307,13 @@ pub struct BundleContentsImpl {
     pub items: Vec<crate::item_stack::ItemStack>,
 }
 impl PartialEq for BundleContentsImpl {
-    fn eq(&self, _other: &Self) -> bool {
-        false
+    fn eq(&self, other: &Self) -> bool {
+        self.items.len() == other.items.len()
+            && self
+                .items
+                .iter()
+                .zip(&other.items)
+                .all(|(left, right)| left.are_equal(right))
     }
 }
 impl Eq for BundleContentsImpl {}
@@ -295,16 +324,11 @@ impl std::fmt::Debug for BundleContentsImpl {
 }
 impl BundleContentsImpl {
     pub fn read_data(tag: &NbtTag) -> Option<Self> {
-        let mut items = Vec::new();
-        if let NbtTag::List(l) = tag {
-            for item_tag in l {
-                if let NbtTag::Compound(c) = item_tag
-                    && let Some(stack) = crate::item_stack::ItemStack::read_item_stack(c)
-                {
-                    items.push(stack);
-                }
-            }
-        }
+        let list = tag.extract_list()?;
+        let items = list
+            .iter()
+            .map(crate::item_stack::ItemStack::read_item_stack_template)
+            .collect::<Option<Vec<_>>>()?;
         Some(Self { items })
     }
     pub fn get_weight(&self) -> u32 {
@@ -352,6 +376,13 @@ impl DataComponentImpl for BundleContentsImpl {
             list.push(NbtTag::Compound(item_compound));
         }
         NbtTag::List(list)
+    }
+    fn get_hash(&self) -> i32 {
+        let mut digest = Digest::new(Crc32Iscsi);
+        for item in &self.items {
+            digest.update(&item.get_hash().to_le_bytes());
+        }
+        digest.finalize() as i32
     }
     default_impl!(BundleContents);
 }

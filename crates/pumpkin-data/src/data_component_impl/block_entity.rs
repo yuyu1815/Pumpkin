@@ -52,8 +52,15 @@ pub struct ContainerImpl {
     pub items: Vec<(u8, crate::item_stack::ItemStack)>,
 }
 impl PartialEq for ContainerImpl {
-    fn eq(&self, _other: &Self) -> bool {
-        false
+    fn eq(&self, other: &Self) -> bool {
+        self.items.len() == other.items.len()
+            && self.items.iter().all(|(slot, stack)| {
+                other
+                    .items
+                    .iter()
+                    .find(|(other_slot, _)| other_slot == slot)
+                    .is_some_and(|(_, other_stack)| stack.are_equal(other_stack))
+            })
     }
 }
 impl Eq for ContainerImpl {}
@@ -64,18 +71,15 @@ impl std::fmt::Debug for ContainerImpl {
 }
 impl ContainerImpl {
     pub fn read_data(tag: &NbtTag) -> Option<Self> {
-        let mut items = Vec::new();
-        if let NbtTag::List(l) = tag {
-            for item_tag in l {
-                if let NbtTag::Compound(c) = item_tag
-                    && let Some(slot) = c.get_int("slot")
-                    && let Some(item_compound) = c.get_compound("item")
-                    && let Some(stack) =
-                        crate::item_stack::ItemStack::read_item_stack(item_compound)
-                {
-                    items.push((slot as u8, stack));
-                }
-            }
+        let list = tag.extract_list()?;
+        let mut items = Vec::with_capacity(list.len());
+        for item_tag in list {
+            let compound = item_tag.extract_compound()?;
+            let slot = crate::data_component_impl::food::nbt_i32(compound.get("slot")?)?;
+            let slot = u8::try_from(slot).ok()?;
+            let stack =
+                crate::item_stack::ItemStack::read_item_stack_template(compound.get("item")?)?;
+            items.push((slot, stack));
         }
         Some(Self { items })
     }
@@ -92,6 +96,20 @@ impl DataComponentImpl for ContainerImpl {
             list.push(NbtTag::Compound(entry));
         }
         NbtTag::List(list)
+    }
+    fn get_hash(&self) -> i32 {
+        let mut slots = self
+            .items
+            .iter()
+            .map(|(slot, stack)| (*slot, stack.get_hash()))
+            .collect::<Vec<_>>();
+        slots.sort_unstable_by_key(|(slot, _)| *slot);
+        let mut digest = Digest::new(Crc32Iscsi);
+        for (slot, hash) in slots {
+            digest.update(&[slot]);
+            digest.update(&hash.to_le_bytes());
+        }
+        digest.finalize() as i32
     }
     default_impl!(Container);
 }
@@ -207,13 +225,43 @@ impl DataComponentImpl for ContainerLootImpl {
     default_impl!(ContainerLoot);
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct SulfurCubeContentImpl;
+#[derive(Clone)]
+pub struct SulfurCubeContentImpl {
+    pub absorbed_block_item_stack: crate::item_stack::ItemStack,
+}
+impl std::fmt::Debug for SulfurCubeContentImpl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SulfurCubeContentImpl")
+            .field("item", &self.absorbed_block_item_stack.item.registry_key)
+            .field("count", &self.absorbed_block_item_stack.item_count)
+            .finish()
+    }
+}
+impl PartialEq for SulfurCubeContentImpl {
+    fn eq(&self, other: &Self) -> bool {
+        self.absorbed_block_item_stack
+            .are_equal(&other.absorbed_block_item_stack)
+    }
+}
+impl Eq for SulfurCubeContentImpl {}
 impl SulfurCubeContentImpl {
-    pub const fn read_data(_data: &NbtTag) -> Option<Self> {
-        Some(Self)
+    pub fn read_data(data: &NbtTag) -> Option<Self> {
+        Some(Self {
+            absorbed_block_item_stack: crate::item_stack::ItemStack::read_item_stack_template(
+                data,
+            )?,
+        })
     }
 }
 impl DataComponentImpl for SulfurCubeContentImpl {
+    fn write_data(&self) -> NbtTag {
+        let mut compound = NbtCompound::new();
+        self.absorbed_block_item_stack
+            .write_item_stack(&mut compound);
+        NbtTag::Compound(compound)
+    }
+    fn get_hash(&self) -> i32 {
+        self.absorbed_block_item_stack.get_hash()
+    }
     default_impl!(SulfurCubeContent);
 }

@@ -166,6 +166,19 @@ fn default_swing_animation_type() -> String {
     "whack".to_string()
 }
 
+fn default_item_stack_count() -> u8 {
+    1
+}
+
+#[derive(Deserialize)]
+struct UseRemainderComponent {
+    id: String,
+    #[serde(default = "default_item_stack_count")]
+    count: u8,
+    #[serde(default)]
+    components: serde_json::Map<String, serde_json::Value>,
+}
+
 const fn default_swing_animation_duration() -> i32 {
     6
 }
@@ -1023,8 +1036,32 @@ impl ToTokens for ItemComponents {
         if self.use_effects.is_some() {
             tokens.extend(quote! { (UseEffects, &UseEffectsImpl), });
         }
-        if self.use_remainder.is_some() {
-            tokens.extend(quote! { (UseRemainder, &UseRemainderImpl), });
+        if let Some(value) = &self.use_remainder {
+            let remainder: UseRemainderComponent = serde_json::from_value(value.clone())
+                .expect("invalid minecraft:use_remainder template");
+            assert!((1..=99).contains(&remainder.count));
+            assert!(
+                remainder.components.is_empty(),
+                "generated use_remainder components are not supported yet"
+            );
+            let item_name = remainder
+                .id
+                .strip_prefix("minecraft:")
+                .unwrap_or(&remainder.id)
+                .to_shouty_snake_case();
+            let item = format_ident!("{item_name}");
+            let count = LitInt::new(&remainder.count.to_string(), Span::call_site());
+            tokens.extend(quote! {
+                (
+                    UseRemainder,
+                    &UseRemainderImpl {
+                        convert_into: crate::item_stack::ItemStack::static_new_java(
+                            #count,
+                            &Item::#item,
+                        ),
+                    },
+                ),
+            });
         }
         if self.writable_book_content.is_some() {
             tokens.extend(

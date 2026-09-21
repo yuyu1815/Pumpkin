@@ -70,18 +70,9 @@ impl ItemBehaviour for CrossbowItem {
 
                 let drawn = ProjectileWeaponItem::draw(&stack, &projectile, is_creative);
                 if !drawn.is_empty() {
-                    let mut charged_nbts = Vec::new();
-                    for item in drawn {
-                        let mut arrow_nbt = pumpkin_nbt::compound::NbtCompound::new();
-                        item.write_item_stack(&mut arrow_nbt);
-                        charged_nbts.push(arrow_nbt);
-                    }
-
                     stack.patch.push((
                         DataComponent::ChargedProjectiles,
-                        Some(Box::new(ChargedProjectilesImpl {
-                            projectiles: charged_nbts,
-                        })),
+                        Some(Box::new(ChargedProjectilesImpl { projectiles: drawn })),
                     ));
                     player.inventory().set_held_item(stack);
 
@@ -119,12 +110,7 @@ impl CrossbowItem {
         let charged_opt = held.get_data_component::<ChargedProjectilesImpl>().cloned();
 
         if let Some(charged) = charged_opt {
-            let mut projectiles = Vec::new();
-            for projectile_nbt in charged.projectiles {
-                if let Some(projectile) = ItemStack::read_item_stack(&projectile_nbt) {
-                    projectiles.push(projectile);
-                }
-            }
+            let projectiles = charged.projectiles;
 
             if !projectiles.is_empty() {
                 let world = player.world();
