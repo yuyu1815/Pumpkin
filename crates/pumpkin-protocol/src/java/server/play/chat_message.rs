@@ -47,10 +47,32 @@ impl<'a> ServerPacket<'a> for SChatMessage<'a> {
             } else {
                 let _signed_preview = read.get_u8()? != 0;
                 if version >= &JavaMinecraftVersion::V_1_19_1 {
-                    // Legacy last seen messages
-                    // Not fully mapping legacy fields, just reading to consume bytes if needed, but the packet structure doesn't match easily without bigger refactor
-                    // Since pumpkin relies on these bytes to be consumed, we might just leave this for now or skip
-                    // Actually, if we just want to compile, let's leave legacy unhandled as it requires more structs
+                    let previous_messages = read.get_var_int()?.0;
+                    if !(0..=20).contains(&previous_messages) {
+                        return Err(ReadingError::Message(format!(
+                            "Invalid previous chat message count: {previous_messages}"
+                        )));
+                    }
+                    for _ in 0..previous_messages {
+                        let _sender = read.get_uuid()?;
+                        let signature_len = read.get_var_int()?.0;
+                        if !(0..=256).contains(&signature_len) {
+                            return Err(ReadingError::Message(format!(
+                                "Invalid previous chat signature length: {signature_len}"
+                            )));
+                        }
+                        read.read_slice_borrowed(signature_len as usize)?;
+                    }
+                    let _last_rejected = read.get_option(|read| {
+                        let _sender = read.get_uuid()?;
+                        let signature_len = read.get_var_int()?.0;
+                        if !(0..=256).contains(&signature_len) {
+                            return Err(ReadingError::Message(format!(
+                                "Invalid rejected chat signature length: {signature_len}"
+                            )));
+                        }
+                        read.read_slice_borrowed(signature_len as usize)
+                    })?;
                 }
             }
         }
@@ -68,6 +90,30 @@ impl<'a> ServerPacket<'a> for SChatMessage<'a> {
             acknowledged,
             checksum,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_legacy_last_seen_messages_completely() {
+        let mut payload = vec![1, b'x'];
+        payload.extend_from_slice(&[0; 8]);
+        payload.extend_from_slice(&[0; 8]);
+        payload.push(0); // absent signature
+        payload.push(0); // signed preview
+        payload.push(1); // one previous message
+        payload.extend_from_slice(&[0; 16]); // sender UUID
+        payload.extend_from_slice(&[0x80, 0x02]); // 256-byte signature
+        payload.extend_from_slice(&[0; 256]);
+        payload.push(0); // no rejected message
+
+        let mut remaining = payload.as_slice();
+        let packet = SChatMessage::read(&mut remaining, &JavaMinecraftVersion::V_1_19_1).unwrap();
+        assert_eq!(packet.message, "x");
+        assert!(remaining.is_empty(), "{} bytes remain", remaining.len());
     }
 }
 

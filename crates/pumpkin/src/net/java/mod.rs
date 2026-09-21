@@ -1690,25 +1690,26 @@ impl JavaClient {
         }
 
         let mut payload = &event.payload[..];
+        macro_rules! read_play_packet {
+            ($packet:ty) => {{
+                let packet = <$packet>::read(&mut payload, &version)?;
+                require_empty_body(&payload, stringify!($packet))?;
+                packet
+            }};
+        }
         match event.packet_id {
             id if id == SConfirmTeleport::to_id(version) => {
-                self.handle_confirm_teleport(
-                    player,
-                    &SConfirmTeleport::read(&mut payload, &version)?,
-                );
+                self.handle_confirm_teleport(player, &read_play_packet!(SConfirmTeleport));
             }
             id if id == SChangeGameMode::to_id(version) => {
-                self.handle_change_game_mode(
-                    player,
-                    &SChangeGameMode::read(&mut payload, &version)?,
-                );
+                self.handle_change_game_mode(player, &read_play_packet!(SChangeGameMode));
             }
             id if id == SChatAck::to_id(version) => {
-                let packet = SChatAck::read(&mut payload, &version)?;
+                let packet = read_play_packet!(SChatAck);
                 self.handle_chat_ack(player, &packet);
             }
             id if id == SChatCommand::to_id(version) => {
-                let packet = SChatCommand::read(&mut payload, &version)?;
+                let packet = read_play_packet!(SChatCommand);
                 let cmd = packet.command.to_string();
                 let client_platform = player.client.clone();
                 let player_c = player.clone();
@@ -1731,7 +1732,7 @@ impl JavaClient {
                 }
             }
             id if id == SChatMessage::to_id(version) => {
-                let packet = SChatMessage::read(&mut payload, &version)?;
+                let packet = read_play_packet!(SChatMessage);
                 let msg = packet.message.to_string();
                 let signature = packet.signature.map(<[u8]>::to_vec);
                 let ack = packet.acknowledged.to_vec();
@@ -1763,219 +1764,166 @@ impl JavaClient {
                 self.handle_client_information(
                     server,
                     player,
-                    &SClientInformationPlay::read(&mut payload, &version)?,
+                    &read_play_packet!(SClientInformationPlay),
                 );
             }
             id if id == SClientCommand::to_id(version) => {
-                self.handle_client_status(player, &SClientCommand::read(&mut payload, &version)?);
+                self.handle_client_status(player, &read_play_packet!(SClientCommand));
             }
             id if id == SPlayerInput::to_id(version) => {
-                self.handle_player_input(
-                    player,
-                    &SPlayerInput::read(&mut payload, &version)?,
-                    server,
-                );
+                self.handle_player_input(player, &read_play_packet!(SPlayerInput), server);
             }
             id if id == SMoveVehicle::to_id(version) => {
-                self.handle_move_vehicle(player, &SMoveVehicle::read(&mut payload, &version)?);
+                self.handle_move_vehicle(player, &read_play_packet!(SMoveVehicle));
             }
             id if id == SPaddleBoat::to_id(version) => {
-                self.handle_paddle_boat(player, &SPaddleBoat::read(&mut payload, &version)?);
+                self.handle_paddle_boat(player, &read_play_packet!(SPaddleBoat));
             }
             id if id == SInteract::to_id(version) => {
-                self.handle_interact(player, &SInteract::read(&mut payload, &version)?, server);
+                self.handle_interact(player, &read_play_packet!(SInteract), server);
             }
             id if id == SBundleItemSelected::to_id(version) => {
-                self.handle_bundle_item_selected(
-                    player,
-                    &SBundleItemSelected::read(&mut payload, &version)?,
-                );
+                self.handle_bundle_item_selected(player, &read_play_packet!(SBundleItemSelected));
             }
             id if id == SAttack::to_id(version) => {
-                self.handle_attack(player, &SAttack::read(&mut payload, &version)?, server);
+                self.handle_attack(player, &read_play_packet!(SAttack), server);
             }
             id if id == STeleportToEntity::to_id(version) => {
                 self.handle_teleport_to_entity(
                     player,
-                    &STeleportToEntity::read(&mut payload, &version)?,
+                    &read_play_packet!(STeleportToEntity),
                     server,
                 );
             }
             id if id == pumpkin_protocol::java::server::play::SKeepAlive::to_id(version) => {
                 self.handle_keep_alive(
                     player,
-                    &pumpkin_protocol::java::server::play::SKeepAlive::read(
-                        &mut payload,
-                        &version,
-                    )?,
+                    &read_play_packet!(pumpkin_protocol::java::server::play::SKeepAlive),
                 );
             }
             id if id == SClientTickEnd::to_id(version) => {
+                let _ = read_play_packet!(SClientTickEnd);
                 self.handle_client_tick_end(player);
             }
             id if id == STestInstanceBlockAction::to_id(version) => {
                 self.handle_test_instance_block_action(
                     player,
-                    &STestInstanceBlockAction::read(&mut payload, &version)?,
+                    &read_play_packet!(STestInstanceBlockAction),
                 );
             }
             id if id == SSetTestBlock::to_id(version) => {
-                self.handle_set_test_block(player, &SSetTestBlock::read(&mut payload, &version)?);
+                self.handle_set_test_block(player, &read_play_packet!(SSetTestBlock));
             }
             id if id == SDebugSubscriptionRequest::to_id(version) => {
                 self.handle_debug_subscription_request(
                     player,
-                    &SDebugSubscriptionRequest::read(&mut payload, &version)?,
+                    &read_play_packet!(SDebugSubscriptionRequest),
                 );
             }
             id if id == SDebugSampleSubscription::to_id(version) => {
                 self.handle_debug_sample_subscription(
                     player,
-                    &SDebugSampleSubscription::read(&mut payload, &version)?,
+                    &read_play_packet!(SDebugSampleSubscription),
                 );
             }
             id if id == SPlayerPosition::to_id(version) => {
-                self.handle_position(
-                    player,
-                    server,
-                    &SPlayerPosition::read(&mut payload, &version)?,
-                );
+                self.handle_position(player, server, &read_play_packet!(SPlayerPosition));
             }
             id if id == SPlayerPositionRotation::to_id(version) => {
                 self.handle_position_rotation(
                     player,
                     server,
-                    &SPlayerPositionRotation::read(&mut payload, &version)?,
+                    &read_play_packet!(SPlayerPositionRotation),
                 );
             }
             id if id == SPlayerRotation::to_id(version) => {
-                self.handle_rotation(player, &SPlayerRotation::read(&mut payload, &version)?);
+                self.handle_rotation(player, &read_play_packet!(SPlayerRotation));
             }
             id if id == SSetPlayerGround::to_id(version) => {
-                self.handle_player_ground(player, &SSetPlayerGround::read(&mut payload, &version)?);
+                self.handle_player_ground(player, &read_play_packet!(SSetPlayerGround));
             }
             id if id == SPickItemFromBlock::to_id(version) => {
-                self.handle_pick_item_from_block(
-                    player,
-                    &SPickItemFromBlock::read(&mut payload, &version)?,
-                );
+                self.handle_pick_item_from_block(player, &read_play_packet!(SPickItemFromBlock));
             }
             id if id
                 == pumpkin_protocol::java::server::play::SPickItemFromEntity::to_id(version) =>
             {
                 self.handle_pick_item_from_entity(
                     player,
-                    &pumpkin_protocol::java::server::play::SPickItemFromEntity::read(
-                        &mut payload,
-                        &version,
-                    )?,
+                    &read_play_packet!(pumpkin_protocol::java::server::play::SPickItemFromEntity),
                 );
             }
             id if id == SPlayerAbilities::to_id(version) => {
-                self.handle_player_abilities(
-                    player,
-                    &SPlayerAbilities::read(&mut payload, &version)?,
-                    server,
-                );
+                self.handle_player_abilities(player, &read_play_packet!(SPlayerAbilities), server);
             }
             id if id == SPlayerAction::to_id(version) => {
-                self.handle_player_action(
-                    player,
-                    &SPlayerAction::read(&mut payload, &version)?,
-                    server,
-                );
+                self.handle_player_action(player, &read_play_packet!(SPlayerAction), server);
             }
             id if id == SSetCommandBlock::to_id(version) => {
-                self.handle_set_command_block(
-                    player,
-                    &SSetCommandBlock::read(&mut payload, &version)?,
-                );
+                self.handle_set_command_block(player, &read_play_packet!(SSetCommandBlock));
             }
             id if id == SSetJigsawBlock::to_id(version) => {
-                self.handle_set_jigsaw_block(
-                    player,
-                    &SSetJigsawBlock::read(&mut payload, &version)?,
-                );
+                self.handle_set_jigsaw_block(player, &read_play_packet!(SSetJigsawBlock));
             }
             id if id == SJigsawGenerate::to_id(version) => {
-                self.handle_jigsaw_generate(
-                    player,
-                    &SJigsawGenerate::read(&mut payload, &version)?,
-                );
+                self.handle_jigsaw_generate(player, &read_play_packet!(SJigsawGenerate));
             }
             id if id == SPlayerCommand::to_id(version) => {
-                self.handle_player_command(
-                    player,
-                    &SPlayerCommand::read(&mut payload, &version)?,
-                    server,
-                );
+                self.handle_player_command(player, &read_play_packet!(SPlayerCommand), server);
             }
             id if id == SPlayerLoaded::to_id(version) => {
+                let _ = read_play_packet!(SPlayerLoaded);
                 Self::handle_player_loaded(player);
             }
             id if id == SPlayPingRequest::to_id(version) => {
-                self.handle_play_ping_request(&SPlayPingRequest::read(&mut payload, &version)?);
+                self.handle_play_ping_request(&read_play_packet!(SPlayPingRequest));
             }
             id if id == SClickSlot::to_id(version) => {
-                player.on_slot_click(SClickSlot::read(&mut payload, &version)?, server);
+                player.on_slot_click(read_play_packet!(SClickSlot), server);
             }
             id if id == SContainerButtonClick::to_id(version) => {
-                player.on_container_button_click(&SContainerButtonClick::read(
-                    &mut payload,
-                    &version,
-                )?);
+                player.on_container_button_click(&read_play_packet!(SContainerButtonClick));
             }
             id if id == SSetHeldItem::to_id(version) => {
-                self.handle_set_held_item(
-                    server,
-                    player,
-                    &SSetHeldItem::read(&mut payload, &version)?,
-                );
+                self.handle_set_held_item(server, player, &read_play_packet!(SSetHeldItem));
             }
             id if id == SSetCreativeSlot::to_id(version) => {
-                self.handle_set_creative_slot(
-                    player,
-                    SSetCreativeSlot::read(&mut payload, &version)?,
-                )?;
+                self.handle_set_creative_slot(player, read_play_packet!(SSetCreativeSlot))?;
             }
             id if id == SSwingArm::to_id(version) => {
-                self.handle_swing_arm(server, player, &SSwingArm::read(&mut payload, &version)?);
+                self.handle_swing_arm(server, player, &read_play_packet!(SSwingArm));
             }
             id if id == SUpdateSign::to_id(version) => {
-                self.handle_sign_update(player, &SUpdateSign::read(&mut payload, &version)?);
+                self.handle_sign_update(player, &read_play_packet!(SUpdateSign));
             }
             id if id == SEditBook::to_id(version) => {
-                self.handle_edit_book(player, &SEditBook::read(&mut payload, &version)?);
+                self.handle_edit_book(player, &read_play_packet!(SEditBook));
             }
             id if id == SUseItemOn::to_id(version) => {
-                self.handle_use_item_on(
-                    player,
-                    &SUseItemOn::read(&mut payload, &version)?,
-                    server,
-                )?;
+                self.handle_use_item_on(player, &read_play_packet!(SUseItemOn), server)?;
             }
             id if id == SUseItem::to_id(version) => {
-                self.handle_use_item(player, &SUseItem::read(&mut payload, &version)?, server);
+                self.handle_use_item(player, &read_play_packet!(SUseItem), server);
             }
             id if id == SCommandSuggestion::to_id(version) => {
                 self.handle_command_suggestion(
                     player,
-                    &SCommandSuggestion::read(&mut payload, &version)?,
+                    &read_play_packet!(SCommandSuggestion),
                     server,
                 );
             }
             id if id == SPCookieResponse::to_id(version) => {
-                self.handle_cookie_response(&SPCookieResponse::read(&mut payload, &version)?);
+                self.handle_cookie_response(&read_play_packet!(SPCookieResponse));
             }
             id if id == SCloseContainer::to_id(version) => {
-                let packet = SCloseContainer::read(&mut payload, &version)?;
+                let packet = read_play_packet!(SCloseContainer);
                 self.handle_close_container(player, packet.window_id.0);
             }
             id if id == SChunkBatch::to_id(version) => {
-                self.handle_chunk_batch(player, &SChunkBatch::read(&mut payload, &version)?);
+                self.handle_chunk_batch(player, &read_play_packet!(SChunkBatch));
             }
             id if id == SPlayerSession::to_id(version) => {
-                let session = SPlayerSession::read(&mut payload, &version)?;
+                let session = read_play_packet!(SPlayerSession);
                 let client_platform = player.client.clone();
                 let player_c = player.clone();
                 let server_c = server.clone();
@@ -1988,7 +1936,7 @@ impl JavaClient {
                 });
             }
             id if id == SCustomPayload::to_id(version) => {
-                let payload = SCustomPayload::read(&mut payload, &version)?;
+                let payload = read_play_packet!(SCustomPayload);
                 let channel_str = payload.channel.to_string();
                 let mut event = PlayerCustomPayloadEvent::new(
                     player.clone(),
@@ -2035,30 +1983,28 @@ impl JavaClient {
                 self.handle_recipe_book_change_settings(
                     server,
                     player,
-                    &SRecipeBookChangeSettings::read(&mut payload, &version)?,
+                    &read_play_packet!(SRecipeBookChangeSettings),
                 );
             }
             id if id == SRecipeBookSeenRecipe::to_id(version) => {
                 self.handle_recipe_book_seen_recipe(
                     server,
                     player,
-                    &SRecipeBookSeenRecipe::read(&mut payload, &version)?,
+                    &read_play_packet!(SRecipeBookSeenRecipe),
                 );
             }
             id if id == SRenameItem::to_id(version) => {
-                player.on_rename_item(&SRenameItem::read(&mut payload, &version)?);
+                player.on_rename_item(&read_play_packet!(SRenameItem));
             }
             id if id == SPlaceRecipe::to_id(version) => {
-                let packet = SPlaceRecipe::read(&mut payload, &version)?;
+                let packet = read_play_packet!(SPlaceRecipe);
                 self.handle_place_recipe(server, player, &packet);
             }
             id if id
                 == pumpkin_protocol::java::server::play::SCustomClickAction::to_id(version) =>
             {
-                let packet = pumpkin_protocol::java::server::play::SCustomClickAction::read(
-                    &mut payload,
-                    &version,
-                )?;
+                let packet =
+                    read_play_packet!(pumpkin_protocol::java::server::play::SCustomClickAction);
                 let mut event = crate::plugin::api::events::dialog::dialog_click_action::DialogClickActionEvent::new(
                     player.clone(),
                     packet.action_id.to_string(),
@@ -2067,80 +2013,60 @@ impl JavaClient {
                 server.plugin_manager.fire_blocking(server, &mut event);
             }
             id if id == SSelectTrade::to_id(version) => {
-                self.handle_select_trade(player, &SSelectTrade::read(&mut payload, &version)?);
+                self.handle_select_trade(player, &read_play_packet!(SSelectTrade));
             }
             id if id == SSeenAdvancement::to_id(version) => {
-                self.handle_seen_advancement(
-                    player,
-                    &SSeenAdvancement::read(&mut payload, &version)?,
-                );
+                self.handle_seen_advancement(player, &read_play_packet!(SSeenAdvancement));
             }
             id if id == SPlayResourcePack::to_id(version) => {
                 self.handle_play_resource_pack_response(
                     server,
                     player,
-                    &SPlayResourcePack::read(&mut payload, &version)?,
+                    &read_play_packet!(SPlayResourcePack),
                 );
             }
             id if id == SPlayPong::to_id(version) => {
-                self.handle_play_pong(player, &SPlayPong::read(&mut payload, &version)?);
+                self.handle_play_pong(player, &read_play_packet!(SPlayPong));
             }
             id if id == SLockDifficulty::to_id(version) => {
-                self.handle_lock_difficulty(
-                    server,
-                    player,
-                    &SLockDifficulty::read(&mut payload, &version)?,
-                );
+                self.handle_lock_difficulty(server, player, &read_play_packet!(SLockDifficulty));
             }
             id if id == SChangeDifficulty::to_id(version) => {
                 self.handle_change_difficulty(
                     server,
                     player,
-                    &SChangeDifficulty::read(&mut payload, &version)?,
+                    &read_play_packet!(SChangeDifficulty),
                 );
             }
             id if id == SSetBeacon::to_id(version) => {
-                self.handle_set_beacon(player, &SSetBeacon::read(&mut payload, &version)?);
+                self.handle_set_beacon(player, &read_play_packet!(SSetBeacon));
             }
             id if id == SContainerSlotStateChanged::to_id(version) => {
                 self.handle_container_slot_state_changed(
                     player,
-                    &SContainerSlotStateChanged::read(&mut payload, &version)?,
+                    &read_play_packet!(SContainerSlotStateChanged),
                 );
             }
             id if id == SSpectateEntity::to_id(version) => {
-                self.handle_spectate_entity(
-                    player,
-                    server,
-                    &SSpectateEntity::read(&mut payload, &version)?,
-                );
+                self.handle_spectate_entity(player, server, &read_play_packet!(SSpectateEntity));
             }
             id if id == SSetCommandMinecart::to_id(version) => {
-                self.handle_set_command_minecart(
-                    player,
-                    &SSetCommandMinecart::read(&mut payload, &version)?,
-                );
+                self.handle_set_command_minecart(player, &read_play_packet!(SSetCommandMinecart));
             }
             id if id == SSetStructureBlock::to_id(version) => {
-                self.handle_set_structure_block(
-                    player,
-                    &SSetStructureBlock::read(&mut payload, &version)?,
-                );
+                self.handle_set_structure_block(player, &read_play_packet!(SSetStructureBlock));
             }
             id if id == SSetGameRule::to_id(version) => {
-                self.handle_set_game_rule(player, &SSetGameRule::read(&mut payload, &version)?);
+                self.handle_set_game_rule(player, &read_play_packet!(SSetGameRule));
             }
             id if id == SBlockEntityTagQuery::to_id(version) => {
                 self.handle_block_entity_tag_query(
                     player,
-                    &SBlockEntityTagQuery::read(&mut payload, &version)?,
+                    &read_play_packet!(SBlockEntityTagQuery),
                 );
             }
             id if id == SEntityTagQuery::to_id(version) => {
-                self.handle_entity_tag_query(
-                    player,
-                    &SEntityTagQuery::read(&mut payload, &version)?,
-                );
+                self.handle_entity_tag_query(player, &read_play_packet!(SEntityTagQuery));
             }
             id if id == SConfigurationAcknowledged::to_id(version) => {
                 let _ = SConfigurationAcknowledged::read(&mut payload, &version)?;
@@ -2640,5 +2566,172 @@ mod configuration_state_tests {
         assert!(claim_finish(&phase));
         assert_eq!(phase.load(), ConfigurationPhase::Play);
         assert!(!claim_finish(&phase));
+    }
+}
+
+#[cfg(test)]
+mod play_dispatch_tests {
+    use super::JavaClient;
+    use arc_swap::ArcSwap;
+    use bytes::Bytes;
+    use pumpkin_config::{AdvancedConfiguration, BasicConfiguration, TelemetryConfig};
+    use pumpkin_protocol::{
+        RawPacket,
+        java::server::play::{SPlayerLoaded, SSetPlayerGround},
+        packet::MultiVersionJavaPacket,
+    };
+    use pumpkin_util::version::JavaMinecraftVersion;
+    use std::net::SocketAddr;
+    use std::sync::Arc;
+    use tempfile::TempDir;
+    use tokio::net::{TcpListener, TcpStream};
+    use uuid::Uuid;
+
+    fn test_vanilla_data() -> crate::data::VanillaData {
+        crate::data::VanillaData {
+            banned_ip_list: std::sync::RwLock::new(Default::default()),
+            banned_player_list: std::sync::RwLock::new(Default::default()),
+            operator_config: std::sync::RwLock::new(Default::default()),
+            user_cache: std::sync::RwLock::new(Default::default()),
+            whitelist_config: std::sync::RwLock::new(Default::default()),
+        }
+    }
+
+    async fn runtime_java_client(
+        profile: &crate::net::GameProfile,
+    ) -> Arc<crate::net::ClientPlatform> {
+        let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
+            .await
+            .expect("play-dispatch fixture listener");
+        let address = listener
+            .local_addr()
+            .expect("play-dispatch fixture address");
+        let connector = tokio::spawn(TcpStream::connect(address));
+        let (server_stream, peer_address) = listener
+            .accept()
+            .await
+            .expect("play-dispatch fixture accept");
+        let _peer = connector
+            .await
+            .expect("play-dispatch connector task")
+            .expect("play-dispatch fixture connect");
+        let pending = crate::net::java::pending::PendingConnection::new(
+            server_stream,
+            peer_address,
+            1,
+            crate::net::PacketRateLimiter::new(false, 0.0, 0.0),
+        );
+        Arc::new(crate::net::ClientPlatform::Java(JavaClient::from_pending(
+            pending,
+            profile.clone(),
+            crate::net::PlayerConfig::default(),
+        )))
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn play_dispatch_rejects_trailing_s_player_loaded_payload() {
+        let temp_world = TempDir::new().expect("temporary runtime world");
+        let mut basic = BasicConfiguration::default();
+        basic.default_level_name = temp_world.path().to_string_lossy().into_owned();
+        basic.allow_nether = false;
+        basic.allow_end = false;
+        basic.allow_chat_reports = false;
+        basic.spawn_protection = 0;
+        basic.use_favicon = false;
+
+        let mut advanced = AdvancedConfiguration::default();
+        advanced.logging.enabled = false;
+        advanced.plugins.enabled = false;
+        advanced.commands.use_console = false;
+        advanced.commands.use_tty = false;
+        advanced.networking.java.enabled = false;
+        advanced.networking.bedrock.enabled = false;
+        advanced.networking.query.enabled = false;
+        advanced.networking.lan_broadcast.enabled = false;
+        let server = crate::server::Server::new(
+            basic,
+            advanced,
+            TelemetryConfig {
+                enabled: false,
+                ..TelemetryConfig::default()
+            },
+            test_vanilla_data(),
+        )
+        .await;
+        let profile = crate::net::GameProfile {
+            id: Uuid::from_u128(0x2620_0005),
+            name: "play_dispatch_fixture".to_owned(),
+            properties: ArcSwap::from_pointee(Vec::new()),
+            profile_actions: None,
+        };
+        let (player, _) = server
+            .add_player(
+                runtime_java_client(&profile).await,
+                profile,
+                Some(crate::net::PlayerConfig::default()),
+            )
+            .expect("fixture player published");
+        player.set_client_loaded(false);
+        let java = match player.client.as_ref() {
+            crate::net::ClientPlatform::Java(java) => java,
+            crate::net::ClientPlatform::Bedrock(_) => panic!("Java fixture expected"),
+        };
+        let packet = RawPacket {
+            id: SPlayerLoaded::to_id(JavaMinecraftVersion::V_26_2),
+            payload: Bytes::from_static(&[0]),
+        };
+
+        assert!(
+            java.handle_play_packet(&player, &server, &packet).is_err(),
+            "play dispatch must reject trailing SPlayerLoaded bytes before handler side effects"
+        );
+        assert!(!player.has_client_loaded());
+
+        let valid_unit = RawPacket {
+            id: SPlayerLoaded::to_id(JavaMinecraftVersion::V_26_2),
+            payload: Bytes::new(),
+        };
+        assert!(
+            java.handle_play_packet(&player, &server, &valid_unit)
+                .is_ok()
+        );
+        assert!(player.has_client_loaded());
+
+        player
+            .living_entity
+            .entity
+            .on_ground
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        let invalid_payload = RawPacket {
+            id: SSetPlayerGround::to_id(JavaMinecraftVersion::V_26_2),
+            payload: Bytes::from_static(&[1, 0]),
+        };
+        assert!(
+            java.handle_play_packet(&player, &server, &invalid_payload)
+                .is_err()
+        );
+        assert!(
+            !player
+                .living_entity
+                .entity
+                .on_ground
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+
+        let valid_payload = RawPacket {
+            id: SSetPlayerGround::to_id(JavaMinecraftVersion::V_26_2),
+            payload: Bytes::from_static(&[1]),
+        };
+        assert!(
+            java.handle_play_packet(&player, &server, &valid_payload)
+                .is_ok()
+        );
+        assert!(
+            player
+                .living_entity
+                .entity
+                .on_ground
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
     }
 }

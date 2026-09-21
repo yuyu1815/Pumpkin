@@ -176,7 +176,7 @@ impl JavaClient {
         };
 
         // Read minimum count from occupied slots before clearing (needed for stacking).
-        let current_min = if recipe_matches && !use_max {
+        let current_min = if recipe_matches {
             let mut min = u8::MAX;
             for (idx, ing) in ingredient_slots.iter().enumerate() {
                 if ing.is_some() {
@@ -190,6 +190,25 @@ impl JavaClient {
         } else {
             0
         };
+
+        if recipe_matches {
+            let next_amount = current_min.saturating_add(1);
+            let exceeds_current_capacity = ingredient_slots.iter().enumerate().any(|(idx, ing)| {
+                ing.is_some() && next_amount > crafting_inv.get_stack(idx).get_max_stack_size()
+            });
+            if exceeds_current_capacity {
+                let screen_handler_arc = player
+                    .current_screen_handler
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .clone();
+                screen_handler_arc
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .send_content_updates();
+                return;
+            }
+        }
 
         // Always clear the grid first, returning items to inventory.
         for i in 0..grid_size {
@@ -223,11 +242,27 @@ impl JavaClient {
             return;
         }
 
+        // Confirm the same first-fit allocation used by the donor helper before
+        // consuming anything; otherwise a tag/one-of choice can consume the
+        // donor needed by a later ingredient.
+        if compute_biggest_craftable(&active_ingredients, &player.inventory) < amount_to_craft {
+            let screen_handler_arc = player
+                .current_screen_handler
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone();
+            screen_handler_arc
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .send_content_updates();
+            return;
+        }
+
         // Fill each grid slot with exactly `amount_to_craft` matching items.
         for (idx, ing) in ingredient_slots.iter().enumerate() {
             let Some(ingredient) = ing else { continue };
             let taken = take_n_ingredient(&player.inventory, ingredient, amount_to_craft);
-            if !taken.is_empty() {
+            if taken.item_count == amount_to_craft {
                 crafting_inv.set_stack(idx, taken);
             }
         }
