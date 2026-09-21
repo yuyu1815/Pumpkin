@@ -4,13 +4,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::chunk::format::anvil::SingleChunkDataSerializer;
-use crate::chunk::io::{ChunkSerializer, LoadedData, run_blocking};
+use crate::chunk::io::{ChunkSerializer, LoadedData, run_blocking, sync_path};
 use crate::chunk::{ChunkReadingError, ChunkWritingError};
 use bytes::Bytes;
 use pumpkin_util::math::vector2::Vector2;
 use ruzstd::decoding::StreamingDecoder;
 use ruzstd::encoding::{CompressionLevel, compress_to_vec};
 use serde::{Deserialize, Serialize};
+use tokio::io::AsyncWriteExt;
 
 pub struct PumpFile<D> {
     pub data: PumpData,
@@ -33,6 +34,39 @@ impl<D> Default for PumpFile<D> {
     }
 }
 
+impl<D> PumpFile<D> {
+    async fn serialized_bytes(&self) -> Result<Vec<u8>, std::io::Error> {
+        let data = self.data.clone();
+        run_blocking(move || {
+            let mut root = pumpkin_nbt::compound::NbtCompound::new();
+            root.put_int("x", data.x);
+            root.put_int("z", data.z);
+            let mut chunks_comp = pumpkin_nbt::compound::NbtCompound::new();
+            for (k, v) in data.chunks {
+                let i8_vec: Vec<i8> = v.iter().map(|&b| b as i8).collect();
+                chunks_comp.put(&k, pumpkin_nbt::tag::NbtTag::ByteArray(i8_vec.into()));
+            }
+            root.put_compound("chunks", chunks_comp);
+            pumpkin_nbt::Nbt::from(root).write_unnamed()
+        })
+        .await
+        .map(|bytes| bytes.to_vec())
+        .map_err(|_| std::io::Error::other("pump serialization task failed"))
+    }
+
+    async fn write_durable(&self, backend: &PathBuf) -> Result<(), std::io::Error> {
+        let temp_path = backend.with_extension("tmp");
+        let file = tokio::fs::File::create(&temp_path).await?;
+        let mut writer = tokio::io::BufWriter::new(file);
+        writer.write_all(&self.serialized_bytes().await?).await?;
+        writer.flush().await?;
+        writer.get_mut().sync_all().await?;
+        drop(writer);
+        tokio::fs::rename(temp_path, backend).await?;
+        sync_path(backend).await
+    }
+}
+
 impl<D> ChunkSerializer for PumpFile<D>
 where
     D: SingleChunkDataSerializer + Send + Sync + Sized + 'static,
@@ -52,22 +86,11 @@ where
     }
 
     async fn write(&self, backend: &Self::WriteBackend) -> Result<(), std::io::Error> {
-        let data = self.data.clone();
-        let bytes = run_blocking(move || {
-            let mut root = pumpkin_nbt::compound::NbtCompound::new();
-            root.put_int("x", data.x);
-            root.put_int("z", data.z);
-            let mut chunks_comp = pumpkin_nbt::compound::NbtCompound::new();
-            for (k, v) in data.chunks {
-                let i8_vec: Vec<i8> = v.iter().map(|&b| b as i8).collect();
-                chunks_comp.put(&k, pumpkin_nbt::tag::NbtTag::ByteArray(i8_vec.into()));
-            }
-            root.put_compound("chunks", chunks_comp);
-            pumpkin_nbt::Nbt::from(root).write_unnamed()
-        })
-        .await
-        .map_err(|_| std::io::Error::other("pump serialization task failed"))?;
-        tokio::fs::write(backend, bytes).await
+        tokio::fs::write(backend, self.serialized_bytes().await?).await
+    }
+
+    async fn sync_all(&self, backend: &Self::WriteBackend) -> Result<(), std::io::Error> {
+        self.write_durable(backend).await
     }
 
     fn read(r: Bytes) -> Result<Self, ChunkReadingError> {

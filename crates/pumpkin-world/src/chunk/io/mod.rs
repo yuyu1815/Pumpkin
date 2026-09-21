@@ -16,6 +16,20 @@ where
     tokio::task::spawn_blocking(task).await
 }
 
+/// Force the contents and metadata of an already-published file to the OS.
+///
+/// This is intentionally called only by the explicit flush path. A successful
+/// return is not a power-loss guarantee for atomic rename directory entries.
+pub(crate) async fn sync_path(path: &std::path::Path) -> Result<(), std::io::Error> {
+    tokio::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)
+        .await?
+        .sync_all()
+        .await
+}
+
 /// The result of loading a chunk data.
 ///
 /// It can be the data loaded successfully, the data not found or an error
@@ -93,6 +107,12 @@ where
 
     /// Ensure that all ongoing operations are finished
     fn block_and_await_ongoing_tasks(&self) -> impl Future<Output = ()> + Send + '_;
+
+    /// Publish and force all logical writes not yet covered by an explicit flush.
+    fn sync_all<'a>(
+        &'a self,
+        folder: &'a LevelFolder,
+    ) -> impl Future<Output = Result<(), ChunkWritingError>> + Send + 'a;
 }
 
 /// Trait to serialize and deserialize the chunk data to and from bytes.
@@ -112,6 +132,15 @@ pub trait ChunkSerializer: Send + Sync + Default + 'static {
 
     /// Serialize the data to bytes.
     fn write(
+        &self,
+        backend: &Self::WriteBackend,
+    ) -> impl Future<Output = Result<(), std::io::Error>> + Send;
+
+    /// Publish the current serializer state and force it to the OS.
+    ///
+    /// Implementations must not make this a no-op: unsupported backends must
+    /// return an error instead of reporting a false flush success.
+    fn sync_all(
         &self,
         backend: &Self::WriteBackend,
     ) -> impl Future<Output = Result<(), std::io::Error>> + Send;

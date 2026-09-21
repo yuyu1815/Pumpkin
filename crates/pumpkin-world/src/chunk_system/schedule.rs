@@ -3,13 +3,13 @@ use super::chunk_holder::ChunkHolder;
 use super::chunk_state::{Chunk, StagedChunkEnum};
 use super::dag::{DAG, EdgeKey, Node, NodeKey};
 use super::generation_cache::{Cache, SurfaceBiomeNeighborhood};
-use super::worker_logic::{RecvChunk, io_read_work, io_write_work};
+use super::worker_logic::{IoWriteCommand, RecvChunk, io_read_work, io_write_work};
 use super::{
     ChunkLevel, ChunkListener, ChunkLoading, ChunkPos, HashMapType, HashSetType, IOLock,
     LevelChannel,
 };
 use crate::chunk::io::Dirtiable;
-use crate::level::{Level, LoadedChunkChange, SyncChunk};
+use crate::level::{FlushRequest, Level, LoadedChunkChange, SyncChunk};
 use dashmap::DashMap;
 use pumpkin_config::lighting::LightingEngineConfig;
 use pumpkin_util::math::vector2::Vector2;
@@ -77,7 +77,8 @@ pub struct GenerationSchedule {
     queue_dirty: bool,
     recv_chunk: crossbeam::channel::Receiver<(ChunkPos, RecvChunk)>,
     io_read: tokio::sync::mpsc::Sender<Vec<ChunkPos>>,
-    io_write: tokio::sync::mpsc::Sender<Vec<(ChunkPos, Chunk)>>,
+    io_write: tokio::sync::mpsc::Sender<IoWriteCommand>,
+    save_requests: tokio::sync::mpsc::Receiver<FlushRequest>,
     send_chunk: crossbeam::channel::Sender<(ChunkPos, RecvChunk)>,
     listener: Arc<ChunkListener>,
     lighting_config: LightingEngineConfig,
@@ -110,11 +111,12 @@ impl GenerationSchedule {
         removed
     }
 
-    pub fn create(
+    pub(crate) fn create(
         io_read_thread_count: usize,
         level: Arc<Level>,
         level_channel: Arc<LevelChannel>,
         listener: Arc<ChunkListener>,
+        save_requests: tokio::sync::mpsc::Receiver<FlushRequest>,
         thread_tracker: &mut Vec<thread::JoinHandle<()>>,
     ) {
         let (send_chunk, recv_chunk) = crossbeam::channel::unbounded();
@@ -178,6 +180,7 @@ impl GenerationSchedule {
                     recv_chunk,
                     io_read: send_read_io,
                     io_write: send_write_io,
+                    save_requests,
                     send_chunk,
                     listener,
                     chunk_map: HashMap::default(),
@@ -922,15 +925,34 @@ impl GenerationSchedule {
             *data.entry(*pos).or_insert(0) += 1;
         }
         drop(data);
-        if let Err(e) = self.io_write.blocking_send(chunks) {
-            error!(
-                "Failed to send chunks to io write thread during save (may have shut down): {:?}",
-                e
-            );
+        if let Err(tokio::sync::mpsc::error::SendError(IoWriteCommand::Chunks(chunks))) =
+            self.io_write.blocking_send(IoWriteCommand::Chunks(chunks))
+        {
+            self.release_io_locks(chunks.into_iter().map(|(pos, _)| pos));
+            error!("Failed to send chunks to io write thread during save (may have shut down)");
         }
     }
 
-    fn save_all_chunk(&mut self, save_proto_chunk: bool) {
+    fn release_io_locks(&self, positions: impl IntoIterator<Item = ChunkPos>) {
+        let mut data = self
+            .io_lock
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for pos in positions {
+            if let Some(count) = data.get_mut(&pos) {
+                if *count <= 1 {
+                    data.remove(&pos);
+                } else {
+                    *count -= 1;
+                }
+            }
+        }
+        drop(data);
+        self.io_lock.1.notify_waiters();
+    }
+
+    fn save_all_chunk(&mut self, save_proto_chunk: bool) -> Result<(), String> {
         let mut chunks = Vec::with_capacity(self.chunk_map.len());
 
         for (pos, holder) in &mut self.chunk_map {
@@ -958,7 +980,7 @@ impl GenerationSchedule {
         }
 
         if chunks.is_empty() {
-            return;
+            return Ok(());
         }
 
         info!(
@@ -977,8 +999,49 @@ impl GenerationSchedule {
         }
         drop(data);
 
-        if let Err(e) = self.io_write.blocking_send(chunks) {
-            error!("Failed to send chunks to io write thread: {:?}", e);
+        match self.io_write.blocking_send(IoWriteCommand::Chunks(chunks)) {
+            Ok(()) => Ok(()),
+            Err(tokio::sync::mpsc::error::SendError(IoWriteCommand::Chunks(chunks))) => {
+                self.release_io_locks(chunks.into_iter().map(|(pos, _)| pos));
+                Err("chunk write worker is closed".to_string())
+            }
+            Err(tokio::sync::mpsc::error::SendError(IoWriteCommand::Barrier { .. })) => {
+                unreachable!("save_all_chunk sends only chunk batches")
+            }
+        }
+    }
+
+    fn reject_pending_flushes(&mut self, error: &str) {
+        while let Ok(request) = self.save_requests.try_recv() {
+            let _ = request.completion.send(Err(error.to_string()));
+        }
+    }
+
+    fn process_save_requests(&mut self, level: &Arc<Level>) {
+        let mut requests = Vec::new();
+        while let Ok(request) = self.save_requests.try_recv() {
+            requests.push(request);
+        }
+
+        let save_requested = level.should_save.swap(false, Relaxed);
+        if (save_requested || !requests.is_empty())
+            && let Err(error) = self.save_all_chunk(false)
+        {
+            error!("Failed to queue chunks for save: {error}");
+            for request in requests {
+                let _ = request.completion.send(Err(error.clone()));
+            }
+            return;
+        }
+
+        for request in requests {
+            if let Err(tokio::sync::mpsc::error::SendError(IoWriteCommand::Barrier {
+                completion,
+            })) = self.io_write.blocking_send(IoWriteCommand::Barrier {
+                completion: request.completion,
+            }) {
+                let _ = completion.send(Err("chunk write worker is closed".to_string()));
+            }
         }
     }
 
@@ -1398,19 +1461,19 @@ impl GenerationSchedule {
             thread::current().name().unwrap_or("unknown")
         );
         loop {
-            if level.should_unload.swap(false, Relaxed) {
-                self.garbage_collect_dependencies();
-                self.process_unload_queue();
-            }
-            if level.should_save.swap(false, Relaxed) {
-                self.save_all_chunk(false);
-            }
             if level.shut_down_chunk_system.load(Relaxed) {
+                self.reject_pending_flushes("chunk save system stopped during shutdown");
                 info!("Saving chunks before shutdown...");
                 self.garbage_collect_dependencies();
                 self.process_unload_queue();
-                self.save_all_chunk(true);
+                if let Err(error) = self.save_all_chunk(true) {
+                    error!("Failed to queue shutdown chunk save: {error}");
+                }
                 break;
+            }
+            if level.should_unload.swap(false, Relaxed) {
+                self.garbage_collect_dependencies();
+                self.process_unload_queue();
             }
 
             // 1. Get latest world state (player moves, etc)
@@ -1427,6 +1490,11 @@ impl GenerationSchedule {
                 self.process_unload_queue();
                 self.last_unload = std::time::Instant::now();
             }
+
+            // Capture flush requests after all writes discovered by this scheduler
+            // iteration have been queued, making each barrier the tail of that
+            // iteration's write queue.
+            self.process_save_requests(level);
 
             // 2. Process all pending chunk results from workers
             while let Ok((pos, data)) = self.recv_chunk.try_recv() {
@@ -1445,7 +1513,9 @@ impl GenerationSchedule {
                 if level.shut_down_chunk_system.load(Relaxed) {
                     self.queue.push(task);
                     info!("Shutdown detected during task processing, saving chunks...");
-                    self.save_all_chunk(true);
+                    if let Err(error) = self.save_all_chunk(true) {
+                        error!("Failed to queue shutdown chunk save: {error}");
+                    }
                     break 'out2;
                 }
 
@@ -1541,7 +1611,9 @@ impl GenerationSchedule {
                                 .is_err()
                         {
                             info!("IO read thread closed, saving remaining chunks...");
-                            self.save_all_chunk(true);
+                            if let Err(error) = self.save_all_chunk(true) {
+                                error!("Failed to queue shutdown chunk save: {error}");
+                            }
                             break 'out2;
                         }
                     } else {
@@ -1553,7 +1625,9 @@ impl GenerationSchedule {
                                 .is_err()
                         {
                             info!("IO read thread closed, saving remaining chunks...");
-                            self.save_all_chunk(true);
+                            if let Err(error) = self.save_all_chunk(true) {
+                                error!("Failed to queue shutdown chunk save: {error}");
+                            }
                             break 'out2;
                         }
 
@@ -1707,7 +1781,9 @@ impl GenerationSchedule {
                     .is_err()
             {
                 info!("IO read thread closed, saving remaining chunks...");
-                self.save_all_chunk(true);
+                if let Err(error) = self.save_all_chunk(true) {
+                    error!("Failed to queue shutdown chunk save: {error}");
+                }
             }
 
             // 5. Wait for work or results
@@ -1918,7 +1994,7 @@ mod anvil_load_integration_tests {
         let level = Level::from_root_folder(
             &config,
             temp_dir.path().to_path_buf(),
-            26_2,
+            262,
             Dimension::OVERWORLD,
         );
         let pos = ChunkPos::new(0, 0);
@@ -1979,7 +2055,7 @@ mod anvil_load_integration_tests {
         pos: ChunkPos,
     ) -> (
         GenerationSchedule,
-        tokio::sync::mpsc::Receiver<Vec<(ChunkPos, Chunk)>>,
+        tokio::sync::mpsc::Receiver<IoWriteCommand>,
     ) {
         let mut graph = DAG::default();
         let occupied = graph.nodes.insert(Node::new(pos, StagedChunkEnum::Empty));
@@ -1993,7 +2069,8 @@ mod anvil_load_integration_tests {
             },
         );
         let (io_read, _read_rx) = tokio::sync::mpsc::channel::<Vec<ChunkPos>>(1);
-        let (io_write, write_rx) = tokio::sync::mpsc::channel::<Vec<(ChunkPos, Chunk)>>(1);
+        let (io_write, write_rx) = tokio::sync::mpsc::channel::<IoWriteCommand>(1);
+        let (_save_requests, save_request_rx) = tokio::sync::mpsc::channel(1);
         let generation_pool = Arc::new(
             rayon::ThreadPoolBuilder::new()
                 .num_threads(1)
@@ -2024,6 +2101,7 @@ mod anvil_load_integration_tests {
                 recv_chunk,
                 io_read,
                 io_write,
+                save_requests: save_request_rx,
                 send_chunk,
                 listener: level.chunk_listener.clone(),
                 lighting_config: level.lighting_config,
@@ -2116,7 +2194,9 @@ mod anvil_load_integration_tests {
             assert!(holder.chunk.is_some(), "normal result reaches scheduler");
         }
         if was_failure {
-            scheduler.save_all_chunk(true);
+            scheduler
+                .save_all_chunk(true)
+                .expect("empty failure save queue");
             assert!(scheduler.io_lock.0.lock().unwrap().is_empty());
             // A failure holder has no chunk to enqueue, so save_all_chunk has no
             // write-side effect to observe beyond the empty lock set and hash below.
@@ -2198,6 +2278,292 @@ mod anvil_load_integration_tests {
     }
 
     #[tokio::test]
+    async fn empty_flush_request_reaches_worker_and_completes() {
+        let temp_dir = TempDir::new().expect("empty flush tempdir");
+        let level = Level::from_root_folder(
+            &LevelConfig {
+                autosave_ticks: 0,
+                ..LevelConfig::default()
+            },
+            temp_dir.path().to_path_buf(),
+            262,
+            Dimension::OVERWORLD,
+        );
+
+        assert_eq!(level.request_chunk_flush().await, Ok(()));
+        level.shutdown().await.expect("test level shutdown");
+        drop(temp_dir);
+    }
+
+    #[tokio::test]
+    async fn ordinary_save_queues_without_a_completion_barrier() {
+        let temp_dir = TempDir::new().expect("ordinary save tempdir");
+        let level = Level::from_root_folder(
+            &LevelConfig {
+                autosave_ticks: 0,
+                ..LevelConfig::default()
+            },
+            temp_dir.path().to_path_buf(),
+            262,
+            Dimension::OVERWORLD,
+        );
+        let pos = ChunkPos::new(0, 0);
+        let (send_chunk, recv_chunk) = crossbeam::channel::unbounded();
+        let (scheduler, writes) = test_schedule(&level, recv_chunk, send_chunk, pos);
+        let level_for_process = level.clone();
+        let (scheduler, mut writes) = tokio::task::spawn_blocking(move || {
+            let mut scheduler = scheduler;
+            let chunk = ChunkData::empty_sync(pos.x, pos.y);
+            chunk.mark_dirty(true);
+            scheduler
+                .chunk_map
+                .get_mut(&pos)
+                .expect("test holder")
+                .chunk = Some(Chunk::Level(chunk));
+            level_for_process.should_save.store(true, Relaxed);
+            scheduler.process_save_requests(&level_for_process);
+            (scheduler, writes)
+        })
+        .await
+        .expect("ordinary save scheduler");
+
+        assert!(matches!(writes.try_recv(), Ok(IoWriteCommand::Chunks(_))));
+        assert!(
+            writes.try_recv().is_err(),
+            "ordinary save must not enqueue a barrier"
+        );
+        drop(scheduler);
+        level.shutdown().await.expect("test level shutdown");
+        drop(temp_dir);
+    }
+
+    #[tokio::test]
+    async fn flush_barrier_stays_pending_until_prior_writer_releases() {
+        let (send, mut recv) = tokio::sync::mpsc::channel(2);
+        let (release, wait) = tokio::sync::oneshot::channel();
+        let (complete, mut result) = tokio::sync::oneshot::channel();
+        let worker = tokio::spawn(async move {
+            assert!(matches!(recv.recv().await, Some(IoWriteCommand::Chunks(_))));
+            wait.await.expect("writer gate release");
+            let Some(IoWriteCommand::Barrier { completion }) = recv.recv().await else {
+                panic!("barrier missing after writer");
+            };
+            let _ = completion.send(Ok(()));
+        });
+
+        send.send(IoWriteCommand::Chunks(Vec::new()))
+            .await
+            .expect("queue writer command");
+        send.send(IoWriteCommand::Barrier {
+            completion: complete,
+        })
+        .await
+        .expect("queue barrier");
+        tokio::task::yield_now().await;
+        assert!(
+            result.try_recv().is_err(),
+            "barrier acknowledged before writer"
+        );
+
+        release.send(()).expect("release writer gate");
+        assert_eq!(result.await.expect("barrier result"), Ok(()));
+        worker.await.expect("gate worker join");
+    }
+
+    #[tokio::test]
+    async fn io_write_barrier_propagates_region_error_and_keeps_dirty() {
+        let (temp_dir, level, region_path, _original_hash) = create_fixture(Fixture::Normal).await;
+        let pos = ChunkPos::new(0, 0);
+        let chunk = ChunkData::empty_sync(pos.x, pos.y);
+        chunk.mark_dirty(true);
+        let blocked_temp = region_path.with_extension("tmp");
+        tokio::fs::create_dir(&blocked_temp)
+            .await
+            .expect("block region temp path");
+
+        let (send, recv) = tokio::sync::mpsc::channel(2);
+        let lock = Arc::new((
+            std::sync::Mutex::new(HashMapType::default()),
+            tokio::sync::Notify::new(),
+        ));
+        lock.0.lock().unwrap().insert(pos, 1);
+        let worker = tokio::spawn(io_write_work(recv, level.clone(), lock.clone()));
+        let (complete, result) = tokio::sync::oneshot::channel();
+        send.send(IoWriteCommand::Chunks(vec![(
+            pos,
+            Chunk::Level(chunk.clone()),
+        )]))
+        .await
+        .expect("queue failing chunk");
+        send.send(IoWriteCommand::Barrier {
+            completion: complete,
+        })
+        .await
+        .expect("queue failing barrier");
+
+        assert!(result.await.expect("worker completion channel").is_err());
+        assert!(chunk.is_dirty(), "failed write must remain dirty for retry");
+        assert!(
+            lock.0.lock().unwrap().is_empty(),
+            "I/O lock must be released"
+        );
+
+        tokio::fs::remove_dir(&blocked_temp)
+            .await
+            .expect("remove blocking temp path");
+        let (retry_complete, retry_result) = tokio::sync::oneshot::channel();
+        send.send(IoWriteCommand::Chunks(vec![(pos, Chunk::Level(chunk))]))
+            .await
+            .expect("queue retry chunk");
+        send.send(IoWriteCommand::Barrier {
+            completion: retry_complete,
+        })
+        .await
+        .expect("queue retry barrier");
+        assert_eq!(
+            retry_result.await.expect("retry completion channel"),
+            Ok(())
+        );
+
+        drop(send);
+        worker.await.expect("write worker join");
+        level.shutdown().await.expect("test level shutdown");
+        drop(temp_dir);
+    }
+
+    #[tokio::test]
+    async fn io_write_barrier_propagates_disk_sync_error() {
+        let (temp_dir, level, region_path, _original_hash) = create_fixture(Fixture::Normal).await;
+        let pos = ChunkPos::new(0, 0);
+        let chunk = ChunkData::empty_sync(pos.x, pos.y);
+        chunk.mark_dirty(true);
+        level
+            .chunk_saver
+            .save_chunks(&level.level_folder, vec![(pos, chunk)])
+            .await
+            .expect("logical write before disk sync failure");
+        tokio::fs::remove_file(&region_path)
+            .await
+            .expect("remove region before forced sync failure");
+
+        let (send, recv) = tokio::sync::mpsc::channel(2);
+        let lock = Arc::new((
+            std::sync::Mutex::new(HashMapType::default()),
+            tokio::sync::Notify::new(),
+        ));
+        let worker = tokio::spawn(io_write_work(recv, level.clone(), lock));
+        let (complete, result) = tokio::sync::oneshot::channel();
+        send.send(IoWriteCommand::Chunks(Vec::new()))
+            .await
+            .expect("queue empty logical batch");
+        send.send(IoWriteCommand::Barrier {
+            completion: complete,
+        })
+        .await
+        .expect("queue disk sync barrier");
+
+        let error = result
+            .await
+            .expect("worker completion channel")
+            .expect_err("missing region must fail explicit disk sync");
+        assert!(error.contains("chunk disk sync failed"));
+
+        drop(send);
+        worker.await.expect("write worker join");
+        level.shutdown().await.expect("test level shutdown");
+        drop(temp_dir);
+    }
+
+    #[tokio::test]
+    async fn io_write_worker_close_cannot_leave_barrier_pending() {
+        let temp_dir = TempDir::new().expect("worker close tempdir");
+        let level = Level::from_root_folder(
+            &LevelConfig {
+                autosave_ticks: 0,
+                ..LevelConfig::default()
+            },
+            temp_dir.path().to_path_buf(),
+            262,
+            Dimension::OVERWORLD,
+        );
+        let (send, recv) = tokio::sync::mpsc::channel(1);
+        let lock = Arc::new((
+            std::sync::Mutex::new(HashMapType::default()),
+            tokio::sync::Notify::new(),
+        ));
+        let worker = tokio::spawn(io_write_work(recv, level.clone(), lock));
+        worker.abort();
+        worker.await.expect_err("aborted worker must be observable");
+        let (complete, result) = tokio::sync::oneshot::channel();
+        assert!(
+            send.send(IoWriteCommand::Barrier {
+                completion: complete
+            })
+            .await
+            .is_err()
+        );
+        drop(result);
+        level.shutdown().await.expect("test level shutdown");
+        drop(temp_dir);
+    }
+
+    #[tokio::test]
+    async fn io_write_barrier_rejects_shutdown_race() {
+        let temp_dir = TempDir::new().expect("shutdown barrier tempdir");
+        let level = Level::from_root_folder(
+            &LevelConfig {
+                autosave_ticks: 0,
+                ..LevelConfig::default()
+            },
+            temp_dir.path().to_path_buf(),
+            262,
+            Dimension::OVERWORLD,
+        );
+        level.shut_down_chunk_system.store(true, Relaxed);
+        let (send, recv) = tokio::sync::mpsc::channel(1);
+        let lock = Arc::new((
+            std::sync::Mutex::new(HashMapType::default()),
+            tokio::sync::Notify::new(),
+        ));
+        let worker = tokio::spawn(io_write_work(recv, level.clone(), lock));
+        let (completion, result) = tokio::sync::oneshot::channel();
+        send.send(IoWriteCommand::Barrier { completion })
+            .await
+            .expect("queue shutdown-racing barrier");
+        let error = result
+            .await
+            .expect("shutdown barrier completion channel")
+            .expect_err("shutdown-racing barrier must not report success");
+        assert!(error.contains("shutting down"));
+        drop(send);
+        worker.await.expect("write worker join");
+        level.shutdown().await.expect("test level shutdown");
+        drop(temp_dir);
+    }
+
+    #[tokio::test]
+    async fn closed_chunk_system_returns_flush_error() {
+        let temp_dir = TempDir::new().expect("closed flush tempdir");
+        let level = Level::from_root_folder(
+            &LevelConfig {
+                autosave_ticks: 0,
+                ..LevelConfig::default()
+            },
+            temp_dir.path().to_path_buf(),
+            262,
+            Dimension::OVERWORLD,
+        );
+        level.shut_down_chunk_system.store(true, Relaxed);
+        let error = level
+            .request_chunk_flush()
+            .await
+            .expect_err("closed chunk system must reject flush");
+        assert!(error.contains("shutting down"));
+        level.shutdown().await.expect("test level shutdown");
+        drop(temp_dir);
+    }
+
+    #[tokio::test]
     async fn publishing_saved_ticks_registers_the_chunk_for_tick_collection() {
         let temp_dir = TempDir::new().expect("tick registry tempdir");
         let level = Level::from_root_folder(
@@ -2208,7 +2574,7 @@ mod anvil_load_integration_tests {
         );
         let pos = ChunkPos::new(0, 0);
         let (send_chunk, recv_chunk) = crossbeam::channel::unbounded();
-        let (mut scheduler, _save_rx) = test_schedule(&level, recv_chunk, send_chunk, pos);
+        let (scheduler, _save_rx) = test_schedule(&level, recv_chunk, send_chunk, pos);
         let chunk = ChunkData::empty_sync(pos.x, pos.y);
         chunk.block_ticks.schedule_tick(
             &crate::tick::ScheduledTick {

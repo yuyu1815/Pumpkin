@@ -12,6 +12,13 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering::Relaxed;
 use tracing::{debug, error, warn};
 
+pub(crate) enum IoWriteCommand {
+    Chunks(Vec<(ChunkPos, Chunk)>),
+    Barrier {
+        completion: tokio::sync::oneshot::Sender<Result<(), String>>,
+    },
+}
+
 pub enum RecvChunk {
     IO(Chunk),
     /// A disk read/parse/decompression failure is terminal for this request.
@@ -222,79 +229,93 @@ pub async fn io_read_work(
     debug!("io read thread stop");
 }
 
-pub async fn io_write_work(
-    mut recv: tokio::sync::mpsc::Receiver<Vec<(ChunkPos, Chunk)>>,
+pub(crate) async fn io_write_work(
+    mut recv: tokio::sync::mpsc::Receiver<IoWriteCommand>,
     level: Arc<Level>,
     lock: IOLock,
 ) {
-    loop {
-        // Don't check cancel_token here (keep saving chunks)
-        let Some(data) = recv.recv().await else { break };
-        // debug!("io write thread receive chunks size {}", data.len());
-        let positions = data.iter().map(|(pos, _)| *pos).collect::<Vec<_>>();
-        let level_for_upgrade = level.clone();
-        let upgrade_result = run_blocking(move || {
-            let mut vec = Vec::with_capacity(data.len());
-            for (pos, chunk) in data {
-                match chunk {
-                    Chunk::Level(chunk) => vec.push((pos, chunk)),
-                    Chunk::Proto(chunk) => {
-                        let mut temp = Chunk::Proto(chunk);
-                        temp.upgrade_to_level_chunk(
-                            level_for_upgrade.world_gen.load().dimension(),
-                            &level_for_upgrade.lighting_config,
-                        );
-                        let Chunk::Level(chunk) = temp else { panic!() };
-                        vec.push((pos, chunk));
-                    }
-                }
-            }
-            vec
-        })
-        .await;
-        let upgrade_failed = match upgrade_result {
-            Ok(vec) => {
-                if let Err(e) = level
-                    .chunk_saver
-                    .save_chunks(&level.level_folder, vec)
-                    .await
-                {
-                    error!("Failed to save chunks: {:?}", e);
-                }
-                false
-            }
-            Err(_) => true,
-        };
+    let mut pending_error = None;
 
-        {
-            let mut data = lock
-                .0
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            for i in positions {
-                match data.entry(i) {
-                    Entry::Occupied(mut entry) => {
-                        let rc = entry.get_mut();
-                        if *rc <= 1 {
-                            entry.remove();
-                        } else {
-                            *rc -= 1;
+    while let Some(command) = recv.recv().await {
+        match command {
+            IoWriteCommand::Chunks(data) => {
+                let positions = data.iter().map(|(pos, _)| *pos).collect::<Vec<_>>();
+                let level_for_upgrade = level.clone();
+                let result = match run_blocking(move || {
+                    let mut vec = Vec::with_capacity(data.len());
+                    for (pos, chunk) in data {
+                        match chunk {
+                            Chunk::Level(chunk) => vec.push((pos, chunk)),
+                            Chunk::Proto(chunk) => {
+                                let mut temp = Chunk::Proto(chunk);
+                                temp.upgrade_to_level_chunk(
+                                    level_for_upgrade.world_gen.load().dimension(),
+                                    &level_for_upgrade.lighting_config,
+                                );
+                                let Chunk::Level(chunk) = temp else { panic!() };
+                                vec.push((pos, chunk));
+                            }
                         }
                     }
-                    Entry::Vacant(_) => {
-                        warn!(
-                            "io_write: attempted to release missing lock entry for {:?}",
-                            i
-                        );
+                    vec
+                })
+                .await
+                {
+                    Ok(chunks) => level
+                        .chunk_saver
+                        .save_chunks(&level.level_folder, chunks)
+                        .await
+                        .map_err(|error| format!("chunk write failed: {error}")),
+                    Err(error) => Err(format!("chunk upgrade task failed: {error}")),
+                };
+
+                {
+                    let mut data = lock
+                        .0
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    for i in positions {
+                        match data.entry(i) {
+                            Entry::Occupied(mut entry) => {
+                                let rc = entry.get_mut();
+                                if *rc <= 1 {
+                                    entry.remove();
+                                } else {
+                                    *rc -= 1;
+                                }
+                            }
+                            Entry::Vacant(_) => {
+                                warn!(
+                                    "io_write: attempted to release missing lock entry for {:?}",
+                                    i
+                                );
+                            }
+                        }
                     }
                 }
-            }
-        }
-        lock.1.notify_waiters();
+                lock.1.notify_waiters();
 
-        if upgrade_failed {
-            error!("Failed to upgrade chunks for saving");
-            break;
+                if let Err(error) = result {
+                    error!("Failed to save chunks: {error}");
+                    pending_error.get_or_insert(error);
+                }
+            }
+            IoWriteCommand::Barrier { completion } => {
+                if level.shut_down_chunk_system.load(Relaxed) {
+                    let _ = completion.send(Err("chunk save system is shutting down".to_string()));
+                    continue;
+                }
+                level.chunk_saver.block_and_await_ongoing_tasks().await;
+                let result = match pending_error.take() {
+                    Some(error) => Err(error),
+                    None => level
+                        .chunk_saver
+                        .sync_all(&level.level_folder)
+                        .await
+                        .map_err(|error| format!("chunk disk sync failed: {error}")),
+                };
+                let _ = completion.send(result);
+            }
         }
     }
 }

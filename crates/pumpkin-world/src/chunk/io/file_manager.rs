@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 use futures::future::join_all;
@@ -17,7 +17,7 @@ use crate::{
     level::LevelFolder,
 };
 
-use super::{ChunkSerializer, FileIO, LoadedData, run_blocking};
+use super::{ChunkSerializer, FileIO, LoadedData, run_blocking, sync_path};
 
 /// A simple implementation of the `ChunkSerializer` trait that loads and saves data
 /// to disk using parallelism and a lazy-loading cache keyed by file path.
@@ -31,17 +31,46 @@ use super::{ChunkSerializer, FileIO, LoadedData, run_blocking};
 ///   serializer is **not** evicted from the cache and the file is **not**
 ///   flushed to disk (the caller owns the flush lifecycle).
 ///
+/// A pending path is either `Buffered` (the serializer has changes which have
+/// not reached the file yet) or `Published` (the file has the changes but has
+/// not been explicitly synced). Only the former pins a serializer. The state
+/// uses a synchronous mutex because it is metadata only; no guard is held over
+/// an await.
+///
 /// ### Lock ordering (must never be violated to avoid deadlocks)
 ///
-/// 1. `file_locks`  (outer)
-/// 2. individual `RwLock<S>` inside each loader  (inner)
-/// 3. `watchers`  (independent — never held at the same time as either above)
+/// 1. snapshot pending state, then release it
+/// 2. `file_locks`, then release it
+/// 3. individual serializer `RwLock<S>`
 ///
-/// `watchers` is always acquired in its own critical section, after all
-/// serializer locks are released, which keeps it strictly independent.
+/// `watchers` is acquired in its own critical section. No async lock is held
+/// while waiting for another async lock.
+#[derive(Clone, Copy)]
+enum PendingState {
+    /// The serializer contains a logical update which still needs publishing.
+    Buffered(u64),
+    /// The logical update reached the file; only an explicit OS sync remains.
+    Published(u64),
+}
+
+impl PendingState {
+    const fn generation(self) -> u64 {
+        match self {
+            Self::Buffered(generation) | Self::Published(generation) => generation,
+        }
+    }
+
+    const fn is_buffered(self) -> bool {
+        matches!(self, Self::Buffered(_))
+    }
+}
+
 pub struct ChunkFileManager<S: ChunkSerializer<WriteBackend = PathBuf>> {
     file_locks: RwLock<BTreeMap<PathBuf, Arc<ChunkSerializerLazyLoader<S>>>>,
     watchers: RwLock<BTreeMap<PathBuf, usize>>,
+    /// Region files changed since the last explicit disk sync.
+    pending_sync: Mutex<BTreeMap<PathBuf, PendingState>>,
+    cache_capacity: usize,
     chunk_config: S::ChunkConfig,
 }
 
@@ -125,12 +154,76 @@ impl<S: ChunkSerializer<WriteBackend = PathBuf> + 'static> ChunkSerializerLazyLo
 }
 
 impl<S: ChunkSerializer<WriteBackend = PathBuf>> ChunkFileManager<S> {
+    const DEFAULT_CACHE_CAPACITY: usize = 64;
+
     pub fn new(chunk_config: S::ChunkConfig) -> Self {
+        Self::with_capacity(chunk_config, Self::DEFAULT_CACHE_CAPACITY)
+    }
+
+    fn with_capacity(chunk_config: S::ChunkConfig, cache_capacity: usize) -> Self {
         Self {
             file_locks: RwLock::new(BTreeMap::new()),
             watchers: RwLock::new(BTreeMap::new()),
+            pending_sync: Mutex::new(BTreeMap::new()),
+            cache_capacity: cache_capacity.max(1),
             chunk_config,
         }
+    }
+
+    fn pending_state(&self, path: &Path) -> Option<PendingState> {
+        self.pending_sync
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(path)
+            .copied()
+    }
+
+    fn mark_buffered(&self, path: &Path) -> u64 {
+        let mut pending = self
+            .pending_sync
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let generation = pending
+            .get(path)
+            .map_or(0, |state| state.generation())
+            .saturating_add(1);
+        pending.insert(path.to_path_buf(), PendingState::Buffered(generation));
+        generation
+    }
+
+    fn mark_published(&self, path: &Path, generation: u64) {
+        let mut pending = self
+            .pending_sync
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if pending
+            .get(path)
+            .is_some_and(|state| state.generation() == generation)
+        {
+            pending.insert(path.to_path_buf(), PendingState::Published(generation));
+        }
+    }
+
+    fn clear_pending(&self, path: &Path, generation: u64) {
+        let mut pending = self
+            .pending_sync
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if pending
+            .get(path)
+            .is_some_and(|state| state.generation() == generation)
+        {
+            pending.remove(path);
+        }
+    }
+
+    fn pending_snapshot(&self) -> Vec<(PathBuf, PendingState)> {
+        self.pending_sync
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .iter()
+            .map(|(path, state)| (path.clone(), *state))
+            .collect()
     }
 }
 
@@ -152,10 +245,35 @@ impl<S: ChunkSerializer<WriteBackend = PathBuf>> ChunkFileManager<S> {
 
         let loader = {
             let mut locks = self.file_locks.write().await;
-            locks
-                .entry(path.into())
-                .or_insert_with(|| Arc::new(ChunkSerializerLazyLoader::new(path.into())))
-                .clone()
+            locks.get(path).cloned().unwrap_or_else(|| {
+                if locks.len() >= self.cache_capacity {
+                    let evictable = locks.iter().find_map(|(cached_path, loader)| {
+                        let watched = self.watchers.try_read().map_or(true, |watchers| {
+                            watchers.get(cached_path).is_some_and(|&count| count > 0)
+                        });
+                        let buffered = self
+                            .pending_state(cached_path)
+                            .is_some_and(PendingState::is_buffered);
+                        (!watched && !buffered && ChunkSerializerLazyLoader::can_remove(loader))
+                            .then(|| cached_path.clone())
+                    });
+                    if let Some(evictable) = evictable {
+                        locks.remove(&evictable);
+                    } else {
+                        // The limit is an eviction target, not a correctness limit:
+                        // active regions may temporarily exceed it during one batch.
+                        trace!(
+                            "Serializer cache temporarily exceeds capacity {} while opening {}",
+                            self.cache_capacity,
+                            path.display()
+                        );
+                    }
+                }
+
+                let loader = Arc::new(ChunkSerializerLazyLoader::new(path.into()));
+                locks.insert(path.into(), loader.clone());
+                loader
+            })
             // Write-lock dropped here — `loader.get()` may block on I/O and
             // must not hold the map lock.
         };
@@ -176,6 +294,17 @@ impl<S: ChunkSerializer<WriteBackend = PathBuf>> ChunkFileManager<S> {
         };
 
         if still_watched {
+            return;
+        }
+
+        if self
+            .pending_state(path)
+            .is_some_and(PendingState::is_buffered)
+        {
+            trace!(
+                "Skipping eviction for {} — serializer has unpublished data",
+                path.display()
+            );
             return;
         }
 
@@ -378,6 +507,8 @@ where
                 };
 
                 let mut cleared_dirty = Vec::new();
+                let mut pending_generation = None;
+                let mut update_error = None;
                 {
                     let mut writer = chunk_serializer.write().await;
                     for chunk in &chunk_locks {
@@ -395,41 +526,59 @@ where
                                 for chunk in &cleared_dirty {
                                     chunk.mark_dirty(true);
                                 }
-                                return Err(error);
+                                // Keep the loader pinned even if an
+                                // implementation fails after partially changing
+                                // its in-memory state.
+                                pending_generation = Some(self.mark_buffered(&path));
+                                update_error = Some(error);
+                                break;
                             }
                         }
                     }
-                    // Write-lock released here — flush can proceed under a read-lock.
+                    if update_error.is_none() && !cleared_dirty.is_empty() {
+                        pending_generation = Some(self.mark_buffered(&path));
+                    }
+                }
+
+                if let Some(error) = update_error {
+                    drop(chunk_serializer);
+                    self.maybe_evict(&path).await;
+                    return Err(error);
                 }
 
                 trace!("Chunk data updated for {}", path.display());
 
-                // We check watchers *after* releasing the write-lock to honour
-                // lock ordering (serializer lock → watchers, never the reverse).
+                // We check watchers after releasing the serializer lock. A
+                // buffered serializer is pinned; a published one may evict.
                 let is_watched = {
                     let watchers = self.watchers.read().await;
                     watchers.get(&path).is_some_and(|&c| c > 0)
                 };
 
                 if !is_watched {
-                    // A read-lock suffices for `write()` since we have already
-                    // applied all mutations above.
-                    {
-                        let serializer = chunk_serializer.read().await;
-                        debug!("Flushing {} to disk", path.display());
-                        if let Err(error) = serializer.write(&path).await {
+                    if let Some(generation) = pending_generation {
+                        let write_result = {
+                            let serializer = chunk_serializer.write().await;
+                            debug!("Flushing {} to disk", path.display());
+                            let result = serializer.write(&path).await;
+                            if result.is_ok() {
+                                // Keep the serializer lock through this state
+                                // transition so a newer update cannot be lost.
+                                self.mark_published(&path, generation);
+                            }
+                            result
+                        };
+                        if let Err(error) = write_result {
                             for chunk in &cleared_dirty {
                                 chunk.mark_dirty(true);
                             }
+                            drop(chunk_serializer);
+                            self.maybe_evict(&path).await;
                             return Err(ChunkWritingError::IoError(error));
                         }
-                        // Read-lock released here.
-                    };
+                    }
 
-                    // Drop our handle so `can_remove` may succeed.
                     drop(chunk_serializer);
-
-                    // Evict the cache entry when no longer needed.
                     self.maybe_evict(&path).await;
                 }
 
@@ -439,6 +588,61 @@ where
         // Collect all region results; surface the first error encountered.
         let results: Vec<Result<(), ChunkWritingError>> = join_all(tasks).await;
         results.into_iter().find(Result::is_err).unwrap_or(Ok(()))
+    }
+
+    async fn sync_all<'a>(&'a self, _folder: &'a LevelFolder) -> Result<(), ChunkWritingError> {
+        // Snapshot only metadata. Every async lock is acquired after this
+        // synchronous guard is released, so eviction and sync have one order.
+        let paths = self.pending_snapshot();
+
+        for (path, _) in paths {
+            let Some(state) = self.pending_state(&path) else {
+                continue;
+            };
+            let loader = {
+                let locks = self.file_locks.read().await;
+                locks.get(&path).cloned()
+            };
+            let serializer = loader
+                .as_ref()
+                .and_then(|loader| loader.internal.get().cloned());
+
+            match serializer {
+                Some(serializer) => {
+                    let result = {
+                        let serializer = serializer.write().await;
+                        let Some(state) = self.pending_state(&path) else {
+                            continue;
+                        };
+                        let generation = state.generation();
+                        let result = serializer.sync_all(&path).await;
+                        if result.is_ok() {
+                            // The serializer lock prevents a newer update from
+                            // being hidden by this clear.
+                            self.clear_pending(&path, generation);
+                        }
+                        result
+                    };
+                    result.map_err(ChunkWritingError::IoError)?;
+                }
+                None if state.is_buffered() => {
+                    return Err(ChunkWritingError::IoError(std::io::Error::other(format!(
+                        "pending serializer was evicted before publishing {}",
+                        path.display()
+                    ))));
+                }
+                None => {
+                    // Published content is safe to sync by path after eviction.
+                    // A missing file is an error, never a successful old-file sync.
+                    sync_path(&path).await.map_err(ChunkWritingError::IoError)?;
+                    self.clear_pending(&path, state.generation());
+                }
+            }
+
+            self.maybe_evict(&path).await;
+        }
+
+        Ok(())
     }
 
     /// Blocks until all in-flight serialiser operations have completed by
@@ -478,143 +682,6 @@ where
     Linear(ChunkFileManager<Linear>),
     Anvil(ChunkFileManager<Anvil>),
     Pump(ChunkFileManager<Pump>),
-}
-
-#[cfg(all(test, windows))]
-mod tests {
-    use std::{fs, sync::Arc};
-
-    use bytes::Bytes;
-    use pumpkin_config::chunk::AnvilChunkConfig;
-    use tempfile::TempDir;
-
-    use super::ChunkFileManager;
-    use crate::chunk::format::anvil::{AnvilChunkFile, SingleChunkDataSerializer};
-    use crate::chunk::io::{Dirtiable, FileIO, LoadedData};
-    use crate::chunk::{ChunkData, ChunkReadingError, ChunkSerializingError};
-    use crate::level::LevelFolder;
-    use pumpkin_util::math::vector2::Vector2;
-
-    struct FailingChunk {
-        dirty: std::sync::atomic::AtomicBool,
-    }
-
-    impl Dirtiable for FailingChunk {
-        fn is_dirty(&self) -> bool {
-            self.dirty.load(std::sync::atomic::Ordering::Relaxed)
-        }
-
-        fn mark_dirty(&self, flag: bool) {
-            self.dirty.store(flag, std::sync::atomic::Ordering::Relaxed);
-        }
-    }
-
-    impl super::PathFromLevelFolder for FailingChunk {
-        fn file_path(folder: &LevelFolder, file_name: &str) -> std::path::PathBuf {
-            folder.region_folder.join(file_name)
-        }
-    }
-
-    impl SingleChunkDataSerializer for FailingChunk {
-        fn to_bytes(&self) -> Result<Bytes, ChunkSerializingError> {
-            Err(ChunkSerializingError::ErrorSerializingChunk(
-                pumpkin_nbt::Error::UnsupportedType("test failure".into()),
-            ))
-        }
-
-        fn from_bytes(_bytes: &Bytes, _pos: Vector2<i32>) -> Result<Self, ChunkReadingError> {
-            Err(ChunkReadingError::ChunkNotExist)
-        }
-
-        fn position(&self) -> (i32, i32) {
-            (0, 0)
-        }
-    }
-
-    #[tokio::test]
-    async fn failed_update_keeps_chunk_dirty_for_retry() {
-        let temp_dir = TempDir::new().expect("temp directory");
-        let level_folder = LevelFolder {
-            root_folder: temp_dir.path().to_path_buf(),
-            dim_folder: temp_dir.path().to_path_buf(),
-            region_folder: temp_dir.path().join("region"),
-            entities_folder: temp_dir.path().join("entities"),
-            poi_folder: temp_dir.path().join("poi"),
-        };
-        fs::create_dir_all(&level_folder.region_folder).expect("region directory");
-
-        let chunk = Arc::new(FailingChunk {
-            dirty: std::sync::atomic::AtomicBool::new(true),
-        });
-        let saver =
-            ChunkFileManager::<AnvilChunkFile<FailingChunk>>::new(AnvilChunkConfig::default());
-        let error = saver
-            .save_chunks(&level_folder, vec![(Vector2::new(0, 0), chunk.clone())])
-            .await
-            .expect_err("update failure must surface");
-
-        assert!(matches!(
-            error,
-            crate::chunk::ChunkWritingError::ChunkSerializingError(_)
-        ));
-        assert!(chunk.is_dirty(), "failed update must remain retryable");
-        assert!(!level_folder.region_folder.join("r.0.0.mca").exists());
-    }
-
-    #[tokio::test]
-    async fn failed_region_write_keeps_chunk_dirty_for_retry() {
-        let temp_dir = TempDir::new().expect("temp directory");
-        let level_folder = LevelFolder {
-            root_folder: temp_dir.path().to_path_buf(),
-            dim_folder: temp_dir.path().to_path_buf(),
-            region_folder: temp_dir.path().join("region"),
-            entities_folder: temp_dir.path().join("entities"),
-            poi_folder: temp_dir.path().join("poi"),
-        };
-        fs::create_dir_all(&level_folder.region_folder).expect("region directory");
-
-        let position = Vector2::new(0, 0);
-        let chunk = Arc::new(ChunkData::empty(0, 0));
-        chunk.mark_dirty(true);
-        let saver = ChunkFileManager::<AnvilChunkFile<ChunkData>>::new(AnvilChunkConfig::default());
-
-        saver
-            .save_chunks(&level_folder, vec![(position, chunk.clone())])
-            .await
-            .expect("initial region write");
-        let region_path = level_folder.region_folder.join("r.0.0.mca");
-        let original = fs::read(&region_path).expect("initial region bytes");
-
-        chunk.mark_dirty(true);
-        let temp_path = region_path.with_extension("tmp");
-        fs::create_dir(&temp_path).expect("blocking temp path");
-        let error = saver
-            .save_chunks(&level_folder, vec![(position, chunk.clone())])
-            .await
-            .expect_err("blocked temp path must fail the write");
-
-        assert!(matches!(error, crate::chunk::ChunkWritingError::IoError(_)));
-        assert!(chunk.is_dirty(), "failed write must remain retryable");
-        assert_eq!(fs::read(&region_path).expect("region bytes"), original);
-
-        fs::remove_dir(&temp_path).expect("remove blocking temp path");
-        saver
-            .save_chunks(&level_folder, vec![(position, chunk)])
-            .await
-            .expect("retry region write");
-
-        let retry_saver =
-            ChunkFileManager::<AnvilChunkFile<ChunkData>>::new(AnvilChunkConfig::default());
-        let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
-        retry_saver
-            .fetch_chunks(&level_folder, &[position], sender)
-            .await;
-        let loaded = receiver.recv().await.expect("terminal load result");
-        let LoadedData::Loaded(loaded) = loaded else {
-            panic!("retry must reload the saved chunk");
-        };
-        assert_eq!((loaded.x, loaded.z), (0, 0));
-    }
 }
 
 impl<P, Linear, Anvil, Pump> FileIO for LevelFileIO<Linear, Anvil, Pump>
@@ -684,5 +751,377 @@ where
             Self::Anvil(io) => io.block_and_await_ongoing_tasks().await,
             Self::Pump(io) => io.block_and_await_ongoing_tasks().await,
         }
+    }
+
+    async fn sync_all<'a>(&'a self, folder: &'a LevelFolder) -> Result<(), ChunkWritingError> {
+        match self {
+            Self::Linear(io) => io.sync_all(folder).await,
+            Self::Anvil(io) => io.sync_all(folder).await,
+            Self::Pump(io) => io.sync_all(folder).await,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, sync::Arc};
+
+    use bytes::Bytes;
+    use pumpkin_config::chunk::AnvilChunkConfig;
+    use pumpkin_data::Block;
+    use tempfile::TempDir;
+
+    use super::ChunkFileManager;
+    use crate::chunk::format::anvil::{AnvilChunkFile, SingleChunkDataSerializer};
+    use crate::chunk::io::{Dirtiable, FileIO, LoadedData};
+    use crate::chunk::{ChunkData, ChunkReadingError, ChunkSerializingError};
+    use crate::level::LevelFolder;
+    use pumpkin_util::math::vector2::Vector2;
+
+    struct FailingChunk {
+        dirty: std::sync::atomic::AtomicBool,
+    }
+
+    impl Dirtiable for FailingChunk {
+        fn is_dirty(&self) -> bool {
+            self.dirty.load(std::sync::atomic::Ordering::Relaxed)
+        }
+
+        fn mark_dirty(&self, flag: bool) {
+            self.dirty.store(flag, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    impl super::PathFromLevelFolder for FailingChunk {
+        fn file_path(folder: &LevelFolder, file_name: &str) -> std::path::PathBuf {
+            folder.region_folder.join(file_name)
+        }
+    }
+
+    impl SingleChunkDataSerializer for FailingChunk {
+        fn to_bytes(&self) -> Result<Bytes, ChunkSerializingError> {
+            Err(ChunkSerializingError::ErrorSerializingChunk(
+                pumpkin_nbt::Error::UnsupportedType("test failure".into()),
+            ))
+        }
+
+        fn from_bytes(_bytes: &Bytes, _pos: Vector2<i32>) -> Result<Self, ChunkReadingError> {
+            Err(ChunkReadingError::ChunkNotExist)
+        }
+
+        fn position(&self) -> (i32, i32) {
+            (0, 0)
+        }
+    }
+
+    #[tokio::test]
+    async fn watched_region_is_published_by_flush_after_unwatch() {
+        let temp_dir = TempDir::new().expect("temp directory");
+        let level_folder = LevelFolder {
+            root_folder: temp_dir.path().to_path_buf(),
+            dim_folder: temp_dir.path().to_path_buf(),
+            region_folder: temp_dir.path().join("region"),
+            entities_folder: temp_dir.path().join("entities"),
+            poi_folder: temp_dir.path().join("poi"),
+        };
+        fs::create_dir_all(&level_folder.region_folder).expect("region directory");
+        let position = Vector2::new(0, 0);
+        let saver = ChunkFileManager::<AnvilChunkFile<ChunkData>>::new(AnvilChunkConfig::default());
+
+        let old = Arc::new(ChunkData::empty(0, 0));
+        old.mark_dirty(true);
+        saver
+            .save_chunks(&level_folder, vec![(position, old)])
+            .await
+            .expect("initial region write");
+
+        let updated = Arc::new(ChunkData::empty(0, 0));
+        updated.set_block_absolute_y(0, 64, 0, Block::STONE.default_state.id);
+        updated.mark_dirty(true);
+        saver.watch_chunks(&level_folder, &[position]).await;
+        saver
+            .save_chunks(&level_folder, vec![(position, updated)])
+            .await
+            .expect("watched logical update");
+        saver.unwatch_chunks(&level_folder, &[position]).await;
+        saver
+            .sync_all(&level_folder)
+            .await
+            .expect("flush publishes watched update");
+
+        let retry_saver =
+            ChunkFileManager::<AnvilChunkFile<ChunkData>>::new(AnvilChunkConfig::default());
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+        retry_saver
+            .fetch_chunks(&level_folder, &[position], sender)
+            .await;
+        let LoadedData::Loaded(loaded) = receiver.recv().await.expect("terminal load result")
+        else {
+            panic!("flushed watched update must reload");
+        };
+        assert_eq!(
+            loaded.section.get_block_absolute_y(0, 64, 0),
+            Some(Block::STONE.default_state.id),
+            "unwatch must not evict an unpublished pending serializer"
+        );
+    }
+
+    #[tokio::test]
+    async fn normal_saves_do_not_pin_cache_without_explicit_flush() {
+        let temp_dir = TempDir::new().expect("temp directory");
+        let level_folder = LevelFolder {
+            root_folder: temp_dir.path().to_path_buf(),
+            dim_folder: temp_dir.path().to_path_buf(),
+            region_folder: temp_dir.path().join("region"),
+            entities_folder: temp_dir.path().join("entities"),
+            poi_folder: temp_dir.path().join("poi"),
+        };
+        fs::create_dir_all(&level_folder.region_folder).expect("region directory");
+        let saver = ChunkFileManager::<AnvilChunkFile<ChunkData>>::with_capacity(
+            AnvilChunkConfig::default(),
+            1,
+        );
+
+        for position in [Vector2::new(0, 0), Vector2::new(32, 0), Vector2::new(64, 0)] {
+            let chunk = Arc::new(ChunkData::empty(position.x, position.y));
+            chunk.mark_dirty(true);
+            saver
+                .save_chunks(&level_folder, vec![(position, chunk)])
+                .await
+                .expect("normal region write");
+            assert!(
+                saver.file_locks.read().await.len() <= 1,
+                "normal nonflush saves must not pin every region serializer"
+            );
+        }
+        saver
+            .sync_all(&level_folder)
+            .await
+            .expect("explicit flush must sync evicted normal writes");
+        assert!(
+            saver
+                .pending_state(&level_folder.region_folder.join("r.0.0.mca"))
+                .is_none()
+        );
+        assert!(
+            saver
+                .pending_state(&level_folder.region_folder.join("r.1.0.mca"))
+                .is_none()
+        );
+        assert!(
+            saver
+                .pending_state(&level_folder.region_folder.join("r.2.0.mca"))
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn oversized_plain_region_batch_is_not_rejected_by_cache_target() {
+        let temp_dir = TempDir::new().expect("temp directory");
+        let level_folder = LevelFolder {
+            root_folder: temp_dir.path().to_path_buf(),
+            dim_folder: temp_dir.path().to_path_buf(),
+            region_folder: temp_dir.path().join("region"),
+            entities_folder: temp_dir.path().join("entities"),
+            poi_folder: temp_dir.path().join("poi"),
+        };
+        fs::create_dir_all(&level_folder.region_folder).expect("region directory");
+        let saver = ChunkFileManager::<AnvilChunkFile<ChunkData>>::new(AnvilChunkConfig::default());
+        let chunks = (0..=64)
+            .map(|region| {
+                let position = Vector2::new(region * 32, 0);
+                let chunk = Arc::new(ChunkData::empty(position.x, position.y));
+                chunk.mark_dirty(true);
+                (position, chunk)
+            })
+            .collect();
+
+        saver
+            .save_chunks(&level_folder, chunks)
+            .await
+            .expect("normal writes beyond the cache target must remain valid");
+        saver
+            .sync_all(&level_folder)
+            .await
+            .expect("explicit flush after the oversized normal batch");
+        assert!(saver.pending_sync.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn sync_and_eviction_contention_has_a_bounded_completion() {
+        let temp_dir = TempDir::new().expect("temp directory");
+        let level_folder = LevelFolder {
+            root_folder: temp_dir.path().to_path_buf(),
+            dim_folder: temp_dir.path().to_path_buf(),
+            region_folder: temp_dir.path().join("region"),
+            entities_folder: temp_dir.path().join("entities"),
+            poi_folder: temp_dir.path().join("poi"),
+        };
+        fs::create_dir_all(&level_folder.region_folder).expect("region directory");
+        let position = Vector2::new(0, 0);
+        let saver = ChunkFileManager::<AnvilChunkFile<ChunkData>>::with_capacity(
+            AnvilChunkConfig::default(),
+            1,
+        );
+
+        for _ in 0..8 {
+            saver.watch_chunks(&level_folder, &[position]).await;
+            let chunk = Arc::new(ChunkData::empty(position.x, position.y));
+            chunk.mark_dirty(true);
+            saver
+                .save_chunks(&level_folder, vec![(position, chunk)])
+                .await
+                .expect("watched logical update");
+
+            let watched_chunks = [position];
+            let result = tokio::time::timeout(std::time::Duration::from_secs(1), async {
+                let (sync_result, ()) = tokio::join!(
+                    saver.sync_all(&level_folder),
+                    saver.unwatch_chunks(&level_folder, &watched_chunks),
+                );
+                sync_result
+            })
+            .await
+            .expect("sync and eviction must not deadlock");
+            result.expect("contention sync");
+        }
+    }
+
+    #[tokio::test]
+    async fn failed_sync_keeps_pending_state_for_retry_and_then_evicts() {
+        let temp_dir = TempDir::new().expect("temp directory");
+        let level_folder = LevelFolder {
+            root_folder: temp_dir.path().to_path_buf(),
+            dim_folder: temp_dir.path().to_path_buf(),
+            region_folder: temp_dir.path().join("region"),
+            entities_folder: temp_dir.path().join("entities"),
+            poi_folder: temp_dir.path().join("poi"),
+        };
+        fs::create_dir_all(&level_folder.region_folder).expect("region directory");
+        let position = Vector2::new(0, 0);
+        let saver = ChunkFileManager::<AnvilChunkFile<ChunkData>>::new(AnvilChunkConfig::default());
+        let initial = Arc::new(ChunkData::empty(0, 0));
+        initial.mark_dirty(true);
+        saver
+            .save_chunks(&level_folder, vec![(position, initial)])
+            .await
+            .expect("initial region write");
+        let path = level_folder.region_folder.join("r.0.0.mca");
+        fs::remove_file(&path).expect("remove region for forced sync failure");
+
+        assert!(saver.sync_all(&level_folder).await.is_err());
+        assert!(saver.pending_state(&path).is_some());
+
+        let retry = Arc::new(ChunkData::empty(0, 0));
+        retry.set_block_absolute_y(0, 64, 0, Block::STONE.default_state.id);
+        retry.mark_dirty(true);
+        saver
+            .save_chunks(&level_folder, vec![(position, retry)])
+            .await
+            .expect("logical retry after sync failure");
+        saver.sync_all(&level_folder).await.expect("retry flush");
+        assert!(saver.pending_state(&path).is_none());
+        assert!(saver.file_locks.read().await.get(&path).is_none());
+    }
+
+    #[tokio::test]
+    async fn failed_update_keeps_chunk_dirty_for_retry() {
+        let temp_dir = TempDir::new().expect("temp directory");
+        let level_folder = LevelFolder {
+            root_folder: temp_dir.path().to_path_buf(),
+            dim_folder: temp_dir.path().to_path_buf(),
+            region_folder: temp_dir.path().join("region"),
+            entities_folder: temp_dir.path().join("entities"),
+            poi_folder: temp_dir.path().join("poi"),
+        };
+        fs::create_dir_all(&level_folder.region_folder).expect("region directory");
+
+        let chunk = Arc::new(FailingChunk {
+            dirty: std::sync::atomic::AtomicBool::new(true),
+        });
+        let saver =
+            ChunkFileManager::<AnvilChunkFile<FailingChunk>>::new(AnvilChunkConfig::default());
+        let error = saver
+            .save_chunks(&level_folder, vec![(Vector2::new(0, 0), chunk.clone())])
+            .await
+            .expect_err("update failure must surface");
+
+        assert!(matches!(
+            error,
+            crate::chunk::ChunkWritingError::ChunkSerializingError(_)
+        ));
+        assert!(chunk.is_dirty(), "failed update must remain retryable");
+        assert!(
+            saver
+                .pending_state(&level_folder.region_folder.join("r.0.0.mca"))
+                .is_some_and(super::PendingState::is_buffered),
+            "failed update must protect possibly buffered serializer state"
+        );
+        assert!(!level_folder.region_folder.join("r.0.0.mca").exists());
+    }
+
+    #[tokio::test]
+    async fn failed_region_write_keeps_chunk_dirty_for_retry() {
+        let temp_dir = TempDir::new().expect("temp directory");
+        let level_folder = LevelFolder {
+            root_folder: temp_dir.path().to_path_buf(),
+            dim_folder: temp_dir.path().to_path_buf(),
+            region_folder: temp_dir.path().join("region"),
+            entities_folder: temp_dir.path().join("entities"),
+            poi_folder: temp_dir.path().join("poi"),
+        };
+        fs::create_dir_all(&level_folder.region_folder).expect("region directory");
+
+        let position = Vector2::new(0, 0);
+        let chunk = Arc::new(ChunkData::empty(0, 0));
+        chunk.mark_dirty(true);
+        let saver = ChunkFileManager::<AnvilChunkFile<ChunkData>>::new(AnvilChunkConfig::default());
+
+        saver
+            .save_chunks(&level_folder, vec![(position, chunk.clone())])
+            .await
+            .expect("initial region write");
+        let region_path = level_folder.region_folder.join("r.0.0.mca");
+        let original = fs::read(&region_path).expect("initial region bytes");
+
+        chunk.mark_dirty(true);
+        let temp_path = region_path.with_extension("tmp");
+        fs::create_dir(&temp_path).expect("blocking temp path");
+        let error = saver
+            .save_chunks(&level_folder, vec![(position, chunk.clone())])
+            .await
+            .expect_err("blocked temp path must fail the write");
+
+        assert!(matches!(error, crate::chunk::ChunkWritingError::IoError(_)));
+        assert!(
+            saver
+                .pending_state(&region_path)
+                .is_some_and(super::PendingState::is_buffered),
+            "failed logical write must keep the serializer protected"
+        );
+        assert!(
+            saver.sync_all(&level_folder).await.is_err(),
+            "syncing the old disk file must not report a failed buffered write as success"
+        );
+        assert!(chunk.is_dirty(), "failed write must remain retryable");
+        assert_eq!(fs::read(&region_path).expect("region bytes"), original);
+
+        fs::remove_dir(&temp_path).expect("remove blocking temp path");
+        saver
+            .save_chunks(&level_folder, vec![(position, chunk)])
+            .await
+            .expect("retry region write");
+
+        let retry_saver =
+            ChunkFileManager::<AnvilChunkFile<ChunkData>>::new(AnvilChunkConfig::default());
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+        retry_saver
+            .fetch_chunks(&level_folder, &[position], sender)
+            .await;
+        let loaded = receiver.recv().await.expect("terminal load result");
+        let LoadedData::Loaded(loaded) = loaded else {
+            panic!("retry must reload the saved chunk");
+        };
+        assert_eq!((loaded.x, loaded.z), (0, 0));
     }
 }

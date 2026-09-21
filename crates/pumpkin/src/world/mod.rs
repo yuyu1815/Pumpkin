@@ -2583,10 +2583,13 @@ impl World {
     }
 
     pub async fn save(&self) -> Result<(), String> {
+        self.save_with_flush(false).await
+    }
+
+    pub async fn save_with_flush(&self, flush: bool) -> Result<(), String> {
         for entity in self.entities.load().iter() {
             self.save_entity(entity).await?;
         }
-
         let chunks: Vec<Vector2<i32>> = self
             .block_entities
             .iter()
@@ -2596,7 +2599,15 @@ impl World {
             self.save_block_entities(chunk_pos);
         }
 
-        if let Ok(mut portal_poi) = self.portal_poi.try_lock() {
+        if flush {
+            let mut portal_poi = self
+                .portal_poi
+                .try_lock()
+                .map_err(|_| "portal POI save lock is unavailable".to_string())?;
+            portal_poi
+                .save_all()
+                .map_err(|error| format!("failed saving portal POI data: {error}"))?;
+        } else if let Ok(mut portal_poi) = self.portal_poi.try_lock() {
             let _ = portal_poi.save_all();
         }
 
@@ -2612,20 +2623,33 @@ impl World {
                     .root_folder
                     .join("pumpkin_custom_data.nbt");
                 let nbt = pumpkin_nbt::Nbt::from(custom_data.clone());
-                let _ = std::fs::write(custom_data_path, nbt.write());
+                let result = std::fs::write(&custom_data_path, nbt.write());
+                if flush {
+                    result.map_err(|error| {
+                        format!(
+                            "failed saving custom world data {}: {error}",
+                            custom_data_path.display()
+                        )
+                    })?;
+                }
             }
         }
 
-        self.level
-            .should_save
-            .store(true, std::sync::atomic::Ordering::Relaxed);
-        self.level.level_channel.notify();
+        if !flush {
+            self.level
+                .should_save
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+            self.level.level_channel.notify();
+        }
 
         let mut save_event = crate::plugin::api::events::world::world_save::WorldSaveEvent::new(
             format!("{:?}", self.dimension),
         );
         if let Some(server) = self.server.upgrade() {
             server.plugin_manager.fire(&server, &mut save_event).await;
+        }
+        if flush {
+            self.level.flush_entity_data_and_chunks().await?;
         }
         Ok(())
     }

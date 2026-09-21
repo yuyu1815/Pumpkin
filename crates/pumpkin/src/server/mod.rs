@@ -586,6 +586,10 @@ impl Server {
     }
 
     pub async fn save_all(&self) -> Result<(), String> {
+        self.save_all_with_flush(false).await
+    }
+
+    pub async fn save_all_with_flush(&self, flush: bool) -> Result<(), String> {
         if let Err(err) = self.save_world_info() {
             error!("Failed to save world info: {err}");
             return Err(format!("Failed to save world info: {err}"));
@@ -606,7 +610,7 @@ impl Server {
         }
 
         for world in self.worlds.load().iter() {
-            world.save().await?;
+            world.save_with_flush(flush).await?;
         }
 
         Ok(())

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::chunk::format::anvil::{AnvilChunkFile, SingleChunkDataSerializer};
-use crate::chunk::io::{ChunkSerializer, LoadedData, run_blocking};
+use crate::chunk::io::{ChunkSerializer, LoadedData, run_blocking, sync_path};
 use crate::chunk::{ChunkReadingError, ChunkWritingError};
 use bytes::{Buf, BufMut, Bytes};
 use pumpkin_util::math::vector2::Vector2;
@@ -372,23 +372,8 @@ impl<S: SingleChunkDataSerializer> LinearV2File<S> {
         let cx = bucket_col * stride + local_col;
         cz * 32 + cx
     }
-}
 
-impl<S: SingleChunkDataSerializer + 'static> ChunkSerializer for LinearV2File<S> {
-    type Data = S;
-    type WriteBackend = PathBuf;
-    type ChunkConfig = ();
-
-    fn should_write(&self, is_watched: bool) -> bool {
-        !is_watched
-    }
-
-    fn get_chunk_key(chunk: &Vector2<i32>) -> String {
-        let (region_x, region_z) = AnvilChunkFile::<S>::get_region_coords(chunk);
-        format!("./r.{region_x}.{region_z}.linear")
-    }
-
-    async fn write(&self, path: &PathBuf) -> Result<(), std::io::Error> {
+    async fn write_inner(&self, path: &PathBuf, durable: bool) -> Result<(), std::io::Error> {
         let temp_path = path.with_extension("tmp");
         let grid_size = self.grid_size;
         let chunks_data = self.chunks_data.clone();
@@ -446,10 +431,40 @@ impl<S: SingleChunkDataSerializer + 'static> ChunkSerializer for LinearV2File<S>
         }
         writer.write_all(&SIGNATURE).await?;
         writer.flush().await?;
+        if durable {
+            writer.get_mut().sync_all().await?;
+        }
+        drop(writer);
 
         // Atomic rename so a crash during write cannot produce a torn file.
         tokio::fs::rename(temp_path, path).await?;
+        if durable {
+            sync_path(path).await?;
+        }
         Ok(())
+    }
+}
+
+impl<S: SingleChunkDataSerializer + 'static> ChunkSerializer for LinearV2File<S> {
+    type Data = S;
+    type WriteBackend = PathBuf;
+    type ChunkConfig = ();
+
+    fn should_write(&self, is_watched: bool) -> bool {
+        !is_watched
+    }
+
+    fn get_chunk_key(chunk: &Vector2<i32>) -> String {
+        let (region_x, region_z) = AnvilChunkFile::<S>::get_region_coords(chunk);
+        format!("./r.{region_x}.{region_z}.linear")
+    }
+
+    async fn write(&self, path: &PathBuf) -> Result<(), std::io::Error> {
+        self.write_inner(path, false).await
+    }
+
+    async fn sync_all(&self, path: &PathBuf) -> Result<(), std::io::Error> {
+        self.write_inner(path, true).await
     }
 
     #[expect(clippy::large_stack_arrays)]

@@ -61,6 +61,10 @@ pub(crate) enum EntityChunkLoad {
     Missing(SyncEntityChunk),
 }
 
+pub(crate) struct FlushRequest {
+    pub(crate) completion: oneshot::Sender<Result<(), String>>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LoadedChunkChange {
     Loaded(Vector2<i32>),
@@ -124,6 +128,7 @@ pub struct Level {
     pub shut_down_chunk_system: AtomicBool,
     pub should_save: AtomicBool,
     pub should_unload: AtomicBool,
+    save_requests: mpsc::Sender<FlushRequest>,
     /// Whether periodic autosaving is enabled. Toggled by `/save-off` and `/save-on`;
     /// a manual `/save-all` still saves while this is `false`.
     pub save_enabled: AtomicBool,
@@ -299,6 +304,7 @@ impl Level {
         };
 
         let pending_entity_generations = Arc::new(DashMap::new());
+        let (save_requests, save_request_rx) = mpsc::channel(16);
         let level_channel = Arc::new(LevelChannel::new());
         let thread_tracker = Mutex::new(Vec::new());
         let listener = Arc::new(ChunkListener::new());
@@ -326,6 +332,7 @@ impl Level {
             shut_down_chunk_system: AtomicBool::new(false),
             should_save: AtomicBool::new(false),
             should_unload: AtomicBool::new(false),
+            save_requests,
             save_enabled: AtomicBool::new(true),
             autosave_ticks: level_config.autosave_ticks,
             pending_entity_generations,
@@ -339,6 +346,7 @@ impl Level {
             level_ref.clone(),
             level_channel,
             listener,
+            save_request_rx,
             level_ref
                 .thread_tracker
                 .lock()
@@ -347,6 +355,48 @@ impl Level {
         );
 
         level_ref
+    }
+
+    async fn sync_entity_data_unlocked(&self) -> Result<(), String> {
+        self.entity_saver
+            .sync_all(&self.level_folder)
+            .await
+            .map_err(|error| format!("entity disk sync failed: {error}"))
+    }
+
+    pub async fn sync_entity_data(&self) -> Result<(), String> {
+        let _save_guard = self.entity_save_lock.lock().await;
+        self.sync_entity_data_unlocked().await
+    }
+
+    pub async fn flush_entity_data_and_chunks(&self) -> Result<(), String> {
+        let _save_guard = self.entity_save_lock.lock().await;
+        self.sync_entity_data_unlocked().await?;
+        self.request_chunk_flush_unlocked().await
+    }
+
+    async fn request_chunk_flush_unlocked(&self) -> Result<(), String> {
+        if self.shut_down_chunk_system.load(Ordering::Relaxed) {
+            return Err("chunk save system is shutting down".to_string());
+        }
+
+        let (completion, result) = oneshot::channel();
+        self.save_requests
+            .send(FlushRequest { completion })
+            .await
+            .map_err(|_| "chunk scheduler is closed".to_string())?;
+        // Reuse the scheduler's existing wake flag so an idle scheduler does
+        // not wait for its polling timeout to notice the request.
+        self.should_save.store(true, Ordering::Relaxed);
+        self.level_channel.notify();
+        result
+            .await
+            .map_err(|_| "chunk write worker closed before flush completion".to_string())?
+    }
+
+    pub async fn request_chunk_flush(&self) -> Result<(), String> {
+        let _save_guard = self.entity_save_lock.lock().await;
+        self.request_chunk_flush_unlocked().await
     }
 
     pub fn set_world_gen(&self, generator: Arc<WorldGenerator>) {
@@ -1423,6 +1473,32 @@ mod tests {
         level.shutdown().await.unwrap();
     }
 
+    fn assert_saved_tick_delay(
+        level: &Level,
+        chunk_pos: Vector2<i32>,
+        position: BlockPos,
+        expected: i32,
+        fluid: bool,
+    ) {
+        let chunk = level.loaded_chunks.get(&chunk_pos).unwrap();
+        let delay = if fluid {
+            chunk
+                .fluid_ticks
+                .to_vec()
+                .iter()
+                .find(|tick| tick.position == position)
+                .map(|tick| tick.delay)
+        } else {
+            chunk
+                .block_ticks
+                .to_vec()
+                .iter()
+                .find(|tick| tick.position == position)
+                .map(|tick| tick.delay)
+        };
+        assert_eq!(delay, Some(expected));
+    }
+
     #[tokio::test]
     async fn scheduled_ticks_keep_absolute_deadlines_outside_active_chunks() {
         let temp_dir = TempDir::new().unwrap();
@@ -1469,54 +1545,10 @@ mod tests {
                 .count(),
             1
         );
-        assert_eq!(
-            level
-                .loaded_chunks
-                .get(&chunk_pos)
-                .unwrap()
-                .block_ticks
-                .to_vec()
-                .iter()
-                .find(|tick| tick.position == block_due)
-                .map(|tick| tick.delay),
-            Some(-3)
-        );
-        assert_eq!(
-            level
-                .loaded_chunks
-                .get(&chunk_pos)
-                .unwrap()
-                .block_ticks
-                .to_vec()
-                .iter()
-                .find(|tick| tick.position == block_future)
-                .map(|tick| tick.delay),
-            Some(3)
-        );
-        assert_eq!(
-            level
-                .loaded_chunks
-                .get(&chunk_pos)
-                .unwrap()
-                .fluid_ticks
-                .to_vec()
-                .iter()
-                .find(|tick| tick.position == fluid_due)
-                .map(|tick| tick.delay),
-            Some(-3)
-        );
-        assert_eq!(
-            level
-                .loaded_chunks
-                .get(&chunk_pos)
-                .unwrap()
-                .fluid_ticks
-                .to_vec()
-                .iter()
-                .find(|tick| tick.position == fluid_future)
-                .map(|tick| tick.delay),
-            Some(4)
-        );
+        assert_saved_tick_delay(&level, chunk_pos, block_due, -3, false);
+        assert_saved_tick_delay(&level, chunk_pos, block_future, 3, false);
+        assert_saved_tick_delay(&level, chunk_pos, fluid_due, -3, true);
+        assert_saved_tick_delay(&level, chunk_pos, fluid_future, 4, true);
 
         let active_chunks = FxHashSet::from_iter([chunk_pos]);
         let ticks = level.get_tick_data(&active_chunks, 0);
@@ -1593,6 +1625,7 @@ mod tests {
     #[test]
     fn clear_area_removes_ready_and_future_ticks() {
         let scheduler = crate::tick::scheduler::ChunkTickScheduler::default();
+        // SAFETY: `Block::STONE` is a static registry value, so this reference remains valid.
         let value: &'static Block = unsafe { &*std::ptr::from_ref(&Block::STONE) };
         let ready_pos = BlockPos::new(0, 64, 0);
         let future_pos = BlockPos::new(2, 64, 0);
@@ -1620,6 +1653,32 @@ mod tests {
         assert!(scheduler.is_scheduled(future_pos, value));
         scheduler.clear_area(&BlockPos::new(-1, 0, -1), &BlockPos::new(3, 256, 1));
         assert!(!scheduler.has_ticks());
+    }
+
+    #[tokio::test]
+    async fn explicit_entity_sync_waits_for_inflight_entity_save() {
+        let temp_dir = TempDir::new().unwrap();
+        let level = Level::from_root_folder(
+            &LevelConfig::default(),
+            temp_dir.path().to_path_buf(),
+            0,
+            Dimension::OVERWORLD,
+        );
+        let save_guard = level.entity_save_lock.lock().await;
+        let level_for_sync = level.clone();
+        let mut sync = tokio::spawn(async move { level_for_sync.sync_entity_data().await });
+
+        tokio::task::yield_now().await;
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), &mut sync)
+                .await
+                .is_err(),
+            "entity sync must not pass an in-flight entity save boundary"
+        );
+
+        drop(save_guard);
+        sync.await.unwrap().unwrap();
+        level.shutdown().await.unwrap();
     }
 
     #[tokio::test]

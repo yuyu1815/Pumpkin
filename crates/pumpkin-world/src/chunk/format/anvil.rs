@@ -20,7 +20,7 @@ use tracing::{debug, trace};
 use crate::chunk::{
     ChunkParsingError, ChunkReadingError, ChunkSerializingError, ChunkWritingError,
     CompressionError,
-    io::{ChunkSerializer, Dirtiable, LoadedData, run_blocking},
+    io::{ChunkSerializer, Dirtiable, LoadedData, run_blocking, sync_path},
 };
 
 /// The side size of a region in chunks (one region is 32x32 chunks)
@@ -356,7 +356,12 @@ impl<S: SingleChunkDataSerializer> AnvilChunkFile<S> {
         index as usize
     }
 
-    async fn write_indices<I>(&self, path: &Path, indices: I) -> Result<(), std::io::Error>
+    async fn write_indices<I>(
+        &self,
+        path: &Path,
+        indices: I,
+        durable: bool,
+    ) -> Result<(), std::io::Error>
     where
         I: IntoIterator<Item = usize>,
     {
@@ -442,11 +447,15 @@ impl<S: SingleChunkDataSerializer> AnvilChunkFile<S> {
             chunk.serialized_data.write(&mut write).await?;
         }
 
-        write.flush().await
+        write.flush().await?;
+        if durable {
+            write.get_mut().sync_all().await?;
+        }
+        Ok(())
     }
 
     /// Write entire file, disregarding saved offsets
-    async fn write_all(&self, path: &Path) -> Result<(), std::io::Error> {
+    async fn write_all(&self, path: &Path, durable: bool) -> Result<(), std::io::Error> {
         let temp_path = path.with_extension("tmp");
         trace!("Writing tmp file to disk: {temp_path:?}");
 
@@ -486,7 +495,14 @@ impl<S: SingleChunkDataSerializer> AnvilChunkFile<S> {
         }
 
         write.flush().await?;
+        if durable {
+            write.get_mut().sync_all().await?;
+        }
+        drop(write);
         tokio::fs::rename(temp_path, path).await?;
+        if durable {
+            sync_path(path).await?;
+        }
         Ok(())
     }
 }
@@ -535,11 +551,27 @@ impl<S: SingleChunkDataSerializer + 'static> ChunkSerializer for AnvilChunkFile<
                 );
                 Ok(())
             }
-            WriteAction::All => self.write_all(path).await,
-            WriteAction::Parts(parts) => self.write_indices(path, parts.iter().copied()).await,
+            WriteAction::All => self.write_all(path, false).await,
+            WriteAction::Parts(parts) => {
+                self.write_indices(path, parts.iter().copied(), false).await
+            }
         }?;
 
         // If we still are in memory after this, we don't need to write again!
+        *write_action = WriteAction::Pass;
+        Ok(())
+    }
+
+    async fn sync_all(&self, path: &PathBuf) -> Result<(), std::io::Error> {
+        let mut write_action = self.write_action.lock().await;
+        match &*write_action {
+            WriteAction::Pass => sync_path(path).await?,
+            WriteAction::All => self.write_all(path, true).await?,
+            WriteAction::Parts(parts) => {
+                self.write_indices(path, parts.iter().copied(), true)
+                    .await?;
+            }
+        }
         *write_action = WriteAction::Pass;
         Ok(())
     }
