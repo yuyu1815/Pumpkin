@@ -15,6 +15,10 @@ use pumpkin_util::math::vector3::Vector3;
 use pumpkin_util::text::TextComponent;
 use pumpkin_world::world::BlockFlags;
 
+pub(crate) const DEBUG_STICK_BLOCK_UPDATE_FLAGS: BlockFlags = BlockFlags::from_bits_retain(
+    BlockFlags::NOTIFY_LISTENERS.bits() | BlockFlags::UPDATE_KNOWN_SHAPE.bits(),
+);
+
 pub struct DebugStickItem;
 
 impl ItemMetadata for DebugStickItem {
@@ -127,7 +131,7 @@ impl DebugStickItem {
 
             let new_state_id = block.from_properties(&new_props).to_state_id(block);
             let world = player.world();
-            world.set_block_state(pos, new_state_id, BlockFlags::NOTIFY_ALL);
+            world.set_block_state(pos, new_state_id, DEBUG_STICK_BLOCK_UPDATE_FLAGS);
 
             player.send_system_message_raw(
                 &TextComponent::translate(

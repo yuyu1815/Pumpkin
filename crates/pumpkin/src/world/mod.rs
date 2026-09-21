@@ -2993,12 +2993,17 @@ mod tests {
     use pumpkin_util::math::{position::BlockPos, vector2::Vector2, vector3::Vector3};
     use pumpkin_util::world_seed::Seed;
     use pumpkin_world::world_info::LevelData;
-    use pumpkin_world::{chunk::format::anvil::SingleChunkDataSerializer, level::Level};
+    use pumpkin_world::{
+        chunk::{ChunkData, format::anvil::SingleChunkDataSerializer},
+        level::Level,
+    };
     use tempfile::TempDir;
     use tokio::time::{Duration, timeout};
     use uuid::Uuid;
 
     use super::{World, bedrock_block_breaking_rate, bedrock_chest_block_actor};
+    use crate::item::items::debug_stick::DEBUG_STICK_BLOCK_UPDATE_FLAGS;
+    use pumpkin_world::world::BlockFlags;
 
     fn test_world(root: &Path) -> Arc<World> {
         let config = LevelConfig {
@@ -3013,6 +3018,102 @@ mod tests {
             crate::block::registry::default_registry(),
             Weak::new(),
         ))
+    }
+
+    async fn debug_stick_flag_fixture(flags: BlockFlags) -> (pumpkin_data::BlockStateId, bool) {
+        let temp_dir = TempDir::new().expect("debug-stick flag fixture tempdir");
+        let world = test_world(temp_dir.path());
+        world
+            .level
+            .loaded_chunks
+            .insert(Vector2::new(0, 0), ChunkData::empty_sync(0, 0));
+
+        let target = BlockPos::new(0, 64, 0);
+        let neighbor = BlockPos::new(1, 64, 0);
+        let gate = &Block::OAK_FENCE_GATE;
+        let wire = &Block::REDSTONE_WIRE;
+        let mut neighbor_props = wire
+            .properties(wire.default_state.id)
+            .expect("redstone wire properties")
+            .to_props();
+        for (name, value) in &mut neighbor_props {
+            if *name == "west" {
+                *value = "side";
+            }
+        }
+        let neighbor_initial = wire.from_properties(&neighbor_props).to_state_id(wire);
+        let mut open_props = gate
+            .properties(gate.default_state.id)
+            .expect("fence gate properties")
+            .to_props();
+        for (name, value) in &mut open_props {
+            if *name == "open" {
+                *value = "true";
+            }
+        }
+        let target_open = gate.from_properties(&open_props).to_state_id(gate);
+
+        // Seed a closed gate and an adjacent connected wire without invoking
+        // their placement/shape callbacks.
+        let setup_flags = BlockFlags::NOTIFY_LISTENERS | BlockFlags::UPDATE_KNOWN_SHAPE;
+        world.set_block_state(
+            &BlockPos::new(0, 63, 0),
+            Block::STONE.default_state.id,
+            setup_flags,
+        );
+        world.set_block_state(
+            &BlockPos::new(1, 63, 0),
+            Block::STONE.default_state.id,
+            setup_flags,
+        );
+        world.set_block_state(&target, gate.default_state.id, setup_flags);
+        world.set_block_state(&neighbor, neighbor_initial, setup_flags);
+        world
+            .unsent_block_changes
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clear();
+
+        // Opening the gate is the Debug Stick mutation. Vanilla flags 18 keep
+        // the adjacent wire's stale shape and still notify clients.
+        assert_eq!(world.get_block_state_id(&neighbor), neighbor_initial);
+        world.set_block_state(&target, target_open, flags);
+        let neighbor_after = world.get_block_state_id(&neighbor);
+        let client_update = world
+            .unsent_block_changes
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&target)
+            .copied()
+            == Some(target_open);
+        (neighbor_after, client_update)
+    }
+
+    #[tokio::test]
+    async fn debug_stick_flags_skip_neighbor_shape_update_but_notify_client() {
+        let expected_stale_neighbor = {
+            let wire = &Block::REDSTONE_WIRE;
+            let mut props = wire
+                .properties(wire.default_state.id)
+                .expect("redstone wire properties")
+                .to_props();
+            for (name, value) in &mut props {
+                if *name == "west" {
+                    *value = "side";
+                }
+            }
+            wire.from_properties(&props).to_state_id(wire)
+        };
+        let (neighbor_after, client_update) =
+            debug_stick_flag_fixture(DEBUG_STICK_BLOCK_UPDATE_FLAGS).await;
+        assert_eq!(
+            neighbor_after, expected_stale_neighbor,
+            "Debug Stick flags must suppress the adjacent wire shape callback"
+        );
+        assert!(
+            client_update,
+            "Debug Stick flags must retain client notification"
+        );
     }
 
     fn set_persistence_marker(entity: &Arc<dyn crate::entity::EntityBase>, marker: &str) {

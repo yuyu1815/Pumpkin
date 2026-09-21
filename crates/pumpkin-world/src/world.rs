@@ -25,9 +25,14 @@ bitflags! {
         /// Prevents the previous block from dropping items when it is replaced
         /// Commonly used when a block is "transformed" rather than destroyed
         const SKIP_DROPS                            = 0b000_0000_1000;
-        /// Signals that the block is being moved (usually by a piston)
-        /// This prevents certain "on-break" logic from firing until the move is complete
+        /// Bit 16 is the local shape-update suppression bit used by the
+        /// synchronous World::set_block_state path. Keep MOVED for existing
+        /// piston/structure callers; Debug Stick uses the vanilla name below.
         const MOVED                                 = 0b000_0001_0000;
+        /// Matches vanilla Block.UPDATE_KNOWN_SHAPE (16). In Pumpkin's shared
+        /// set_block_state implementation this bit is consumed by the same
+        /// `!MOVED` guard that suppresses neighbor-shape callbacks.
+        const UPDATE_KNOWN_SHAPE                    = 0b000_0001_0000;
         /// Prevents redstone wire from re-calculating its shape/power immediately
         /// Used during massive redstone updates to reduce calculation lag
         const SKIP_REDSTONE_WIRE_STATE_REPLACEMENT  = 0b000_0010_0000;
