@@ -12,9 +12,13 @@ use pumpkin_protocol::{
         client::play::CPlayDisconnect,
         packet_decoder::TCPNetworkDecoder,
         packet_encoder::TCPNetworkEncoder,
-        server::config::{
-            SAcceptCodeOfConduct, SAcknowledgeFinishConfig, SClientInformationConfig,
-            SConfigCookieResponse, SConfigPong, SConfigResourcePack, SKnownPacks, SPluginMessage,
+        server::{
+            config::{
+                SAcceptCodeOfConduct, SAcknowledgeFinishConfig, SClientInformationConfig,
+                SConfigCookieResponse, SConfigPong, SConfigResourcePack, SKnownPacks,
+                SPluginMessage,
+            },
+            status::SStatusPingRequest,
         },
     },
     packet::MultiVersionJavaPacket,
@@ -40,7 +44,7 @@ use crate::{
     server::Server,
 };
 
-use super::{ConfigurationPhase, JavaClient};
+use super::{ConfigurationPhase, JavaClient, require_empty_body};
 
 const BRAND_CHANNEL_PREFIX: &str = "minecraft:brand";
 
@@ -53,6 +57,35 @@ const BRAND_CHANNEL_PREFIX: &str = "minecraft:brand";
 /// server. The timer covers silence rather than the whole handshake: it is reset
 /// on every packet, so a slow but progressing login is never cut off.
 const HANDSHAKE_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+enum DecodedStatusPacket {
+    Request,
+    Ping(SStatusPingRequest),
+}
+
+fn decode_status_packet(
+    packet: &RawPacket,
+    version: JavaMinecraftVersion,
+) -> Result<DecodedStatusPacket, ReadingError> {
+    let mut payload = &packet.payload[..];
+
+    match packet.id {
+        id if id == pumpkin_protocol::java::server::status::SStatusRequest::to_id(version) => {
+            pumpkin_protocol::java::server::status::SStatusRequest::read(&mut payload, &version)?;
+            require_empty_body(payload, "status request")?;
+            Ok(DecodedStatusPacket::Request)
+        }
+        id if id == SStatusPingRequest::to_id(version) => {
+            let ping = SStatusPingRequest::read(&mut payload, &version)?;
+            require_empty_body(payload, "status ping")?;
+            Ok(DecodedStatusPacket::Ping(ping))
+        }
+        _ => Err(ReadingError::Message(format!(
+            "Failed to handle java client packet id {} in Status State",
+            packet.id
+        ))),
+    }
+}
 
 pub struct PendingConnection {
     pub id: u64,
@@ -305,31 +338,17 @@ impl PendingConnection {
         packet: &RawPacket,
     ) -> Result<Option<PacketHandlerResult>, ReadingError> {
         debug!("Handling status group");
-        let mut payload = &packet.payload[..];
         let version = self.version.load();
 
-        match packet.id {
-            id if id == pumpkin_protocol::java::server::status::SStatusRequest::to_id(version) => {
+        match decode_status_packet(packet, version)? {
+            DecodedStatusPacket::Request => {
                 self.handle_status_request(server).await;
-                Ok(None)
             }
-            id if id
-                == pumpkin_protocol::java::server::status::SStatusPingRequest::to_id(version) =>
-            {
-                self.handle_ping_request(
-                    pumpkin_protocol::java::server::status::SStatusPingRequest::read(
-                        &mut payload,
-                        &version,
-                    )?,
-                )
-                .await;
-                Ok(None)
+            DecodedStatusPacket::Ping(ping) => {
+                self.handle_ping_request(ping).await;
             }
-            _ => Err(ReadingError::Message(format!(
-                "Failed to handle java client packet id {} in Status State",
-                packet.id
-            ))),
         }
+        Ok(None)
     }
 
     async fn handle_login_packet(
@@ -600,7 +619,29 @@ impl PendingConnection {
 
 #[cfg(test)]
 mod tests {
-    use super::ConfigurationPhase;
+    use super::{ConfigurationPhase, decode_status_packet};
+    use pumpkin_protocol::java::packet_decoder::TCPNetworkDecoder;
+    use pumpkin_util::version::JavaMinecraftVersion;
+
+    #[tokio::test]
+    async fn status_decoder_rejects_trailing_payload_after_protocol_decode() {
+        let version = JavaMinecraftVersion::V_26_2;
+        let mut ping_frame = vec![10, 1];
+        ping_frame.extend_from_slice(&[0; 8]);
+        ping_frame.push(0);
+
+        for frame in [vec![2, 0, 0], ping_frame] {
+            let mut decoder = TCPNetworkDecoder::new(frame.as_slice());
+            let packet = decoder
+                .get_raw_packet()
+                .await
+                .expect("status fixture frame should decode");
+            assert!(
+                decode_status_packet(&packet, version).is_err(),
+                "status handler must reject trailing body bytes"
+            );
+        }
+    }
 
     #[test]
     fn configuration_finish_ack_requires_finish_packet_to_be_sent() {

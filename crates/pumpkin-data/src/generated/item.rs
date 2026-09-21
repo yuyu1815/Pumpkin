@@ -21997,7 +21997,12 @@ impl Item {
                 },
             ),
             (BreakSound, &BreakSoundImpl),
-            (DebugStickState, &DebugStickStateImpl),
+            (
+                DebugStickState,
+                &DebugStickStateImpl {
+                    properties: std::collections::BTreeMap::new(),
+                },
+            ),
             (EnchantmentGlintOverride, &EnchantmentGlintOverrideImpl),
             (
                 Enchantments,

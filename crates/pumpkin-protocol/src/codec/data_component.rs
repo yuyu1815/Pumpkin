@@ -1685,7 +1685,7 @@ fn read_adventure_state(seq: &mut impl NetworkReadExt) -> Result<NbtTag, Reading
             )));
         }
         if seq.get_bool()? {
-            state.put(&name, NbtTag::String(seq.get_str()?.into()));
+            state.put(&name, NbtTag::String(seq.get_str()?));
         } else {
             let mut range = NbtCompound::new();
             if seq.get_bool()? {
@@ -1799,6 +1799,39 @@ fn read_adventure_components(seq: &mut impl NetworkReadExt) -> Result<NbtTag, Re
     }
     Ok(NbtTag::Compound(result))
 }
+fn write_adventure_tooltip(
+    tooltip: &NbtCompound,
+    seq: &mut impl NetworkWriteExt,
+) -> Result<(), WritingError> {
+    let hidden = tooltip.get_list("hidden_components").ok_or_else(|| {
+        WritingError::Message("TooltipDisplay matcher is missing hidden_components".into())
+    })?;
+    let hide = tooltip.get_bool("hide_tooltip").ok_or_else(|| {
+        WritingError::Message("TooltipDisplay matcher is missing hide_tooltip".into())
+    })?;
+    if tooltip
+        .child_tags
+        .keys()
+        .any(|key| key.as_ref() != "hide_tooltip" && key.as_ref() != "hidden_components")
+    {
+        return Err(WritingError::Message(
+            "Unknown TooltipDisplay matcher field".into(),
+        ));
+    }
+    seq.write_bool(hide)?;
+    seq.write_var_int(&VarInt(i32::try_from(hidden.len()).map_err(|_| {
+        WritingError::Message("TooltipDisplay hidden component count overflow".into())
+    })?))?;
+    for item in hidden {
+        let NbtTag::String(name) = item else {
+            return Err(WritingError::Message(
+                "TooltipDisplay hidden component ID must be a string".into(),
+            ));
+        };
+        seq.write_var_int(&VarInt(i32::from(adventure_component_name(name)?.to_id())))?;
+    }
+    Ok(())
+}
 fn write_adventure_components(
     value: &NbtTag,
     seq: &mut impl NetworkWriteExt,
@@ -1848,43 +1881,11 @@ fn write_adventure_components(
         for (name, component_value) in &exact.child_tags {
             let id = adventure_component_name(name)?;
             seq.write_var_int(&VarInt(i32::from(id.to_id())))?;
-            if id == DataComponent::TooltipDisplay {
-                if let NbtTag::Compound(tooltip) = component_value {
-                    let hidden = tooltip.get_list("hidden_components").ok_or_else(|| {
-                        WritingError::Message(
-                            "TooltipDisplay matcher is missing hidden_components".into(),
-                        )
-                    })?;
-                    let hide = tooltip.get_bool("hide_tooltip").ok_or_else(|| {
-                        WritingError::Message(
-                            "TooltipDisplay matcher is missing hide_tooltip".into(),
-                        )
-                    })?;
-                    if tooltip.child_tags.keys().any(|key| {
-                        key.as_ref() != "hide_tooltip" && key.as_ref() != "hidden_components"
-                    }) {
-                        return Err(WritingError::Message(
-                            "Unknown TooltipDisplay matcher field".into(),
-                        ));
-                    }
-                    seq.write_bool(hide)?;
-                    seq.write_var_int(&VarInt(i32::try_from(hidden.len()).map_err(|_| {
-                        WritingError::Message(
-                            "TooltipDisplay hidden component count overflow".into(),
-                        )
-                    })?))?;
-                    for item in hidden {
-                        let NbtTag::String(name) = item else {
-                            return Err(WritingError::Message(
-                                "TooltipDisplay hidden component ID must be a string".into(),
-                            ));
-                        };
-                        seq.write_var_int(&VarInt(i32::from(
-                            adventure_component_name(name)?.to_id(),
-                        )))?;
-                    }
-                    continue;
-                }
+            if id == DataComponent::TooltipDisplay
+                && let NbtTag::Compound(tooltip) = component_value
+            {
+                write_adventure_tooltip(tooltip, seq)?;
+                continue;
             }
             let component = pumpkin_data::data_component_impl::read_data(id, component_value)
                 .ok_or_else(|| {
@@ -1893,7 +1894,7 @@ fn write_adventure_components(
             serialize(id, component.as_ref(), seq)?;
         }
     }
-    let partial_len = partial.map_or(0, |value| value.len());
+    let partial_len = partial.map_or(0, Vec::len);
     if partial_len > MAX_ADVENTURE_COMPONENTS {
         return Err(WritingError::Message(
             "Too many adventure partial components".into(),
@@ -1946,10 +1947,10 @@ fn read_adventure_predicate(seq: &mut impl NetworkReadExt) -> Result<NbtTag, Rea
     if let Some(value) = nbt {
         result.put("nbt", value);
     }
-    if let NbtTag::Compound(value) = components? {
-        if !value.child_tags.is_empty() {
-            result.put("components", NbtTag::Compound(value));
-        }
+    if let NbtTag::Compound(value) = components?
+        && !value.child_tags.is_empty()
+    {
+        result.put("components", NbtTag::Compound(value));
     }
     Ok(NbtTag::Compound(result))
 }
@@ -2961,12 +2962,12 @@ impl DataComponentCodec<Self> for TrimImpl {
 }
 
 impl DataComponentCodec<Self> for DebugStickStateImpl {
-    fn serialize(&self, _seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
-        Ok(())
+    fn serialize(&self, seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
+        serialize_nbt_fallback(self, seq)
     }
 
-    fn deserialize(_seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
-        Ok(Self)
+    fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
+        deserialize_nbt_fallback(seq, "debug_stick_state", Self::read_data)
     }
 }
 
@@ -3518,6 +3519,98 @@ mod jukebox_playable_tests {
 #[cfg(test)]
 mod persistent_codec_fallback_tests {
     use super::*;
+
+    #[test]
+    fn debug_stick_state_uses_official_nbt_fallback_and_preserves_next_component() {
+        let mut wire = vec![0x0a, 0x08, 0x00, 0x11];
+        wire.extend_from_slice(b"minecraft:oak_log");
+        wire.extend_from_slice(&[0x00, 0x04]);
+        wire.extend_from_slice(b"axis");
+        wire.extend_from_slice(&[0x00, 0x40]);
+
+        let mut input = wire.as_slice();
+        let decoded = deserialize(DataComponent::DebugStickState, &mut input)
+            .expect("debug stick state fallback should decode");
+        let decoded = decoded
+            .as_any()
+            .downcast_ref::<DebugStickStateImpl>()
+            .expect("debug stick state implementation");
+        let mut expected = NbtCompound::new();
+        expected.put_string("minecraft:oak_log", "axis".to_owned());
+        assert_eq!(decoded.write_data(), NbtTag::Compound(expected));
+        assert_eq!(MaxStackSizeImpl::deserialize(&mut input).unwrap().size, 64);
+        assert!(input.is_empty());
+
+        let mut empty = [0x0a, 0x00, 0x40].as_slice();
+        let decoded = deserialize(DataComponent::DebugStickState, &mut empty)
+            .expect("empty debug stick state should decode");
+        assert_eq!(decoded.write_data(), NbtTag::Compound(NbtCompound::new()));
+        assert_eq!(MaxStackSizeImpl::deserialize(&mut empty).unwrap().size, 64);
+        assert!(empty.is_empty());
+    }
+
+    #[test]
+    fn debug_stick_state_rejects_malformed_and_invalid_entries() {
+        let mut end = [0x00].as_slice();
+        assert!(deserialize(DataComponent::DebugStickState, &mut end).is_err());
+
+        for (block, property) in [
+            ("minecraft:no_such_block", "axis"),
+            ("minecraft:oak_log", "no_such_property"),
+            ("custom:oak_log", "axis"),
+        ] {
+            let mut root = NbtCompound::new();
+            root.put_string(block, property.to_owned());
+            let mut wire = Vec::new();
+            wire.write_nbt(NbtTag::Compound(root)).unwrap();
+            assert!(deserialize(DataComponent::DebugStickState, &mut wire.as_slice()).is_err());
+        }
+
+        let mut root = NbtCompound::new();
+        root.put_int("minecraft:stone", 1);
+        let mut wire = Vec::new();
+        wire.write_nbt(NbtTag::Compound(root)).unwrap();
+        assert!(deserialize(DataComponent::DebugStickState, &mut wire.as_slice()).is_err());
+    }
+
+    #[test]
+    fn debug_stick_state_hash_and_equality_follow_canonical_map_state() {
+        let mut first = std::collections::BTreeMap::new();
+        first.insert("minecraft:oak_log".to_owned(), "axis".to_owned());
+        first.insert("minecraft:oak_fence_gate".to_owned(), "facing".to_owned());
+
+        let mut second = std::collections::BTreeMap::new();
+        second.insert("minecraft:oak_fence_gate".to_owned(), "facing".to_owned());
+        second.insert("minecraft:oak_log".to_owned(), "axis".to_owned());
+
+        let left = DebugStickStateImpl { properties: first };
+        let right = DebugStickStateImpl { properties: second };
+        assert_eq!(left, right);
+        assert_eq!(left.get_hash(), right.get_hash());
+
+        let mut changed = right.clone();
+        changed
+            .properties
+            .insert("minecraft:oak_log".to_owned(), "waterlogged".to_owned());
+        assert_ne!(left, changed);
+        assert_ne!(left.get_hash(), changed.get_hash());
+    }
+
+    #[test]
+    fn debug_stick_state_adventure_exact_round_trip_uses_same_fallback() {
+        let mut state = NbtCompound::new();
+        state.put_string("minecraft:oak_log", "axis".to_owned());
+        let mut components = NbtCompound::new();
+        components.put("minecraft:debug_stick_state", NbtTag::Compound(state));
+        let mut root = NbtCompound::new();
+        root.put("components", NbtTag::Compound(components));
+        let value = NbtTag::Compound(root);
+
+        let mut wire = Vec::new();
+        write_adventure_components(&value, &mut wire).unwrap();
+        let decoded = read_adventure_components(&mut wire.as_slice()).unwrap();
+        assert_eq!(decoded, value);
+    }
 
     #[test]
     fn intangible_projectile_accepts_unknown_compound_fields_and_preserves_next_component() {

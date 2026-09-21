@@ -809,7 +809,11 @@ impl ToTokens for ItemComponents {
             });
         }
         if self.debug_stick_state.is_some() {
-            tokens.extend(quote! { (DebugStickState, &DebugStickStateImpl), });
+            tokens.extend(quote! {
+                (DebugStickState, &DebugStickStateImpl {
+                    properties: std::collections::BTreeMap::new(),
+                }),
+            });
         }
         if self.dye.is_some() {
             tokens.extend(quote! { (Dye, &DyeImpl), });

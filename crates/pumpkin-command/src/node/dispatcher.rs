@@ -67,7 +67,7 @@ impl SignableArgument {
     }
 }
 
-impl<'a, S: CommandSource> ParsingResult<'a, S> {
+impl<S: CommandSource> ParsingResult<'_, S> {
     /// Extracts signable arguments from a complete parse without normalizing
     /// their source text.
     ///
@@ -95,12 +95,7 @@ impl<'a, S: CommandSource> ParsingResult<'a, S> {
                 if !argument_node.meta.signable {
                     continue;
                 }
-                if input
-                    .get(parsed_node.range.start..parsed_node.range.end)
-                    .is_none()
-                {
-                    return None;
-                }
+                input.get(parsed_node.range.start..parsed_node.range.end)?;
 
                 result.push(SignableArgument {
                     name: argument_node.meta.name.to_string(),

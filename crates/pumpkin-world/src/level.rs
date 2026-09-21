@@ -143,7 +143,7 @@ pub struct TickData {
     pub random_ticks: Vec<RandomTickSample>,
 }
 
-fn merge_tick_streams<T: Clone>(streams: Vec<Vec<OrderedTick<T>>>) -> Vec<OrderedTick<T>> {
+fn merge_tick_streams<T: Clone>(streams: &[Vec<OrderedTick<T>>]) -> Vec<OrderedTick<T>> {
     let mut positions = vec![0; streams.len()];
     let mut heads = BinaryHeap::new();
     for (index, stream) in streams.iter().enumerate() {
@@ -667,8 +667,8 @@ impl Level {
             }
         }
 
-        ticks.block_ticks = merge_tick_streams(block_tick_streams);
-        ticks.fluid_ticks = merge_tick_streams(fluid_tick_streams);
+        ticks.block_ticks = merge_tick_streams(&block_tick_streams);
+        ticks.fluid_ticks = merge_tick_streams(&fluid_tick_streams);
 
         ticks
     }

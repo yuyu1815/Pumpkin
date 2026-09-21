@@ -1,6 +1,9 @@
-use crate::data_component_impl::DataComponentImpl;
+use crate::{Block, data_component_impl::DataComponentImpl};
+use crc_fast::CrcAlgorithm::Crc32Iscsi;
+use crc_fast::Digest;
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_nbt::tag::NbtTag;
+use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct WritableBookContentImpl {
@@ -88,13 +91,54 @@ impl DataComponentImpl for WrittenBookContentImpl {
     default_impl!(WrittenBookContent);
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct DebugStickStateImpl;
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DebugStickStateImpl {
+    pub properties: BTreeMap<String, String>,
+}
 impl DebugStickStateImpl {
-    pub const fn read_data(_data: &NbtTag) -> Option<Self> {
-        Some(Self)
+    pub fn read_data(data: &NbtTag) -> Option<Self> {
+        let NbtTag::Compound(compound) = data else {
+            return None;
+        };
+        let mut properties = BTreeMap::new();
+        for (block_key, tag) in &compound.child_tags {
+            let NbtTag::String(property) = tag else {
+                return None;
+            };
+            let path = block_key.strip_prefix("minecraft:")?;
+            let block = Block::from_registry_key(path)?;
+            let block_properties = block.properties(block.default_state.id)?;
+            if !block_properties
+                .to_props()
+                .iter()
+                .any(|(name, _)| *name == property.as_ref())
+            {
+                return None;
+            }
+            properties.insert(format!("minecraft:{}", block.name), property.to_string());
+        }
+        Some(Self { properties })
     }
 }
 impl DataComponentImpl for DebugStickStateImpl {
+    fn write_data(&self) -> NbtTag {
+        let mut compound = NbtCompound::new();
+        for (block, property) in &self.properties {
+            compound.put_string(block, property.clone());
+        }
+        NbtTag::Compound(compound)
+    }
+
+    fn get_hash(&self) -> i32 {
+        let mut digest = Digest::new(Crc32Iscsi);
+        for (block, property) in &self.properties {
+            digest.update(block.as_bytes());
+            digest.update(&[0]);
+            digest.update(property.as_bytes());
+            digest.update(&[0]);
+        }
+        digest.finalize() as i32
+    }
+
     default_impl!(DebugStickState);
 }

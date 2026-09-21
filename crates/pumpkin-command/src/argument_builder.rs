@@ -408,7 +408,7 @@ impl<S: CommandSource> RequiredArgumentBuilder<S> {
     /// argument type with vanilla 26.2's `SignedArgument` metadata; ordinary
     /// string and other argument types are not signable by default.
     #[must_use]
-    pub fn signable(mut self) -> Self {
+    pub const fn signable(mut self) -> Self {
         self.signable = true;
         self
     }

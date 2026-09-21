@@ -169,17 +169,7 @@ pub async fn io_read_work(
             let (result_pos, received) = match classify_loaded_data(data) {
                 Ok(chunk) => {
                     let result_pos = ChunkPos::new(chunk.x, chunk.z);
-                    if result_pos != pos {
-                        (
-                            pos,
-                            RecvChunk::LoadFailure {
-                                pos,
-                                error: format!(
-                                    "Loaded chunk coordinates {result_pos:?} do not match requested {pos:?}"
-                                ),
-                            },
-                        )
-                    } else {
+                    if result_pos == pos {
                         let level = level.clone();
                         let result =
                             run_blocking(move || process_loaded_chunk(chunk, &level)).await;
@@ -192,6 +182,16 @@ pub async fn io_read_work(
                             },
                         };
                         (result_pos, received)
+                    } else {
+                        (
+                            pos,
+                            RecvChunk::LoadFailure {
+                                pos,
+                                error: format!(
+                                    "Loaded chunk coordinates {result_pos:?} do not match requested {pos:?}"
+                                ),
+                            },
+                        )
                     }
                 }
                 Err(LoadedChunkOutcome::Missing(result_pos)) => (
