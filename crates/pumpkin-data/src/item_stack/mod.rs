@@ -183,9 +183,39 @@ impl ItemStack {
         }
         None
     }
+    fn normalize_patch_entry(&mut self, id: DataComponent) {
+        let Some(first) = self.patch.iter().position(|(patch_id, _)| *patch_id == id) else {
+            return;
+        };
+        let Some(last) = self.patch.iter().rposition(|(patch_id, _)| *patch_id == id) else {
+            return;
+        };
+        let value = self.patch[last].1.take();
+        for index in (first + 1..self.patch.len()).rev() {
+            if self.patch[index].0 == id {
+                self.patch.remove(index);
+            }
+        }
+        self.patch[first].1 = value;
+    }
+
+    fn replace_patch_entry(
+        &mut self,
+        id: DataComponent,
+        value: Option<Box<dyn DataComponentImpl>>,
+    ) {
+        self.normalize_patch_entry(id);
+        if let Some((_, current)) = self.patch.iter_mut().find(|(patch_id, _)| *patch_id == id) {
+            *current = value;
+        } else {
+            self.patch.push((id, value));
+        }
+    }
+
     #[must_use]
     pub fn get_data_component_mut<T: DataComponentImpl + 'static>(&mut self) -> Option<&mut T> {
         let to_get_id = T::get_enum();
+        self.normalize_patch_entry(to_get_id);
         if let Some(index) = self.patch.iter().rposition(|(id, _)| *id == to_get_id) {
             return self.patch[index]
                 .1
@@ -242,40 +272,23 @@ impl ItemStack {
             let enchantments = EnchantmentsImpl {
                 enchantment: Cow::Owned(vec![(enchantment, level as i32)]),
             };
-            self.patch
-                .push((DataComponent::Enchantments, Some(Box::new(enchantments))));
+            self.replace_patch_entry(DataComponent::Enchantments, Some(Box::new(enchantments)));
         }
     }
 
     pub fn set_lore(&mut self, lines: Vec<pumpkin_util::text::TextComponent>) {
-        let lore = Some(Box::new(crate::data_component_impl::LoreImpl { lines }) as _);
-        if let Some((_, component)) = self
-            .patch
-            .iter_mut()
-            .find(|(id, _)| *id == DataComponent::Lore)
-        {
-            *component = lore;
-        } else {
-            self.patch.push((DataComponent::Lore, lore));
-        }
+        self.replace_patch_entry(
+            DataComponent::Lore,
+            Some(Box::new(crate::data_component_impl::LoreImpl { lines })),
+        );
     }
 
     pub fn set_data_component<T: DataComponentImpl + 'static>(&mut self, component: T) {
-        let to_set_id = T::get_enum();
-        let boxed = Some(Box::new(component) as _);
-        if let Some((_, c)) = self.patch.iter_mut().find(|(id, _)| *id == to_set_id) {
-            *c = boxed;
-        } else {
-            self.patch.push((to_set_id, boxed));
-        }
+        self.replace_patch_entry(T::get_enum(), Some(Box::new(component)));
     }
 
     pub fn remove_data_component(&mut self, to_remove_id: DataComponent) {
-        if let Some((_, c)) = self.patch.iter_mut().find(|(id, _)| *id == to_remove_id) {
-            *c = None;
-        } else {
-            self.patch.push((to_remove_id, None));
-        }
+        self.replace_patch_entry(to_remove_id, None);
     }
 
     pub fn add_lore(&mut self, line: pumpkin_util::text::TextComponent) {
@@ -350,15 +363,7 @@ impl ItemStack {
             return;
         }
 
-        for (id, component) in &mut self.patch {
-            if *id == DataComponent::Damage {
-                *component = Some(DamageImpl { damage }.to_dyn());
-                return;
-            }
-        }
-
-        self.patch
-            .push((DataComponent::Damage, Some(DamageImpl { damage }.to_dyn())));
+        self.replace_patch_entry(DataComponent::Damage, Some(DamageImpl { damage }.to_dyn()));
     }
 
     #[must_use]
@@ -484,15 +489,7 @@ impl ItemStack {
             }
             .to_dyn(),
         );
-        if let Some(pos) = self
-            .patch
-            .iter()
-            .position(|(id, _)| *id == DataComponent::CustomName)
-        {
-            self.patch[pos].1 = component;
-        } else {
-            self.patch.push((DataComponent::CustomName, component));
-        }
+        self.replace_patch_entry(DataComponent::CustomName, component);
     }
 
     #[must_use]
@@ -599,16 +596,10 @@ impl ItemStack {
     }
 
     fn set_custom_data_component(&mut self, custom_data: NbtCompound) {
-        let component = Some(CustomDataImpl { data: custom_data }.to_dyn());
-        if let Some((_, data)) = self
-            .patch
-            .iter_mut()
-            .find(|(id, _)| *id == DataComponent::CustomData)
-        {
-            *data = component;
-        } else {
-            self.patch.push((DataComponent::CustomData, component));
-        }
+        self.replace_patch_entry(
+            DataComponent::CustomData,
+            Some(CustomDataImpl { data: custom_data }.to_dyn()),
+        );
     }
 
     pub fn get_custom_data(&self, namespace: &str, key: &str) -> Option<NbtTag> {
@@ -718,16 +709,28 @@ impl ItemStack {
             }
             data.enchantment.to_mut().push((enchantment, level));
         } else {
-            self.patch.push((
-                Enchantments,
-                Some(
-                    EnchantmentsImpl {
-                        enchantment: Cow::Owned(vec![(enchantment, level)]),
-                    }
-                    .to_dyn(),
-                ),
-            ));
+            self.set_data_component(EnchantmentsImpl {
+                enchantment: Cow::Owned(vec![(enchantment, level)]),
+            });
         }
+    }
+
+    #[must_use]
+    pub fn effective_patch(&self) -> Vec<(DataComponent, Option<&dyn DataComponentImpl>)> {
+        let mut effective = Vec::new();
+        for (id, _) in &self.patch {
+            if effective.iter().any(|(seen_id, _)| seen_id == id) {
+                continue;
+            }
+            let value = self
+                .patch
+                .iter()
+                .rev()
+                .find(|(patch_id, _)| patch_id == id)
+                .and_then(|(_, value)| value.as_deref());
+            effective.push((*id, value));
+        }
+        effective
     }
 
     fn effective_patch_value(&self, id: DataComponent) -> Option<Option<&dyn DataComponentImpl>> {
@@ -859,7 +862,7 @@ impl ItemStack {
         // Create a tag compound for additional data
         let mut tag = NbtCompound::new();
 
-        for (id, data) in &self.patch {
+        for (id, data) in self.effective_patch() {
             if let Some(data) = data {
                 tag.put(id.to_name(), data.write_data());
             } else {
@@ -943,8 +946,8 @@ mod tests {
     use crate::data_component::DataComponent;
     use crate::data_component_impl::{
         BundleContentsImpl, ConsumableImpl, ContainerImpl, CustomDataImpl, CustomNameImpl,
-        DataComponentImpl, EnchantmentsImpl, ItemNameImpl, JukeboxPlayableImpl, LoreImpl,
-        MapDecorationsImpl, RecipesImpl, UnbreakableImpl, UseRemainderImpl, get,
+        DamageImpl, DataComponentImpl, EnchantmentsImpl, ItemNameImpl, JukeboxPlayableImpl,
+        LoreImpl, MapDecorationsImpl, RecipesImpl, UnbreakableImpl, UseRemainderImpl, get,
     };
 
     /// Helper: creates a fresh Iron Sword (max_damage 250, damage 0).
@@ -1423,6 +1426,196 @@ mod tests {
         assert!(!plain.are_items_and_components_equal(&customized));
         assert!(!customized.are_items_and_components_equal(&plain));
         assert!(customized.are_items_and_components_equal(&customized.clone()));
+    }
+
+    #[test]
+    fn duplicate_component_set_replaces_tombstone_for_all_model_views() {
+        let mut stack = ItemStack::new_with_component(
+            1,
+            &Item::IRON_SWORD,
+            vec![
+                (
+                    DataComponent::Damage,
+                    Some(DamageImpl { damage: 3 }.to_dyn()),
+                ),
+                (DataComponent::Damage, None),
+            ],
+        );
+        stack.set_data_component(DamageImpl { damage: 7 });
+
+        let mut expected = ItemStack::new(1, &Item::IRON_SWORD);
+        expected.set_data_component(DamageImpl { damage: 7 });
+        assert_eq!(
+            stack
+                .get_data_component::<DamageImpl>()
+                .map(|damage| damage.damage),
+            Some(7)
+        );
+        assert!(stack.has_data_component(DataComponent::Damage));
+        assert!(stack.are_items_and_components_equal(&expected));
+        assert_eq!(stack.get_hash(), expected.get_hash());
+
+        let mut encoded = NbtCompound::new();
+        stack.write_item_stack(&mut encoded);
+        let components = encoded
+            .get_compound("components")
+            .expect("components should be encoded");
+        assert!(
+            components
+                .child_tags
+                .keys()
+                .any(|name| name.as_ref() == DataComponent::Damage.to_name())
+        );
+        assert!(
+            !components
+                .child_tags
+                .keys()
+                .any(|name| { name.as_ref() == format!("!{}", DataComponent::Damage.to_name()) })
+        );
+
+        let decoded = ItemStack::read_item_stack(&encoded).expect("stack should round-trip");
+        assert_eq!(
+            decoded
+                .get_data_component::<DamageImpl>()
+                .map(|damage| damage.damage),
+            Some(7)
+        );
+        assert!(decoded.has_data_component(DataComponent::Damage));
+        assert!(decoded.are_items_and_components_equal(&expected));
+        assert_eq!(decoded.get_hash(), expected.get_hash());
+    }
+
+    #[test]
+    fn duplicate_component_remove_replaces_late_value_with_tombstone() {
+        let mut stack = ItemStack::new_with_component(
+            1,
+            &Item::IRON_SWORD,
+            vec![
+                (DataComponent::Damage, None),
+                (
+                    DataComponent::Damage,
+                    Some(DamageImpl { damage: 7 }.to_dyn()),
+                ),
+            ],
+        );
+        stack.remove_data_component(DataComponent::Damage);
+
+        let expected = ItemStack::new_with_component(
+            1,
+            &Item::IRON_SWORD,
+            vec![(DataComponent::Damage, None)],
+        );
+        assert!(!stack.has_data_component(DataComponent::Damage));
+        assert!(stack.get_data_component::<DamageImpl>().is_none());
+        assert!(stack.are_items_and_components_equal(&expected));
+        assert_eq!(stack.get_hash(), expected.get_hash());
+
+        let mut encoded = NbtCompound::new();
+        stack.write_item_stack(&mut encoded);
+        let components = encoded
+            .get_compound("components")
+            .expect("components should be encoded");
+        assert!(
+            !components
+                .child_tags
+                .keys()
+                .any(|name| name.as_ref() == DataComponent::Damage.to_name())
+        );
+        assert!(
+            components
+                .child_tags
+                .keys()
+                .any(|name| { name.as_ref() == format!("!{}", DataComponent::Damage.to_name()) })
+        );
+
+        let decoded = ItemStack::read_item_stack(&encoded).expect("stack should round-trip");
+        assert!(!decoded.has_data_component(DataComponent::Damage));
+        assert!(decoded.get_data_component::<DamageImpl>().is_none());
+        assert!(decoded.are_items_and_components_equal(&expected));
+        assert_eq!(decoded.get_hash(), expected.get_hash());
+    }
+
+    #[test]
+    fn duplicate_component_set_updates_the_latest_value() {
+        let mut stack = ItemStack::new_with_component(
+            1,
+            &Item::IRON_SWORD,
+            vec![
+                (
+                    DataComponent::Damage,
+                    Some(DamageImpl { damage: 3 }.to_dyn()),
+                ),
+                (
+                    DataComponent::Damage,
+                    Some(DamageImpl { damage: 5 }.to_dyn()),
+                ),
+            ],
+        );
+        stack.set_data_component(DamageImpl { damage: 9 });
+
+        let mut expected = ItemStack::new(1, &Item::IRON_SWORD);
+        expected.set_data_component(DamageImpl { damage: 9 });
+        assert_eq!(stack.get_damage(), 9);
+        assert!(stack.are_items_and_components_equal(&expected));
+        assert_eq!(stack.get_hash(), expected.get_hash());
+    }
+
+    #[test]
+    fn duplicate_lore_set_updates_the_latest_value_and_roundtrips() {
+        let mut stack = ItemStack::new_with_component(
+            1,
+            &Item::WOODEN_AXE,
+            vec![
+                (
+                    DataComponent::Lore,
+                    Some(
+                        LoreImpl {
+                            lines: vec![pumpkin_util::text::TextComponent::text("old first")],
+                        }
+                        .to_dyn(),
+                    ),
+                ),
+                (
+                    DataComponent::Lore,
+                    Some(
+                        LoreImpl {
+                            lines: vec![pumpkin_util::text::TextComponent::text("old latest")],
+                        }
+                        .to_dyn(),
+                    ),
+                ),
+            ],
+        );
+        stack.set_lore(vec![pumpkin_util::text::TextComponent::text("new latest")]);
+
+        let mut expected = ItemStack::new(1, &Item::WOODEN_AXE);
+        expected.set_lore(vec![pumpkin_util::text::TextComponent::text("new latest")]);
+        assert_eq!(
+            stack
+                .get_data_component::<LoreImpl>()
+                .expect("lore should be present")
+                .lines[0]
+                .clone()
+                .get_text(),
+            "new latest"
+        );
+        assert!(stack.are_items_and_components_equal(&expected));
+        assert_eq!(stack.get_hash(), expected.get_hash());
+
+        let mut encoded = NbtCompound::new();
+        stack.write_item_stack(&mut encoded);
+        let decoded = ItemStack::read_item_stack(&encoded).expect("stack should round-trip");
+        assert_eq!(
+            decoded
+                .get_data_component::<LoreImpl>()
+                .expect("lore should round-trip")
+                .lines[0]
+                .clone()
+                .get_text(),
+            "new latest"
+        );
+        assert!(decoded.are_items_and_components_equal(&expected));
+        assert_eq!(decoded.get_hash(), expected.get_hash());
     }
 
     #[test]

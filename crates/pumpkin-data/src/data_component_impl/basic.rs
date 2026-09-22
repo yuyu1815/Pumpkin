@@ -110,9 +110,12 @@ pub struct CustomNameImpl {
 }
 impl CustomNameImpl {
     pub fn read_data(data: &NbtTag) -> Option<Self> {
-        data.extract_string().map(|name| Self {
-            name: TextComponent::text(name.to_string()),
-        })
+        let name = match data {
+            NbtTag::String(name) => TextComponent::text(name.to_string()),
+            NbtTag::Compound(_) => TextComponent::from_nbt(data),
+            _ => return None,
+        };
+        Some(Self { name })
     }
 }
 impl DataComponentImpl for CustomNameImpl {
