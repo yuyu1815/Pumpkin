@@ -9,8 +9,8 @@ use crate::entity::projectile::{
 use crate::item::{ItemBehaviour, ItemMetadata};
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::item::Item;
-use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::sound::Sound;
+use pumpkin_util::Hand;
 
 pub struct PotionItem;
 pub struct SplashPotionItem;
@@ -47,7 +47,14 @@ impl ItemBehaviour for PotionItem {
 }
 
 impl ItemBehaviour for SplashPotionItem {
-    fn normal_use(&self, _item: &Item, player: &Player) {
+    fn normal_use_with_hand(
+        &self,
+        _item: &Item,
+        player: &Player,
+        hand: Hand,
+        _yaw: f32,
+        _pitch: f32,
+    ) {
         let position = player.position();
         let world = player.world();
         world.play_sound(
@@ -58,39 +65,16 @@ impl ItemBehaviour for SplashPotionItem {
         let entity = Entity::new(world.clone(), position, &EntityType::SPLASH_POTION);
         let splash = SplashPotionEntity::new_shot(entity, player.get_entity());
 
-        // Copy the held item stack data into the projectile
-        let main_s = player.inventory.held_item();
-        let mut used_main = true;
-        let mut stack = (!main_s.is_empty()
-            && main_s.item.id == pumpkin_data::item::Item::SPLASH_POTION.id)
-            .then_some(main_s);
-        if stack.is_none() {
-            let off_s = player.inventory.off_hand_item();
-            if !off_s.is_empty() && off_s.item.id == pumpkin_data::item::Item::SPLASH_POTION.id {
-                stack = Some(off_s);
-                used_main = false;
-            }
-        }
-        let stack = stack.unwrap_or_else(|| ItemStack::EMPTY.clone());
-        splash.set_item_stack(stack);
+        splash.set_item_stack(player.inventory.get_stack_in_hand(hand));
 
         let (yaw, pitch) = player.rotation();
         splash.thrown.set_velocity_from(pitch, yaw, 0.0, POWER, 1.0);
 
         world.spawn_entity(Arc::new(splash));
 
-        // Decrement the used stack (clear)
-        if used_main {
-            let mut s = player.inventory.held_item();
-            s.decrement_unless_creative(player.gamemode.load(), 1);
-            player.inventory.set_held_item(s);
-        } else {
-            let mut s = player.inventory.off_hand_item();
-            s.decrement_unless_creative(player.gamemode.load(), 1);
-            player
-                .inventory
-                .set_stack_in_hand(pumpkin_util::Hand::Left, s);
-        }
+        let mut stack = player.inventory.get_stack_in_hand(hand);
+        stack.decrement_unless_creative(player.gamemode.load(), 1);
+        player.inventory.set_stack_in_hand(hand, stack);
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -99,7 +83,14 @@ impl ItemBehaviour for SplashPotionItem {
 }
 
 impl ItemBehaviour for LingeringPotionItem {
-    fn normal_use(&self, _item: &Item, player: &Player) {
+    fn normal_use_with_hand(
+        &self,
+        _item: &Item,
+        player: &Player,
+        hand: Hand,
+        _yaw: f32,
+        _pitch: f32,
+    ) {
         let position = player.position();
         let world = player.world();
         world.play_sound(
@@ -110,39 +101,16 @@ impl ItemBehaviour for LingeringPotionItem {
         let entity = Entity::new(world.clone(), position, &EntityType::LINGERING_POTION);
         let ling = LingeringPotionEntity::new_shot(entity, player.get_entity());
 
-        // Copy the held item stack data into the projectile
-        let main_s = player.inventory.held_item();
-        let mut used_main = true;
-        let mut stack = (!main_s.is_empty()
-            && main_s.item.id == pumpkin_data::item::Item::LINGERING_POTION.id)
-            .then_some(main_s);
-        if stack.is_none() {
-            let off_s = player.inventory.off_hand_item();
-            if !off_s.is_empty() && off_s.item.id == pumpkin_data::item::Item::LINGERING_POTION.id {
-                stack = Some(off_s);
-                used_main = false;
-            }
-        }
-        let stack = stack.unwrap_or_else(|| ItemStack::EMPTY.clone());
-        ling.set_item_stack(stack);
+        ling.set_item_stack(player.inventory.get_stack_in_hand(hand));
 
         let (yaw, pitch) = player.rotation();
         ling.thrown.set_velocity_from(pitch, yaw, 0.0, POWER, 1.0);
 
         world.spawn_entity(Arc::new(ling));
 
-        // Decrement the used stack (clear)
-        if used_main {
-            let mut s = player.inventory.held_item();
-            s.decrement_unless_creative(player.gamemode.load(), 1);
-            player.inventory.set_held_item(s);
-        } else {
-            let mut s = player.inventory.off_hand_item();
-            s.decrement_unless_creative(player.gamemode.load(), 1);
-            player
-                .inventory
-                .set_stack_in_hand(pumpkin_util::Hand::Left, s);
-        }
+        let mut stack = player.inventory.get_stack_in_hand(hand);
+        stack.decrement_unless_creative(player.gamemode.load(), 1);
+        player.inventory.set_stack_in_hand(hand, stack);
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

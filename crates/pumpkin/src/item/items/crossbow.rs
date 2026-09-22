@@ -90,7 +90,6 @@ impl ItemBehaviour for CrossbowItem {
                 }
             }
         }
-        player.living_entity.clear_active_hand();
     }
 
     fn get_use_duration(&self) -> i32 {

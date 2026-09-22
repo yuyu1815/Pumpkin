@@ -482,17 +482,11 @@ impl ItemBehaviour for FilledBucketItem {
 }
 
 impl ItemBehaviour for MilkBucketItem {
-    fn normal_use(&self, _item: &Item, player: &Player) {
-        let stack = player.inventory().held_item();
-        player
-            .living_entity
-            .set_active_hand(pumpkin_util::Hand::Right, stack, 32);
-    }
+    // Consumable owns the active hand and finish lifecycle.
+    fn normal_use(&self, _item: &Item, _player: &Player) {}
 
-    fn on_stopped_using(&self, _stack: &ItemStack, player: &Player) {
-        player.living_entity.reset_effects_and_attributes();
-        give_player_bucket_item(player, &Item::BUCKET);
-    }
+    // Cancelling use must not consume the bucket or clear effects.
+    fn on_stopped_using(&self, _stack: &ItemStack, _player: &Player) {}
 
     fn get_use_duration(&self) -> i32 {
         32

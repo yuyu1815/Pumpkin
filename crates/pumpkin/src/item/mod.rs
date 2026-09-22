@@ -13,6 +13,7 @@ use pumpkin_data::Block;
 use pumpkin_data::BlockDirection;
 use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
+use pumpkin_util::Hand;
 use pumpkin_util::math::position::BlockPos;
 use pumpkin_util::math::vector3::Vector3;
 
@@ -30,6 +31,17 @@ pub trait ItemBehaviour: Send + Sync {
     /// the player's potentially stale entity rotation.
     fn normal_use_with_rotation(&self, item: &Item, player: &Player, _yaw: f32, _pitch: f32) {
         self.normal_use(item, player);
+    }
+
+    fn normal_use_with_hand(
+        &self,
+        item: &Item,
+        player: &Player,
+        _hand: Hand,
+        yaw: f32,
+        pitch: f32,
+    ) {
+        self.normal_use_with_rotation(item, player, yaw, pitch);
     }
 
     #[expect(clippy::too_many_arguments)]

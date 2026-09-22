@@ -5,6 +5,7 @@ use crate::server::Server;
 use pumpkin_data::Block;
 use pumpkin_data::BlockDirection;
 use pumpkin_data::item_stack::ItemStack;
+use pumpkin_util::Hand;
 use pumpkin_util::math::position::BlockPos;
 use pumpkin_util::math::vector3::Vector3;
 use rustc_hash::FxHashMap;
@@ -32,10 +33,21 @@ impl ItemRegistry {
 
     pub fn on_use(&self, stack: &ItemStack, player: &Player) {
         let (yaw, pitch) = player.rotation();
-        self.on_use_with_rotation(stack, player, yaw, pitch);
+        self.on_use_with_hand(stack, player, Hand::Right, yaw, pitch);
     }
 
     pub fn on_use_with_rotation(&self, stack: &ItemStack, player: &Player, yaw: f32, pitch: f32) {
+        self.on_use_with_hand(stack, player, Hand::Right, yaw, pitch);
+    }
+
+    pub fn on_use_with_hand(
+        &self,
+        stack: &ItemStack,
+        player: &Player,
+        hand: Hand,
+        yaw: f32,
+        pitch: f32,
+    ) {
         let item = stack.item;
         let cooldown = stack.get_use_cooldown();
         let cooldown_group = cooldown
@@ -46,12 +58,28 @@ impl ItemRegistry {
             return;
         }
 
-        let pumpkin_item = self.get_pumpkin_item(item.id);
-        if let Some(pumpkin_item) = pumpkin_item {
-            pumpkin_item.normal_use_with_rotation(item, player, yaw, pitch);
-        }
+        let Some(pumpkin_item) = self.get_pumpkin_item(item.id) else {
+            return;
+        };
+        pumpkin_item.normal_use_with_hand(item, player, hand, yaw, pitch);
 
-        if let Some(cooldown) = cooldown {
+        // Timed consumables start their cooldown at finish; instant uses need the
+        // same post-success protection without reintroducing double starts.
+        let timed_use_started = player
+            .living_entity
+            .item_use_time
+            .load(std::sync::atomic::Ordering::Relaxed)
+            > 0
+            && player
+                .living_entity
+                .item_in_use
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .as_ref()
+                .is_some_and(|used| used.are_items_and_components_equal(stack));
+        // The behaviour API returns no instant Success/Fail result, so retain the
+        // legacy post-call protection for instant uses; timed uses are owned by finish.
+        if !timed_use_started && let Some(cooldown) = cooldown {
             player.start_cooldown(cooldown_group, (cooldown.seconds * 20.0) as i32);
         }
     }
@@ -109,10 +137,6 @@ impl ItemRegistry {
             pumpkin_item.use_on_block(stack, player, location, face, cursor_pos, block, server)
         });
 
-        if let Some(cooldown) = cooldown {
-            player.start_cooldown(cooldown_group, (cooldown.seconds * 20.0) as i32);
-        }
-
         result
     }
 
@@ -135,10 +159,6 @@ impl ItemRegistry {
         let pumpkin_item = self.get_pumpkin_item(stack.item.id);
         if let Some(pumpkin_item) = pumpkin_item {
             pumpkin_item.use_on_entity(stack, player, entity);
-        }
-
-        if let Some(cooldown) = cooldown {
-            player.start_cooldown(cooldown_group, (cooldown.seconds * 20.0) as i32);
         }
     }
 

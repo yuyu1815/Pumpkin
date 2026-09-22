@@ -114,6 +114,45 @@ struct ConditionStruct {
     terms: Option<Vec<ConditionStruct>>,
 }
 
+fn condition_is_fully_supported(cond: &ConditionStruct) -> bool {
+    match cond.condition.as_str() {
+        "minecraft:survives_explosion"
+        | "minecraft:killed_by_player"
+        | "minecraft:random_chance"
+        | "minecraft:random_chance_with_enchanted_bonus" => true,
+        "minecraft:table_bonus" => cond
+            .chances
+            .as_ref()
+            .is_some_and(|chances| !chances.is_empty()),
+        "minecraft:match_tool" => {
+            let Some(predicate) = cond.predicate.as_ref() else {
+                return false;
+            };
+            let shears = predicate.items.as_ref().is_some_and(|items| match items {
+                serde_json::Value::String(item) => item.contains("shears"),
+                serde_json::Value::Array(items) => items
+                    .iter()
+                    .any(|item| item.as_str().is_some_and(|item| item.contains("shears"))),
+                _ => false,
+            });
+            let silk_touch = predicate
+                .predicates
+                .as_ref()
+                .is_some_and(|predicates| predicates.to_string().contains("silk_touch"));
+            shears || silk_touch
+        }
+        "minecraft:all_of" | "minecraft:any_of" => cond
+            .terms
+            .as_ref()
+            .is_some_and(|terms| terms.iter().all(condition_is_fully_supported)),
+        "minecraft:inverted" => cond
+            .term
+            .as_deref()
+            .is_some_and(condition_is_fully_supported),
+        _ => false,
+    }
+}
+
 fn parse_condition(cond: &ConditionStruct) -> LootCondition {
     match cond.condition.as_str() {
         "minecraft:survives_explosion" => LootCondition::SurvivesExplosion,
@@ -155,7 +194,11 @@ fn parse_condition(cond: &ConditionStruct) -> LootCondition {
         }
         "minecraft:all_of" => {
             if let Some(terms) = &cond.terms {
-                combine_conditions(terms)
+                if terms.is_empty() {
+                    LootCondition::AllOf(&[])
+                } else {
+                    combine_conditions(terms)
+                }
             } else {
                 LootCondition::None
             }
@@ -184,33 +227,34 @@ fn parse_condition(cond: &ConditionStruct) -> LootCondition {
             LootCondition::None
         }
         "minecraft:any_of" => {
-            if let Some(terms) = &cond.terms {
-                let has_silk = terms
-                    .iter()
-                    .any(|t| parse_condition(t) == LootCondition::SilkTouch);
-                let has_shears = terms
-                    .iter()
-                    .any(|t| parse_condition(t) == LootCondition::Shears);
-                if has_silk && has_shears {
-                    return LootCondition::SilkTouchOrShears;
-                } else if has_silk {
-                    return LootCondition::SilkTouch;
-                } else if has_shears {
-                    return LootCondition::Shears;
-                }
+            let Some(terms) = &cond.terms else {
+                return LootCondition::None;
+            };
+            if !terms.iter().all(condition_is_fully_supported) {
+                return LootCondition::None;
             }
-            LootCondition::None
+            let parsed: Vec<_> = terms.iter().map(parse_condition).collect();
+            let has_silk = parsed.contains(&LootCondition::SilkTouch);
+            let has_shears = parsed.contains(&LootCondition::Shears);
+            if parsed.len() == 2 && has_silk && has_shears {
+                return LootCondition::SilkTouchOrShears;
+            }
+            if parsed.len() == 1 {
+                return parsed[0];
+            }
+            LootCondition::AnyOf(Box::leak(parsed.into_boxed_slice()))
         }
         "minecraft:inverted" => {
-            if let Some(term) = &cond.term {
-                match parse_condition(term) {
-                    LootCondition::SilkTouch => LootCondition::NoSilkTouch,
-                    LootCondition::Shears => LootCondition::NoSilkTouchOrShears,
-                    LootCondition::SilkTouchOrShears => LootCondition::NoSilkTouchOrShears,
-                    _ => LootCondition::None,
-                }
-            } else {
-                LootCondition::None
+            let Some(term) = &cond.term else {
+                return LootCondition::None;
+            };
+            if !condition_is_fully_supported(term) {
+                return LootCondition::None;
+            }
+            match parse_condition(term) {
+                LootCondition::SilkTouch => LootCondition::NoSilkTouch,
+                LootCondition::SilkTouchOrShears => LootCondition::NoSilkTouchOrShears,
+                parsed => LootCondition::Inverted(Box::leak(Box::new(parsed))),
             }
         }
         _ => LootCondition::None,
@@ -554,6 +598,14 @@ fn extract_entries_with_depth(
 fn condition_to_tokens(cond: LootCondition) -> TokenStream {
     match cond {
         LootCondition::None => quote! { LootCondition::None },
+        LootCondition::AnyOf(list) => {
+            let tokens: Vec<TokenStream> = list.iter().copied().map(condition_to_tokens).collect();
+            quote! { LootCondition::AnyOf(&[#(#tokens),*]) }
+        }
+        LootCondition::Inverted(inner) => {
+            let token = condition_to_tokens(*inner);
+            quote! { LootCondition::Inverted(&#token) }
+        }
         LootCondition::SilkTouch => quote! { LootCondition::SilkTouch },
         LootCondition::NoSilkTouch => quote! { LootCondition::NoSilkTouch },
         LootCondition::Shears => quote! { LootCondition::Shears },
@@ -767,5 +819,139 @@ pub fn build() -> TokenStream {
     quote! {
         pub use pumpkin_util::loot_table::*;
         #all_tokens
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ConditionStruct, parse_condition};
+    use pumpkin_util::loot_table::LootCondition;
+
+    fn random_chance(chance: f32) -> ConditionStruct {
+        ConditionStruct {
+            condition: "minecraft:random_chance".to_owned(),
+            enchantment: None,
+            chance: Some(chance),
+            unenchanted_chance: None,
+            enchanted_chance: None,
+            chances: None,
+            predicate: None,
+            term: None,
+            terms: None,
+        }
+    }
+
+    fn inverted(term: ConditionStruct) -> ConditionStruct {
+        ConditionStruct {
+            condition: "minecraft:inverted".to_owned(),
+            enchantment: None,
+            chance: None,
+            unenchanted_chance: None,
+            enchanted_chance: None,
+            chances: None,
+            predicate: None,
+            term: Some(Box::new(term)),
+            terms: None,
+        }
+    }
+
+    fn unknown() -> ConditionStruct {
+        ConditionStruct {
+            condition: "minecraft:future_condition".to_owned(),
+            enchantment: None,
+            chance: None,
+            unenchanted_chance: None,
+            enchanted_chance: None,
+            chances: None,
+            predicate: None,
+            term: None,
+            terms: None,
+        }
+    }
+
+    #[test]
+    fn inverted_random_chance_and_double_negation_keep_meaning() {
+        assert_eq!(
+            parse_condition(&inverted(random_chance(0.0))),
+            LootCondition::Inverted(Box::leak(Box::new(LootCondition::RandomChance {
+                chance: 0.0,
+            }))),
+        );
+        assert_eq!(
+            parse_condition(&inverted(random_chance(1.0))),
+            LootCondition::Inverted(Box::leak(Box::new(LootCondition::RandomChance {
+                chance: 1.0,
+            }))),
+        );
+        assert!(matches!(
+            parse_condition(&inverted(inverted(random_chance(1.0)))),
+            LootCondition::Inverted(_)
+        ));
+    }
+
+    #[test]
+    fn any_of_only_uses_silk_shears_special_case_when_exact() {
+        let condition = ConditionStruct {
+            condition: "minecraft:any_of".to_owned(),
+            enchantment: None,
+            chance: None,
+            unenchanted_chance: None,
+            enchanted_chance: None,
+            chances: None,
+            predicate: None,
+            term: None,
+            terms: Some(vec![random_chance(0.0), random_chance(1.0)]),
+        };
+        assert!(matches!(
+            parse_condition(&condition),
+            LootCondition::AnyOf(_)
+        ));
+    }
+
+    #[test]
+    fn unknown_root_keeps_legacy_absent_condition_semantics() {
+        assert_eq!(parse_condition(&unknown()), LootCondition::None);
+    }
+
+    #[test]
+    fn unknown_nested_condition_keeps_legacy_fallback() {
+        let any_of = ConditionStruct {
+            condition: "minecraft:any_of".to_owned(),
+            enchantment: None,
+            chance: None,
+            unenchanted_chance: None,
+            enchanted_chance: None,
+            chances: None,
+            predicate: None,
+            term: None,
+            terms: Some(vec![unknown(), random_chance(1.0)]),
+        };
+        assert_eq!(parse_condition(&any_of), LootCondition::None);
+        assert_eq!(parse_condition(&inverted(unknown())), LootCondition::None);
+    }
+
+    #[test]
+    fn empty_composites_keep_vanilla_truth_values() {
+        let all_of = ConditionStruct {
+            condition: "minecraft:all_of".to_owned(),
+            enchantment: None,
+            chance: None,
+            unenchanted_chance: None,
+            enchanted_chance: None,
+            chances: None,
+            predicate: None,
+            term: None,
+            terms: Some(Vec::new()),
+        };
+        let any_of = ConditionStruct {
+            condition: "minecraft:any_of".to_owned(),
+            ..all_of.clone()
+        };
+        assert!(
+            matches!(parse_condition(&all_of), LootCondition::AllOf(terms) if terms.is_empty())
+        );
+        assert!(
+            matches!(parse_condition(&any_of), LootCondition::AnyOf(terms) if terms.is_empty())
+        );
     }
 }

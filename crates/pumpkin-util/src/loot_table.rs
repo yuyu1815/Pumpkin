@@ -3,6 +3,8 @@
 pub enum LootCondition {
     #[default]
     None,
+    AnyOf(&'static [Self]),
+    Inverted(&'static Self),
     SilkTouch,
     NoSilkTouch,
     Shears,

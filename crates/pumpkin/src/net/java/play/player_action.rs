@@ -315,17 +315,7 @@ impl JavaClient {
                     player.drop_held_item(true);
                 }
                 Status::ReleaseItemInUse => {
-                    let item_in_use = player
-                        .living_entity
-                        .item_in_use
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner)
-                        .clone();
-                    if let Some(stack) = item_in_use {
-                        server.item_registry.on_stopped_using(&stack, player);
-                    }
-
-                    player.living_entity.clear_active_hand();
+                    player.living_entity.stop_using_item(server, player);
                 }
                 Status::SwapItem => {
                     player.swap_item();
@@ -383,13 +373,16 @@ mod tests {
     use super::*;
     use arc_swap::ArcSwap;
     use pumpkin_config::{AdvancedConfiguration, BasicConfiguration, TelemetryConfig};
-    use pumpkin_data::data_component_impl::DebugStickStateImpl;
+    use pumpkin_data::data_component_impl::{
+        CustomDataImpl, DebugStickStateImpl, PotionContentsImpl, UseCooldownImpl, UseRemainderImpl,
+    };
     use pumpkin_data::item_stack::ItemStack;
+    use pumpkin_nbt::compound::NbtCompound;
     use pumpkin_protocol::codec::item_stack_seralizer::ItemStackSerializer;
-    use pumpkin_protocol::java::server::play::{SPlayerAction, SSetCreativeSlot};
+    use pumpkin_protocol::java::server::play::{SPlayerAction, SSetCreativeSlot, SSetHeldItem};
     use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
     use pumpkin_world::world::BlockFlags;
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, HashSet};
     use std::net::SocketAddr;
     use std::sync::Arc;
     use tempfile::TempDir;
@@ -742,6 +735,393 @@ mod tests {
             )
             .level,
             1
+        );
+
+        // Instant owner: an off-hand projectile consumes only its source stack and
+        // starts its UseCooldown without entering the timed finish path.
+        let pearl = ItemStack::new(1, &pumpkin_data::item::Item::ENDER_PEARL);
+        player
+            .inventory
+            .set_held_item(ItemStack::new(1, &pumpkin_data::item::Item::STONE));
+        player
+            .inventory
+            .set_stack_in_hand(pumpkin_util::Hand::Left, pearl.clone());
+        server
+            .item_registry
+            .on_use_with_hand(&pearl, &player, pumpkin_util::Hand::Left, 0.0, 0.0);
+        assert_eq!(
+            player.inventory.held_item().item.id,
+            pumpkin_data::item::Item::STONE.id
+        );
+        assert!(player.inventory.off_hand_item().is_empty());
+        let cooldown_group = pearl
+            .get_use_cooldown()
+            .and_then(|cooldown| cooldown.cooldown_group.clone())
+            .unwrap_or_else(|| pearl.item.registry_key.to_owned());
+        assert!(player.is_on_cooldown(&cooldown_group));
+
+        // Selected-slot cancellation calls the item stop owner before changing slots.
+        player.gamemode.store(pumpkin_util::GameMode::Creative);
+        player.inventory.set_selected_slot(0);
+        player
+            .inventory
+            .set_held_item(ItemStack::new(1, &pumpkin_data::item::Item::CROSSBOW));
+        player
+            .inventory
+            .set_stack_in_hand(pumpkin_util::Hand::Right, player.inventory.held_item());
+        player.living_entity.set_active_hand(
+            pumpkin_util::Hand::Right,
+            player.inventory.held_item(),
+            71_975,
+        );
+        java.handle_set_held_item(&server, &player, &SSetHeldItem { slot: 1 });
+        assert!(
+            player
+                .inventory
+                .get_slot(0)
+                .get_data_component::<pumpkin_data::data_component_impl::ChargedProjectilesImpl>()
+                .is_some()
+        );
+        player.gamemode.store(pumpkin_util::GameMode::Survival);
+
+        // Real server/player finish owner: count-only decrement keeps components and
+        // offers the remainder once, then the active off-hand owns its own finish.
+        player.gamemode.store(pumpkin_util::GameMode::Survival);
+        let stew = ItemStack::new(2, &pumpkin_data::item::Item::MUSHROOM_STEW);
+        player.inventory.set_held_item(stew.clone());
+        player.living_entity.set_active_hand(
+            pumpkin_util::Hand::Right,
+            stew.clone(),
+            stew.get_max_use_time(),
+        );
+        for _ in 0..stew.get_max_use_time() {
+            server.tick_players_and_network();
+        }
+        let held_stew = player.inventory.held_item();
+        assert_eq!(
+            held_stew.item.id,
+            pumpkin_data::item::Item::MUSHROOM_STEW.id
+        );
+        assert_eq!(held_stew.item_count, 1);
+        let bowl_count: u32 = (0
+            ..pumpkin_inventory::player::player_inventory::PlayerInventory::MAIN_SIZE)
+            .map(|slot| player.inventory.get_slot(slot))
+            .filter(|stack| stack.item.id == pumpkin_data::item::Item::BOWL.id)
+            .map(|stack| stack.item_count as u32)
+            .sum();
+        assert!(bowl_count >= 1, "count>1 remainder must be offered once");
+
+        player
+            .inventory
+            .set_held_item(ItemStack::new(1, &pumpkin_data::item::Item::STONE));
+        let offhand_stew = ItemStack::new(1, &pumpkin_data::item::Item::MUSHROOM_STEW);
+        player
+            .inventory
+            .set_stack_in_hand(pumpkin_util::Hand::Left, offhand_stew.clone());
+        player.living_entity.set_active_hand(
+            pumpkin_util::Hand::Left,
+            offhand_stew.clone(),
+            offhand_stew.get_max_use_time(),
+        );
+        for _ in 0..offhand_stew.get_max_use_time() {
+            server.tick_players_and_network();
+        }
+        assert_eq!(
+            player.inventory.held_item().item.id,
+            pumpkin_data::item::Item::STONE.id
+        );
+        assert_eq!(
+            player.inventory.off_hand_item().item.id,
+            pumpkin_data::item::Item::BOWL.id
+        );
+
+        // The finish owner compares item/components, not count. A count-only
+        // change before finish still consumes the active hand and returns the
+        // configured template, including its custom data and count.
+        for slot in 0..pumpkin_inventory::player::player_inventory::PlayerInventory::MAIN_SIZE {
+            player.inventory.set_slot(slot, ItemStack::EMPTY.clone());
+        }
+        player
+            .inventory
+            .set_stack_in_hand(pumpkin_util::Hand::Left, ItemStack::EMPTY.clone());
+        let mut marker = NbtCompound::new();
+        marker.put_string("matrix", "custom-remainder".to_owned());
+        let mut custom_remainder = ItemStack::new(2, &pumpkin_data::item::Item::BOWL);
+        custom_remainder.set_data_component(CustomDataImpl::new(marker));
+        let mut count_two_stew = ItemStack::new(2, &pumpkin_data::item::Item::MUSHROOM_STEW);
+        count_two_stew.set_data_component(UseRemainderImpl {
+            convert_into: custom_remainder.clone(),
+        });
+        player.inventory.set_held_item(count_two_stew.clone());
+        player.living_entity.set_active_hand(
+            pumpkin_util::Hand::Right,
+            count_two_stew.clone(),
+            count_two_stew.get_max_use_time(),
+        );
+        player
+            .inventory
+            .set_held_item(count_two_stew.copy_with_count(1));
+        for _ in 0..count_two_stew.get_max_use_time() {
+            server.tick_players_and_network();
+        }
+        let same_hand_remainder = player.inventory.held_item();
+        assert_eq!(
+            same_hand_remainder.item.id,
+            pumpkin_data::item::Item::BOWL.id
+        );
+        assert_eq!(same_hand_remainder.item_count, 2);
+        assert_eq!(
+            same_hand_remainder
+                .get_data_component::<CustomDataImpl>()
+                .and_then(|data| data.data.get_string("matrix")),
+            Some("custom-remainder")
+        );
+
+        // A full inventory uses one new drop entity, with the exact template
+        // count/components; existing world drops are not part of the assertion.
+        for slot in 0..pumpkin_inventory::player::player_inventory::PlayerInventory::MAIN_SIZE {
+            player
+                .inventory
+                .set_slot(slot, ItemStack::new(64, &pumpkin_data::item::Item::STONE));
+        }
+        player.inventory.set_stack_in_hand(
+            pumpkin_util::Hand::Left,
+            ItemStack::new(64, &pumpkin_data::item::Item::STONE),
+        );
+        player.inventory.set_selected_slot(0);
+        player.inventory.set_held_item(count_two_stew.clone());
+        let before_drop_ids: HashSet<i32> = world
+            .entities
+            .load()
+            .iter()
+            .map(|entity| entity.get_entity().entity_id)
+            .collect();
+        player.living_entity.set_active_hand(
+            pumpkin_util::Hand::Right,
+            count_two_stew.clone(),
+            count_two_stew.get_max_use_time(),
+        );
+        for _ in 0..count_two_stew.get_max_use_time() {
+            server.tick_players_and_network();
+        }
+        assert_eq!(player.inventory.held_item().item_count, 1);
+        let entities = world.entities.load();
+        let new_drops: Vec<_> = entities
+            .iter()
+            .filter(|entity| {
+                !before_drop_ids.contains(&entity.get_entity().entity_id)
+                    && entity.get_entity().entity_type == &pumpkin_data::entity::EntityType::ITEM
+            })
+            .filter_map(|entity| entity.get_item_entity())
+            .collect();
+        assert_eq!(new_drops.len(), 1, "one remainder must create one new drop");
+        let dropped_remainder = new_drops[0]
+            .get_item_stack()
+            .lock()
+            .expect("drop stack lock")
+            .clone();
+        assert_eq!(dropped_remainder.item.id, pumpkin_data::item::Item::BOWL.id);
+        assert_eq!(dropped_remainder.item_count, 2);
+        assert_eq!(
+            dropped_remainder
+                .get_data_component::<CustomDataImpl>()
+                .and_then(|data| data.data.get_string("matrix")),
+            Some("custom-remainder")
+        );
+
+        // Creative consumes keep the held count and omit UseRemainder, while
+        // UseCooldown still applies exactly as the official Player owner does.
+        for slot in 0..pumpkin_inventory::player::player_inventory::PlayerInventory::MAIN_SIZE {
+            player.inventory.set_slot(slot, ItemStack::EMPTY.clone());
+        }
+        player
+            .inventory
+            .set_stack_in_hand(pumpkin_util::Hand::Left, ItemStack::EMPTY.clone());
+        player.gamemode.store(pumpkin_util::GameMode::Creative);
+        let creative_food = ItemStack::new(2, &pumpkin_data::item::Item::CHORUS_FRUIT);
+        player.inventory.set_held_item(creative_food.clone());
+        player.living_entity.set_active_hand(
+            pumpkin_util::Hand::Right,
+            creative_food.clone(),
+            creative_food.get_max_use_time(),
+        );
+        let creative_group = creative_food.item.registry_key.to_owned();
+        for _ in 0..creative_food.get_max_use_time() {
+            server.tick_players_and_network();
+        }
+        assert_eq!(player.inventory.held_item().item_count, 2);
+        assert!(player.is_on_cooldown(&creative_group));
+        player.gamemode.store(pumpkin_util::GameMode::Survival);
+
+        // Milk cancellation is a no-op; successful finish owns ClearAllEffects
+        // and the bucket template exactly once.
+        for slot in 0..pumpkin_inventory::player::player_inventory::PlayerInventory::MAIN_SIZE {
+            player.inventory.set_slot(slot, ItemStack::EMPTY.clone());
+        }
+        player
+            .living_entity
+            .add_effect(pumpkin_data::potion::Effect {
+                effect_type: &pumpkin_data::effect::StatusEffect::SPEED,
+                duration: 100,
+                amplifier: 0,
+                ambient: false,
+                show_particles: true,
+                show_icon: true,
+                blend: false,
+            });
+        let milk = ItemStack::new(1, &pumpkin_data::item::Item::MILK_BUCKET);
+        player.inventory.set_held_item(milk.clone());
+        player.living_entity.set_active_hand(
+            pumpkin_util::Hand::Right,
+            milk.clone(),
+            milk.get_max_use_time(),
+        );
+        player.living_entity.stop_using_item(&server, &player);
+        assert!(
+            player
+                .living_entity
+                .has_effect(&pumpkin_data::effect::StatusEffect::SPEED)
+        );
+        assert_eq!(
+            player.inventory.held_item().item.id,
+            pumpkin_data::item::Item::MILK_BUCKET.id
+        );
+        player.living_entity.set_active_hand(
+            pumpkin_util::Hand::Right,
+            milk.clone(),
+            milk.get_max_use_time(),
+        );
+        for _ in 0..milk.get_max_use_time() {
+            server.tick_players_and_network();
+        }
+        assert!(
+            !player
+                .living_entity
+                .has_effect(&pumpkin_data::effect::StatusEffect::SPEED)
+        );
+        assert_eq!(
+            player.inventory.held_item().item.id,
+            pumpkin_data::item::Item::BUCKET.id
+        );
+
+        // Potion contents apply once and generic UseRemainder supplies the one
+        // bottle; the old special bottle path would produce a second bottle.
+        let mut healing = ItemStack::new(1, &pumpkin_data::item::Item::POTION);
+        healing.set_data_component(PotionContentsImpl {
+            potion_id: Some(i32::from(pumpkin_data::potion::Potion::HARMING.id)),
+            custom_color: None,
+            custom_effects: Vec::new(),
+            custom_name: None,
+        });
+        player.living_entity.set_health(20.0);
+        player.inventory.set_held_item(healing.clone());
+        player.living_entity.set_active_hand(
+            pumpkin_util::Hand::Right,
+            healing.clone(),
+            healing.get_max_use_time(),
+        );
+        for _ in 0..healing.get_max_use_time() {
+            server.tick_players_and_network();
+        }
+        assert_eq!(player.living_entity.health.load(), 14.0);
+        assert_eq!(
+            player.inventory.held_item().item.id,
+            pumpkin_data::item::Item::GLASS_BOTTLE.id
+        );
+        assert_eq!(
+            (0..pumpkin_inventory::player::player_inventory::PlayerInventory::MAIN_SIZE)
+                .map(|slot| player.inventory.get_slot(slot))
+                .filter(|stack| stack.item.id == pumpkin_data::item::Item::GLASS_BOTTLE.id)
+                .map(|stack| stack.item_count as u32)
+                .sum::<u32>(),
+            1
+        );
+
+        // A patched group is shared by different instant items, and cancellation
+        // before finish does not start it. An existing instant cooldown remains.
+        for slot in 0..pumpkin_inventory::player::player_inventory::PlayerInventory::MAIN_SIZE {
+            player.inventory.set_slot(slot, ItemStack::EMPTY.clone());
+        }
+        let shared_group = "matrix:shared".to_owned();
+        let mut shared_pearl = ItemStack::new(1, &pumpkin_data::item::Item::ENDER_PEARL);
+        shared_pearl.set_data_component(UseCooldownImpl::new(0.5, Some(shared_group.clone())));
+        let mut shared_wind = ItemStack::new(1, &pumpkin_data::item::Item::WIND_CHARGE);
+        shared_wind.set_data_component(UseCooldownImpl::new(0.5, Some(shared_group.clone())));
+        player.inventory.set_held_item(shared_wind.clone());
+        player
+            .inventory
+            .set_stack_in_hand(pumpkin_util::Hand::Left, shared_pearl.clone());
+        server.item_registry.on_use_with_hand(
+            &shared_pearl,
+            &player,
+            pumpkin_util::Hand::Left,
+            0.0,
+            0.0,
+        );
+        assert!(player.is_on_cooldown(&shared_group));
+        server.item_registry.on_use_with_hand(
+            &shared_wind,
+            &player,
+            pumpkin_util::Hand::Right,
+            0.0,
+            0.0,
+        );
+        assert_eq!(player.inventory.held_item().item_count, 1);
+
+        let cancel_group = "matrix:cancel".to_owned();
+        let mut cancel_food = ItemStack::new(1, &pumpkin_data::item::Item::CHORUS_FRUIT);
+        cancel_food.set_data_component(UseCooldownImpl::new(0.5, Some(cancel_group.clone())));
+        player.inventory.set_held_item(cancel_food.clone());
+        player
+            .living_entity
+            .set_active_hand(pumpkin_util::Hand::Right, cancel_food, 32);
+        player.living_entity.stop_using_item(&server, &player);
+        assert!(!player.is_on_cooldown(&cancel_group));
+
+        let instant_group = "matrix:instant-existing".to_owned();
+        let mut guarded_pearl = ItemStack::new(1, &pumpkin_data::item::Item::ENDER_PEARL);
+        guarded_pearl.set_data_component(UseCooldownImpl::new(0.5, Some(instant_group.clone())));
+        player.inventory.set_held_item(guarded_pearl.clone());
+        player.start_cooldown(instant_group.clone(), 5);
+        server.item_registry.on_use_with_hand(
+            &guarded_pearl,
+            &player,
+            pumpkin_util::Hand::Right,
+            0.0,
+            0.0,
+        );
+        assert_eq!(player.inventory.held_item().item_count, 1);
+        assert!(player.is_on_cooldown(&instant_group));
+
+        // Trident's stop callback re-enters clear_active_hand. This bounded
+        // real-player check catches holding item_use_state across callbacks.
+        for slot in 0..pumpkin_inventory::player::player_inventory::PlayerInventory::MAIN_SIZE {
+            player.inventory.set_slot(slot, ItemStack::EMPTY.clone());
+        }
+        let trident = ItemStack::new(1, &pumpkin_data::item::Item::TRIDENT);
+        player.inventory.set_held_item(trident.clone());
+        player
+            .living_entity
+            .set_active_hand(pumpkin_util::Hand::Right, trident, 71_990);
+        let stop_player = player.clone();
+        let stop_server = server.clone();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            stop_player
+                .living_entity
+                .stop_using_item(&stop_server, &stop_player);
+            let _ = done_tx.send(());
+        });
+        done_rx
+            .recv_timeout(std::time::Duration::from_millis(500))
+            .expect("stop callback must not deadlock on reentrant clear_active_hand");
+        assert!(
+            player
+                .living_entity
+                .item_in_use
+                .lock()
+                .expect("use lock")
+                .is_none()
         );
 
         player.inventory.set_held_item(ItemStack::EMPTY.clone());

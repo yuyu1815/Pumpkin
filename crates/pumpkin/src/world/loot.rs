@@ -36,6 +36,24 @@ fn check_condition(
 ) -> bool {
     match cond {
         LootCondition::None => true,
+        LootCondition::AnyOf(conditions) => conditions.iter().copied().any(|condition| {
+            check_condition(
+                condition,
+                has_silk_touch,
+                has_shears,
+                fortune_level,
+                params,
+                rng,
+            )
+        }),
+        LootCondition::Inverted(inner) => !check_condition(
+            *inner,
+            has_silk_touch,
+            has_shears,
+            fortune_level,
+            params,
+            rng,
+        ),
         LootCondition::SilkTouch => has_silk_touch,
         LootCondition::NoSilkTouch => !has_silk_touch,
         LootCondition::Shears => has_shears,
@@ -65,9 +83,16 @@ fn check_condition(
                 .get(index)
                 .is_some_and(|chance| rng.next_f32() < *chance)
         }
-        LootCondition::AllOf(conditions) => conditions
-            .iter()
-            .all(|c| check_condition(*c, has_silk_touch, has_shears, fortune_level, params, rng)),
+        LootCondition::AllOf(conditions) => conditions.iter().copied().all(|condition| {
+            check_condition(
+                condition,
+                has_silk_touch,
+                has_shears,
+                fortune_level,
+                params,
+                rng,
+            )
+        }),
     }
 }
 
@@ -311,5 +336,187 @@ fn shuffle_and_split_items(
     for i in (1..n).rev() {
         let j = rng.next_bounded_i32((i + 1) as i32) as usize;
         result.swap(i, j);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LootContextParameters, check_condition};
+    use pumpkin_util::loot_table::LootCondition;
+    use pumpkin_util::random::{RandomImpl, xoroshiro128::Xoroshiro};
+
+    #[test]
+    fn inverted_random_chance_truth_table_and_double_negation() {
+        let params = LootContextParameters::default();
+        for (chance, expected) in [(0.0, true), (1.0, false)] {
+            let mut rng = Xoroshiro::from_seed(7);
+            assert_eq!(
+                check_condition(
+                    LootCondition::Inverted(Box::leak(Box::new(LootCondition::RandomChance {
+                        chance
+                    },))),
+                    false,
+                    false,
+                    0,
+                    &params,
+                    &mut rng,
+                ),
+                expected,
+            );
+        }
+
+        let inner = Box::leak(Box::new(LootCondition::RandomChance { chance: 1.0 }));
+        let nested = Box::leak(Box::new(LootCondition::Inverted(inner)));
+        let double_not = LootCondition::Inverted(nested);
+        let mut rng = Xoroshiro::from_seed(7);
+        assert!(check_condition(
+            double_not, false, false, 0, &params, &mut rng,
+        ));
+    }
+
+    #[test]
+    fn any_of_and_all_of_preserve_order_and_short_circuit() {
+        let params = LootContextParameters::default();
+        let any_of = LootCondition::AnyOf(&[
+            LootCondition::RandomChance { chance: 0.0 },
+            LootCondition::RandomChance { chance: 1.0 },
+        ]);
+        let mut any_rng = Xoroshiro::from_seed(11);
+        let mut any_expected = Xoroshiro::from_seed(11);
+        assert!(check_condition(
+            any_of,
+            false,
+            false,
+            0,
+            &params,
+            &mut any_rng,
+        ));
+        let _ = any_expected.next_f32();
+        let _ = any_expected.next_f32();
+        assert_eq!(any_rng.next_f32(), any_expected.next_f32());
+
+        let all_of = LootCondition::AllOf(&[
+            LootCondition::RandomChance { chance: 1.0 },
+            LootCondition::RandomChance { chance: 0.0 },
+            LootCondition::RandomChance { chance: 1.0 },
+        ]);
+        let mut all_rng = Xoroshiro::from_seed(11);
+        let mut all_expected = Xoroshiro::from_seed(11);
+        assert!(!check_condition(
+            all_of,
+            false,
+            false,
+            0,
+            &params,
+            &mut all_rng,
+        ));
+        let _ = all_expected.next_f32();
+        let _ = all_expected.next_f32();
+        assert_eq!(all_rng.next_f32(), all_expected.next_f32());
+    }
+
+    #[test]
+    fn empty_composites_and_inverted_nested_conditions_keep_truth_and_rng_order() {
+        let params = LootContextParameters::default();
+        let mut all_rng = Xoroshiro::from_seed(17);
+        let mut any_rng = Xoroshiro::from_seed(17);
+        assert!(check_condition(
+            LootCondition::AllOf(&[]),
+            false,
+            false,
+            0,
+            &params,
+            &mut all_rng,
+        ));
+        assert!(!check_condition(
+            LootCondition::AnyOf(&[]),
+            false,
+            false,
+            0,
+            &params,
+            &mut any_rng,
+        ));
+
+        let nested = LootCondition::Inverted(Box::leak(Box::new(LootCondition::AnyOf(&[
+            LootCondition::RandomChance { chance: 0.0 },
+            LootCondition::RandomChance { chance: 1.0 },
+        ]))));
+        let mut nested_rng = Xoroshiro::from_seed(19);
+        let mut expected_rng = Xoroshiro::from_seed(19);
+        assert!(!check_condition(
+            nested,
+            false,
+            false,
+            0,
+            &params,
+            &mut nested_rng,
+        ));
+        let _ = expected_rng.next_f32();
+        let _ = expected_rng.next_f32();
+        assert_eq!(nested_rng.next_f32(), expected_rng.next_f32());
+    }
+
+    #[test]
+    fn random_chance_truth_table_and_nested_any_parent_short_circuit() {
+        let params = LootContextParameters::default();
+        let mut zero_rng = Xoroshiro::from_seed(7);
+        assert!(!check_condition(
+            LootCondition::RandomChance { chance: 0.0 },
+            false,
+            false,
+            0,
+            &params,
+            &mut zero_rng,
+        ));
+
+        let mut one_rng = Xoroshiro::from_seed(7);
+        assert!(check_condition(
+            LootCondition::RandomChance { chance: 1.0 },
+            false,
+            false,
+            0,
+            &params,
+            &mut one_rng,
+        ));
+
+        let nested = LootCondition::AllOf(&[
+            LootCondition::SilkTouchOrShears,
+            LootCondition::RandomChance { chance: 1.0 },
+        ]);
+        let mut shears_rng = Xoroshiro::from_seed(7);
+        assert!(check_condition(
+            nested,
+            false,
+            true,
+            0,
+            &params,
+            &mut shears_rng,
+        ));
+        let mut plain_rng = Xoroshiro::from_seed(7);
+        assert!(!check_condition(
+            nested,
+            false,
+            false,
+            0,
+            &params,
+            &mut plain_rng,
+        ));
+
+        let short_circuit = LootCondition::AllOf(&[
+            LootCondition::RandomChance { chance: 0.0 },
+            LootCondition::RandomChance { chance: 1.0 },
+        ]);
+        let mut actual_rng = Xoroshiro::from_seed(11);
+        let mut expected_rng = Xoroshiro::from_seed(11);
+        assert!(!check_condition(
+            short_circuit,
+            false,
+            false,
+            0,
+            &params,
+            &mut actual_rng,
+        ));
+        let _ = expected_rng.next_f32();
+        assert_eq!(actual_rng.next_f32(), expected_rng.next_f32());
     }
 }

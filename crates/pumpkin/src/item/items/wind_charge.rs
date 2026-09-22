@@ -10,6 +10,7 @@ use crate::entity::EntityBase;
 use crate::entity::projectile::ThrownItemEntity;
 use crate::entity::projectile::wind_charge::{WIND_CHARGE_GRAVITY, WindChargeEntity};
 use crate::item::{ItemBehaviour, ItemMetadata};
+use pumpkin_util::Hand;
 
 pub struct WindChargeItem;
 
@@ -22,7 +23,14 @@ impl ItemMetadata for WindChargeItem {
 const POWER: f32 = 1.5;
 
 impl ItemBehaviour for WindChargeItem {
-    fn normal_use(&self, _block: &Item, player: &Player) {
+    fn normal_use_with_hand(
+        &self,
+        _block: &Item,
+        player: &Player,
+        hand: Hand,
+        _yaw: f32,
+        _pitch: f32,
+    ) {
         let world = player.world();
         let position = player.position();
 
@@ -40,24 +48,9 @@ impl ItemBehaviour for WindChargeItem {
 
         world.spawn_entity(Arc::new(WindChargeEntity::new_normal(wind_charge)));
 
-        let mut main_hand = player.inventory.held_item();
-        let consumed = if !main_hand.is_empty() && main_hand.item.id == Item::WIND_CHARGE.id {
-            main_hand.decrement_unless_creative(player.gamemode.load(), 1);
-            player.inventory.set_held_item(main_hand);
-            true
-        } else {
-            false
-        };
-
-        if !consumed {
-            let mut off_hand = player.inventory.off_hand_item();
-            if !off_hand.is_empty() && off_hand.item.id == Item::WIND_CHARGE.id {
-                off_hand.decrement_unless_creative(player.gamemode.load(), 1);
-                player
-                    .inventory
-                    .set_stack_in_hand(pumpkin_util::Hand::Left, off_hand);
-            }
-        }
+        let mut stack = player.inventory.get_stack_in_hand(hand);
+        stack.decrement_unless_creative(player.gamemode.load(), 1);
+        player.inventory.set_stack_in_hand(hand, stack);
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

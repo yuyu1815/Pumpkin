@@ -25,6 +25,17 @@ impl BedrockClient {
             return;
         }
 
+        if previous_slot != slot
+            && *player
+                .living_entity
+                .active_hand
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                == Some(pumpkin_util::Hand::Right)
+        {
+            player.living_entity.stop_using_item(server, player);
+        }
+
         let inv = player.inventory();
         inv.set_selected_slot(slot);
         let stack = inv.held_item();
