@@ -7,7 +7,7 @@ use pumpkin_util::text::TextComponent;
 use crate::argument_types::argument_type::{ArgumentType, JavaClientArgumentType};
 use crate::context::command_context::CommandContext;
 use crate::errors::command_syntax_error::CommandSyntaxError;
-use crate::errors::error_types::CommandErrorType;
+use crate::errors::error_types::{CommandErrorType, READER_EXPECTED_SYMBOL};
 use crate::snbt::SnbtParser;
 use crate::string_reader::StringReader;
 use crate::suggestion::suggestions::{Suggestions, SuggestionsBuilder};
@@ -35,6 +35,18 @@ pub const ERROR_COMPONENT_UNKNOWN: CommandErrorType<1> = CommandErrorType::new(
 
 #[derive(Clone, Copy)]
 pub struct ItemStackArgumentType;
+
+fn expected_component_symbol(reader: &StringReader, symbol: &'static str) -> CommandSyntaxError {
+    READER_EXPECTED_SYMBOL.create(reader, TextComponent::text(symbol))
+}
+
+fn canonical_component_name(name: String) -> String {
+    if name.contains(':') {
+        name
+    } else {
+        format!("minecraft:{name}")
+    }
+}
 
 impl<S: crate::source::CommandSource> ArgumentType<S> for ItemStackArgumentType {
     type Item = ItemStack;
@@ -89,25 +101,26 @@ impl<S: crate::source::CommandSource> ArgumentType<S> for ItemStackArgumentType 
                 let key_str = reader.string()[name_start..reader.cursor()].to_owned();
                 let Some(data_comp) = DataComponent::try_from_name(&key_str) else {
                     reader.set_cursor(name_start);
-                    return Err(
-                        ERROR_COMPONENT_UNKNOWN.create(reader, TextComponent::text(key_str))
-                    );
+                    return Err(ERROR_COMPONENT_UNKNOWN.create(
+                        reader,
+                        TextComponent::text(canonical_component_name(key_str)),
+                    ));
                 };
                 if patch.iter().any(|(id, _)| *id == data_comp) {
                     reader.set_cursor(name_start);
                     return Err(ERROR_COMPONENT_REPEATED
-                        .create(reader, TextComponent::text(data_comp.to_name())));
+                        .create_without_context(TextComponent::text(data_comp.to_name())));
                 }
 
                 reader.skip_whitespace();
                 if removed {
                     if reader.peek() == Some('=') {
-                        return Err(ERROR_COMPONENT_EXPECTED.create(reader));
+                        return Err(expected_component_symbol(reader, "]"));
                     }
                     patch.push((data_comp, None));
                 } else {
                     if reader.peek() != Some('=') {
-                        return Err(ERROR_COMPONENT_EXPECTED.create(reader));
+                        return Err(expected_component_symbol(reader, "="));
                     }
                     reader.skip();
                     reader.skip_whitespace();
@@ -120,7 +133,7 @@ impl<S: crate::source::CommandSource> ArgumentType<S> for ItemStackArgumentType 
                         return Err(ERROR_COMPONENT_MALFORMED.create_args_slice(
                             reader,
                             &[
-                                TextComponent::text(key_str),
+                                TextComponent::text(data_comp.to_name()),
                                 TextComponent::text("invalid component value"),
                             ],
                         ));
@@ -137,7 +150,7 @@ impl<S: crate::source::CommandSource> ArgumentType<S> for ItemStackArgumentType 
                         reader.skip();
                         break;
                     }
-                    _ => return Err(ERROR_COMPONENT_EXPECTED.create(reader)),
+                    _ => return Err(expected_component_symbol(reader, "]")),
                 }
             }
             if !patch.is_empty() {
@@ -172,8 +185,9 @@ impl ItemStackArgumentType {
 
 #[cfg(test)]
 mod tests {
-    use super::{ERROR_COMPONENT_REPEATED, ItemStackArgumentType};
+    use super::{ERROR_COMPONENT_REPEATED, ERROR_COMPONENT_UNKNOWN, ItemStackArgumentType};
     use crate::argument_types::argument_type::ArgumentType;
+    use crate::errors::error_types::READER_EXPECTED_SYMBOL;
     use crate::string_reader::StringReader;
     use pumpkin_data::data_component::DataComponent;
 
@@ -202,7 +216,19 @@ mod tests {
                 panic!("{input}");
             };
             assert!(error.is(&ERROR_COMPONENT_REPEATED), "{input}");
+            assert!(error.context.is_none(), "{input}");
         }
+    }
+
+    #[test]
+    fn unknown_command_component_reports_name_start() {
+        let input = "iron_sword[!missing]";
+        let error = match parse(input) {
+            Ok(_) => panic!("{input}"),
+            Err(error) => error,
+        };
+        assert!(error.is(&ERROR_COMPONENT_UNKNOWN));
+        assert_eq!(error.context.unwrap().cursor, "iron_sword[!".len());
     }
 
     #[test]
@@ -217,9 +243,17 @@ mod tests {
     }
 
     #[test]
-    fn command_component_invalid_shapes_error_at_input_boundary() {
-        for input in ["iron_sword[!damage=1]", "iron_sword[damage]"] {
-            assert!(parse(input).is_err(), "{input}");
+    fn command_component_invalid_shapes_match_vanilla_errors_and_cursors() {
+        for (input, cursor) in [
+            ("iron_sword[!damage=1]", "iron_sword[!damage".len()),
+            ("iron_sword[damage]", "iron_sword[damage".len()),
+        ] {
+            let error = match parse(input) {
+                Ok(_) => panic!("{input}"),
+                Err(error) => error,
+            };
+            assert!(error.is(&READER_EXPECTED_SYMBOL), "{input}");
+            assert_eq!(error.context.as_ref().unwrap().cursor, cursor, "{input}");
         }
     }
 

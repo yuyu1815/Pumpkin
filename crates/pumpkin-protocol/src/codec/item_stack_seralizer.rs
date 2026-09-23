@@ -76,8 +76,8 @@ fn serialize_item_stack_with_id(
                     });
             write.put_var_int(&VarInt::from(stack.item_count))?;
             write.put_var_int(&VarInt::from(item_id))?;
-            write.put_var_int(&VarInt::from(to_add as i32))?;
-            write.put_var_int(&VarInt::from(to_remove as i32))?;
+            write.put_var_int(&VarInt(to_add))?;
+            write.put_var_int(&VarInt(to_remove))?;
 
             for (wire_id, id, data) in &effective {
                 if let Some(data) = data {
@@ -151,8 +151,8 @@ fn serialize_length_prefixed_item_stack_with_id(
                     });
             write.put_var_int(&VarInt::from(stack.item_count))?;
             write.put_var_int(&VarInt::from(item_id))?;
-            write.put_var_int(&VarInt::from(to_add as i32))?;
-            write.put_var_int(&VarInt::from(to_remove as i32))?;
+            write.put_var_int(&VarInt(to_add))?;
+            write.put_var_int(&VarInt(to_remove))?;
 
             for (wire_id, id, data) in &effective {
                 if let Some(data) = data {
@@ -790,8 +790,8 @@ impl ItemStackSerializer<'_> {
             });
         write.put_var_int(&VarInt::from(remapped_item_id))?;
         write.put_var_int(&VarInt::from(self.0.item_count))?;
-        write.put_var_int(&VarInt::from(to_add as i32))?;
-        write.put_var_int(&VarInt::from(to_remove as i32))?;
+        write.put_var_int(&VarInt(to_add))?;
+        write.put_var_int(&VarInt(to_remove))?;
 
         for (wire_id, id, data) in &effective {
             if let Some(data) = data {
