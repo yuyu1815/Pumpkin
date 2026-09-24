@@ -124,7 +124,7 @@ impl MapBlockEntity {
             scale: 0,
             tracking_position: false,
             locked: false,
-            icons: Some(&[]),
+            icons: None,
             data: Some(data),
         };
         server.broadcast_packet_all(&packet);

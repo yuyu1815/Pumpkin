@@ -162,3 +162,26 @@ impl ClientPacket for CMapItemData<'_> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn icon_presence_is_distinct_from_an_explicit_empty_list() {
+        let version = JavaMinecraftVersion::V_26_2;
+        let encode = |icons| {
+            let packet = CMapItemData::new(VarInt(1), 0, false, false, icons, None);
+            let mut bytes = Vec::new();
+            packet
+                .write_packet_data(&mut bytes, &version)
+                .expect("encode map packet");
+            bytes
+        };
+
+        // map id, scale, locked, icons-present=false, absent pixel patch
+        assert_eq!(encode(None), [1, 0, 0, 0, 0]);
+        // map id, scale, locked, icons-present=true, icon count=0, absent pixel patch
+        assert_eq!(encode(Some(&[])), [1, 0, 0, 1, 0, 0]);
+    }
+}
