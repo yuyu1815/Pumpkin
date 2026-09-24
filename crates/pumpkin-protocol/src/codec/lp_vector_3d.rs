@@ -61,12 +61,14 @@ impl LpVector3d {
     pub fn read<R: std::io::Read>(reader: &mut R) -> Result<Self, ReadingError> {
         let mut low_16 = [0u8; 2];
         reader
-            .read_exact(&mut low_16)
+            .read_exact(&mut low_16[..1])
             .map_err(|e| ReadingError::Message(e.to_string()))?;
-
-        if low_16[0] == 0 && low_16[1] == 0 {
+        if low_16[0] == 0 {
             return Ok(Self(Vector3::new(0.0, 0.0, 0.0)));
         }
+        reader
+            .read_exact(&mut low_16[1..])
+            .map_err(|e| ReadingError::Message(e.to_string()))?;
 
         let mut mid_32 = [0u8; 4];
         reader
@@ -157,6 +159,26 @@ mod tests {
         assert_eq!(encode_legacy_velocity_component(-0.5), -4000);
         assert_eq!(encode_legacy_velocity_component(4.0), 31200);
         assert_eq!(encode_legacy_velocity_component(-4.0), -31200);
+    }
+
+    #[test]
+    fn zero_sentinel_consumes_one_byte() -> Result<(), Box<dyn std::error::Error>> {
+        let mut input = std::io::Cursor::new([0, 42]);
+        assert_eq!(LpVector3d::read(&mut input)?.0, Vector3::new(0.0, 0.0, 0.0));
+        assert_eq!(input.position(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn nonzero_velocity_round_trips() -> Result<(), Box<dyn std::error::Error>> {
+        let value = LpVector3d(Vector3::new(0.5, -0.5, 0.25));
+        let mut bytes = Vec::new();
+        value.write(&mut bytes)?;
+        let decoded = LpVector3d::read(&mut bytes.as_slice())?;
+        assert!((decoded.0.x - value.0.x).abs() < 0.001);
+        assert!((decoded.0.y - value.0.y).abs() < 0.001);
+        assert!((decoded.0.z - value.0.z).abs() < 0.001);
+        Ok(())
     }
 
     #[test]
