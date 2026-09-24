@@ -156,8 +156,8 @@ mod tests {
         (origin, destination)
     }
 
-    #[test]
-    fn attack_relocates_exactly_one_egg_and_suppresses_breaking() {
+    #[tokio::test]
+    async fn attack_relocates_exactly_one_egg_and_suppresses_breaking() {
         let temp_dir = TempDir::new().unwrap();
         let world = test_world(temp_dir.path());
         let (origin, destination) = prepare_egg(&world);
@@ -171,8 +171,8 @@ mod tests {
         assert_eq!(world.get_block(&destination), &Block::DRAGON_EGG);
     }
 
-    #[test]
-    fn attack_without_destination_keeps_original_egg() {
+    #[tokio::test]
+    async fn attack_without_destination_keeps_original_egg() {
         let temp_dir = TempDir::new().unwrap();
         let world = test_world(temp_dir.path());
         let (origin, blocked_candidate) = prepare_egg(&world);
@@ -190,8 +190,8 @@ mod tests {
         assert_eq!(world.get_block(&origin), &Block::DRAGON_EGG);
     }
 
-    #[test]
-    fn attack_does_not_relocate_a_replaced_source_block() {
+    #[tokio::test]
+    async fn attack_does_not_relocate_a_replaced_source_block() {
         let temp_dir = TempDir::new().unwrap();
         let world = test_world(temp_dir.path());
         let (origin, destination) = prepare_egg(&world);
