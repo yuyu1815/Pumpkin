@@ -527,7 +527,11 @@ impl ClientPacket for CRecipeBookAdd<'_> {
                 )
             })
             .count();
-        let dynamic_count = self.dynamic_recipes.len();
+        let dynamic_count = self
+            .dynamic_recipes
+            .iter()
+            .filter(|recipe| !matches!(recipe, DynamicRecipe::Brewing(_)))
+            .count();
         let total = crafting_count + RECIPES_COOKING.len() + dynamic_count;
 
         // Entry count (VarInt)
@@ -963,4 +967,59 @@ fn write_dynamic_cooking_entry(
     write_dynamic_ingredient_holderset(write, &cooking.ingredient, version)?;
     write.write_u8(flags)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::codec::recipe::{
+        DynamicRecipe, OwnedBrewingRecipe, OwnedCookingRecipe, OwnedCookingRecipeType,
+        OwnedRecipeIngredient, OwnedRecipeResult,
+    };
+
+    fn serialize(dynamic_recipes: &[DynamicRecipe]) -> Vec<u8> {
+        let packet = CRecipeBookAdd::new(true, dynamic_recipes);
+        let mut bytes = Vec::new();
+        packet
+            .write_packet_data(&mut bytes, &JavaMinecraftVersion::V_26_2)
+            .expect("serialize recipe book packet");
+        bytes
+    }
+
+    fn brewing_recipe() -> DynamicRecipe {
+        DynamicRecipe::Brewing(OwnedBrewingRecipe {
+            recipe_id: "test:brewing".into(),
+            input_item: "minecraft:water_bottle".into(),
+            input_potion: None,
+            reagent: "minecraft:nether_wart".into(),
+            output_item: "minecraft:potion".into(),
+            output_potion: Some("minecraft:awkward".into()),
+        })
+    }
+
+    fn cooking_recipe() -> DynamicRecipe {
+        DynamicRecipe::Cooking(OwnedCookingRecipeType::Smelting(OwnedCookingRecipe {
+            recipe_id: "test:smelting".into(),
+            category: RecipeCategoryTypes::Food,
+            group: None,
+            ingredient: OwnedRecipeIngredient::Simple("minecraft:beef".into()),
+            cooking_time: 200,
+            experience: 0.35,
+            result: OwnedRecipeResult {
+                item_id: "minecraft:cooked_beef".into(),
+                count: 1,
+            },
+        }))
+    }
+
+    #[test]
+    fn brewing_recipes_are_excluded_from_count_and_display_ids() {
+        let no_dynamic_recipes = serialize(&[]);
+        let brewing_only = serialize(&[brewing_recipe()]);
+        assert_eq!(brewing_only, no_dynamic_recipes);
+
+        let cooking_only = serialize(&[cooking_recipe()]);
+        let brewing_then_cooking = serialize(&[brewing_recipe(), cooking_recipe()]);
+        assert_eq!(brewing_then_cooking, cooking_only);
+    }
 }
