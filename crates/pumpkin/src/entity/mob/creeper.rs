@@ -165,6 +165,10 @@ impl Mob for CreeperEntity {
             .set_synced_data(pumpkin_data::tracked_data::creeper::CHARGED, true);
         self.mob_entity
             .living_entity
+            .entity
+            .set_synced_data(pumpkin_data::tracked_data::creeper::DATA_IS_POWERED, true);
+        self.mob_entity
+            .living_entity
             .on_lightning_strike(caller, lightning);
     }
 
@@ -244,6 +248,10 @@ impl CreeperEntity {
         self.charged.store(charged, Ordering::Relaxed);
         let entity = &self.mob_entity.living_entity.entity;
         entity.set_synced_data(pumpkin_data::tracked_data::creeper::CHARGED, charged);
+        entity.set_synced_data(
+            pumpkin_data::tracked_data::creeper::DATA_IS_POWERED,
+            charged,
+        );
     }
 
     pub fn is_ignited(&self) -> bool {

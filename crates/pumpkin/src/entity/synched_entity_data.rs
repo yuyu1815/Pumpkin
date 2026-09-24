@@ -217,3 +217,28 @@ impl SynchedEntityData {
         Some(buf.into_boxed_slice())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::SynchedEntityData;
+    use pumpkin_data::tracked_data::creeper;
+    use pumpkin_util::version::JavaMinecraftVersion;
+
+    #[test]
+    fn charged_creeper_metadata_uses_powered_slot_in_26_2() {
+        let data = SynchedEntityData::new();
+        data.set(creeper::DATA_IS_POWERED, true);
+        let metadata = data
+            .pack_dirty_for_version(&JavaMinecraftVersion::V_26_2)
+            .expect("powered Creeper metadata should be serialized");
+        assert_eq!(metadata.as_ref(), [17, 8, 1, 255]);
+
+        let legacy_data = SynchedEntityData::new();
+        legacy_data.set(creeper::CHARGED, true);
+        assert!(
+            legacy_data
+                .pack_dirty_for_version(&JavaMinecraftVersion::V_26_2)
+                .is_none()
+        );
+    }
+}
