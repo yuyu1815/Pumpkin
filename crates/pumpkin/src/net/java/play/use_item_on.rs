@@ -34,9 +34,18 @@ impl JavaClient {
             return Err(BlockPlacingError::InvalidHand);
         };
 
+        let entity = &player.get_entity();
+        let world = entity.world.load_full();
+        if world.is_in_spawn_protection(player, &position) {
+            player.send_system_message(&TextComponent::translate_cross(
+                pumpkin_data::translation::java::BUILD_SPAWN_PROTECTION,
+                pumpkin_data::translation::java::BUILD_SPAWN_PROTECTION,
+                [TextComponent::text(player.gameprofile.name.clone())],
+            ));
+            return Ok(());
+        }
+
         if player.gamemode.load() == GameMode::Spectator {
-            let entity = &player.get_entity();
-            let world = entity.world.load_full();
             let block = world.get_block(&position);
 
             let event = PlayerInteractEvent::new(
@@ -78,8 +87,6 @@ impl JavaClient {
         let item_id = item.item.id;
         player.increment_stat(StatisticCategory::Used, item_id as i32, 1);
 
-        let entity = &player.get_entity();
-        let world = entity.world.load_full();
         let block = world.get_block(&position);
 
         let event = PlayerInteractEvent::new(
