@@ -725,6 +725,27 @@ mod tests {
         );
     }
 
+    #[test]
+    fn throw_all_binding_curse_armor_returns_without_dropping() {
+        use pumpkin_data::{Enchantment, item::Item};
+
+        let inventory = new_inventory();
+        let player = DropRecorder::new(inventory.clone());
+        let mut helmet = ItemStack::new(1, &Item::DIAMOND_HELMET);
+        helmet.add_enchantment(&Enchantment::BINDING_CURSE, 1);
+        inventory.set_slot(39, helmet);
+        let mut handler = new_handler(false, &inventory);
+
+        assert!(!handler.get_behaviour().slots[5].can_take_items(&player));
+        handler.on_slot_click(5, 1, SlotActionType::Throw, &player);
+
+        assert_eq!(
+            handler.get_behaviour().slots[5].get_stack().item,
+            &Item::DIAMOND_HELMET
+        );
+        assert!(player.drops.lock().unwrap().is_empty());
+    }
+
     fn assert_map_transmute(material_slots: usize, stacked_material: bool, expected_count: u8) {
         use pumpkin_data::item::Item;
 
