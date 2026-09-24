@@ -9,6 +9,8 @@ use pumpkin_macros::java_packet;
 use pumpkin_util::version::JavaMinecraftVersion;
 use std::io::Read;
 
+const MAX_CHANGED_SLOTS: i32 = 128;
+
 #[derive(Debug)]
 #[java_packet(CONTAINER_CLICK)]
 pub struct SClickSlot {
@@ -47,7 +49,7 @@ impl<'a> ServerPacket<'a> for SClickSlot {
         let mode = SlotActionType::read(&mut bytebuf)?;
 
         let length_of_array = bytebuf.get_var_int()?;
-        if length_of_array.0 < 0 || length_of_array.0 > 256 {
+        if !(0..=MAX_CHANGED_SLOTS).contains(&length_of_array.0) {
             return Err(ReadingError::Message(
                 "Changed slots length out of bounds".into(),
             ));
@@ -163,5 +165,41 @@ impl TryFrom<i32> for SlotActionType {
             6 => Ok(Self::PickupAll),
             _ => Err(InvalidSlotActionType),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MAX_CHANGED_SLOTS, SClickSlot};
+    use crate::{ServerPacket, VarInt, ser::NetworkWriteExt};
+    use pumpkin_util::version::JavaMinecraftVersion;
+
+    fn packet_with_changed_slots(count: i32) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.write_var_int(&VarInt(0)).unwrap(); // container id
+        bytes.write_var_int(&VarInt(0)).unwrap(); // revision
+        bytes.write_i16_be(0).unwrap();
+        bytes.write_i8(0).unwrap();
+        bytes.write_var_int(&VarInt(0)).unwrap(); // pickup
+        bytes.write_var_int(&VarInt(count)).unwrap();
+        for _ in 0..count {
+            bytes.write_i16_be(0).unwrap();
+            bytes.put_bool(false).unwrap();
+        }
+        bytes.put_bool(false).unwrap(); // carried item
+        bytes
+    }
+
+    #[test]
+    fn changed_slots_accepts_official_limit_and_rejects_above_it() {
+        let version = JavaMinecraftVersion::V_26_2;
+        let bytes = packet_with_changed_slots(MAX_CHANGED_SLOTS);
+        let mut input = bytes.as_slice();
+        let packet = SClickSlot::read(&mut input, &version).expect("128 changed slots");
+        assert_eq!(packet.array_of_changed_slots.len(), 128);
+
+        let bytes = packet_with_changed_slots(MAX_CHANGED_SLOTS + 1);
+        let mut input = bytes.as_slice();
+        assert!(SClickSlot::read(&mut input, &version).is_err());
     }
 }
