@@ -9,7 +9,6 @@ use crate::serializer::NbtWriteHelper;
 use crate::tag::NbtTag;
 use crate::{END_ID, Error, Nbt};
 use std::collections::hash_map::IntoIter;
-use std::io::ErrorKind;
 
 #[macro_export]
 /// Creates an [`NbtTag::Compound`](crate::tag::NbtTag::Compound) from key-value pairs.
@@ -64,11 +63,7 @@ impl NbtCompound {
         }
 
         loop {
-            let tag_id = match reader.get_u8() {
-                Ok(id) => id,
-                Err(Error::Incomplete(e)) if e.kind() == ErrorKind::UnexpectedEof => break,
-                Err(e) => return Err(e),
-            };
+            let tag_id = reader.get_u8()?;
 
             if tag_id == END_ID {
                 break;
@@ -100,11 +95,7 @@ impl NbtCompound {
         let mut compound = Self::new();
 
         loop {
-            let tag_id = match reader.get_u8() {
-                Ok(id) => id,
-                Err(Error::Incomplete(e)) if e.kind() == ErrorKind::UnexpectedEof => break,
-                Err(e) => return Err(e),
-            };
+            let tag_id = reader.get_u8()?;
 
             if tag_id == END_ID {
                 break;
@@ -448,6 +439,8 @@ impl Display for NbtTag {
 #[cfg(test)]
 mod tests {
     use super::NbtCompound;
+    use crate::deserializer::NbtReadHelperJava;
+    use std::io::Cursor;
     use uuid::Uuid;
 
     #[test]
@@ -462,5 +455,27 @@ mod tests {
         let mut short = NbtCompound::new();
         short.put("UUID", crate::tag::NbtTag::IntArray(vec![1, 2, 3]));
         assert_eq!(short.get_uuid("UUID"), None);
+    }
+
+    #[test]
+    fn truncated_compound_is_rejected_when_reading_or_skipping() {
+        let mut read = NbtReadHelperJava::new(Cursor::new(&[][..]));
+        assert!(NbtCompound::deserialize_content(&mut read).is_err());
+
+        let mut skip = NbtReadHelperJava::new(Cursor::new(&[][..]));
+        assert!(NbtCompound::skip_content(&mut skip).is_err());
+    }
+
+    #[test]
+    fn empty_compound_requires_and_accepts_end_tag() {
+        let mut read = NbtReadHelperJava::new(Cursor::new(&[crate::END_ID][..]));
+        assert!(
+            NbtCompound::deserialize_content(&mut read)
+                .expect("terminated compound")
+                .is_empty()
+        );
+
+        let mut skip = NbtReadHelperJava::new(Cursor::new(&[crate::END_ID][..]));
+        assert!(NbtCompound::skip_content(&mut skip).is_ok());
     }
 }
