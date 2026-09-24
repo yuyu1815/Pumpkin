@@ -64,9 +64,11 @@ impl PendingConnection {
                     &self.server_address,
                     login_start.name.into_string(),
                     &proxy.bungeecord.secret,
+                    server.advanced_config.networking.java.online_mode,
                 ) {
                     Ok((_ip, profile)) => {
-                        self.online_profile_verified = true;
+                        self.online_profile_verified =
+                            server.advanced_config.networking.java.online_mode;
                         self.gameprofile = Some(profile.clone());
                         self.finish_login(server, &profile).await
                     }

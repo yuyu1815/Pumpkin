@@ -32,6 +32,8 @@ pub enum VelocityError {
     NoData,
     #[error("Unable to verify player details")]
     FailedVerifyIntegrity,
+    #[error("Unexpected or reused Velocity message ID")]
+    InvalidMessageId,
     #[error("Failed to read forward version")]
     FailedReadForwardVersion,
     #[error("Unsupported forwarding version {0}. Maximum supported version is {1}")]
@@ -49,8 +51,8 @@ pub enum VelocityError {
 }
 
 pub async fn velocity_login(connection: &mut PendingConnection) {
-    // TODO: Validate the packet transaction id from the plugin response with this
     let velocity_message_id: i32 = rand::rng().random();
+    connection.velocity_message_id = Some(velocity_message_id);
 
     let mut buf = BytesMut::new();
     buf.put_u8(MAX_SUPPORTED_FORWARDING_VERSION);
@@ -61,6 +63,13 @@ pub async fn velocity_login(connection: &mut PendingConnection) {
             &buf,
         ))
         .await;
+}
+
+pub fn validate_message_id(expected: &mut Option<i32>, received: i32) -> Result<(), VelocityError> {
+    match expected.take() {
+        Some(expected) if expected == received => Ok(()),
+        _ => Err(VelocityError::InvalidMessageId),
+    }
 }
 
 #[must_use]
@@ -151,4 +160,72 @@ pub fn receive_velocity_plugin_response(
         return Ok((profile, socket_addr));
     }
     Err(VelocityError::NoData)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pumpkin_protocol::{codec::var_int::VarInt, ser::NetworkWriteExt};
+    use uuid::Uuid;
+
+    const SECRET: &str = "velocity-test-secret";
+
+    #[test]
+    fn accepts_and_consumes_matching_message_id() {
+        let mut expected = Some(42);
+        assert!(validate_message_id(&mut expected, 42).is_ok());
+        assert_eq!(expected, None);
+        assert!(matches!(
+            validate_message_id(&mut expected, 42),
+            Err(VelocityError::InvalidMessageId)
+        ));
+    }
+
+    #[test]
+    fn rejects_mismatched_message_id_and_consumes_it() {
+        let mut expected = Some(42);
+        assert!(matches!(
+            validate_message_id(&mut expected, 43),
+            Err(VelocityError::InvalidMessageId)
+        ));
+        assert!(matches!(
+            validate_message_id(&mut expected, 42),
+            Err(VelocityError::InvalidMessageId)
+        ));
+    }
+
+    #[test]
+    fn accepts_valid_hmac_and_profile() {
+        let id = Uuid::new_v4();
+        let mut payload = Vec::new();
+        payload
+            .write_var_int(&VarInt(MAX_SUPPORTED_FORWARDING_VERSION as i32))
+            .unwrap();
+        payload.write_string("127.0.0.1").unwrap();
+        payload.extend_from_slice(id.as_bytes());
+        payload.write_string("Steve").unwrap();
+        payload.write_var_int(&VarInt(0)).unwrap();
+
+        let mut mac = HmacSha256::new_from_slice(SECRET.as_bytes()).unwrap();
+        mac.update(&payload);
+        let mut data = mac.finalize().into_bytes().to_vec();
+        data.extend_from_slice(&payload);
+        let config = VelocityConfig {
+            secret: SECRET.into(),
+            ..Default::default()
+        };
+
+        let (profile, address) = receive_velocity_plugin_response(
+            25565,
+            &config,
+            SLoginPluginResponse {
+                message_id: VarInt(9),
+                data: Some(data.into_boxed_slice()),
+            },
+        )
+        .unwrap();
+        assert_eq!(profile.id, id);
+        assert_eq!(profile.name, "Steve");
+        assert_eq!(address.ip(), IpAddr::from([127, 0, 0, 1]));
+    }
 }

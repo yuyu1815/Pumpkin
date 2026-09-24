@@ -29,6 +29,13 @@ impl PendingConnection {
                 }
             }
         } else if proxy_config.velocity.enabled {
+            if let Err(error) = velocity::validate_message_id(
+                &mut self.velocity_message_id,
+                plugin_response.message_id.0,
+            ) {
+                self.kick(TextComponent::text(error.to_string())).await;
+                return Some(PacketHandlerResult::Stop);
+            }
             match velocity::receive_velocity_plugin_response(
                 self.address.port(),
                 &proxy_config.velocity,

@@ -26,6 +26,8 @@ pub enum BungeeCordError {
     MissingToken,
     #[error("Invalid BungeeGuard token")]
     InvalidToken,
+    #[error("Online-mode BungeeCord forwarding requires a BungeeGuard secret")]
+    MissingSecret,
 }
 
 /// Attempts to login a player via `BungeeCord`.
@@ -51,7 +53,12 @@ pub fn bungeecord_login(
     server_address: &str,
     name: String,
     secret: &str,
+    online_mode: bool,
 ) -> Result<(IpAddr, GameProfile), BungeeCordError> {
+    if online_mode && secret.is_empty() {
+        return Err(BungeeCordError::MissingSecret);
+    }
+
     let mut parts = server_address.split('\0');
 
     // Skip the first part (the actual server address/host)
@@ -178,6 +185,7 @@ mod tests {
             &handshake.server_address,
             "Steve".to_string(),
             "",
+            false,
         )
         .expect("the forwarded address should produce a game profile");
 
@@ -234,9 +242,14 @@ mod tests {
         );
         let address = forwarded_address(&properties);
 
-        let (ip, profile) =
-            bungeecord_login(&client_address(), &address, "Steve".to_string(), SECRET)
-                .expect("a matching token should be accepted");
+        let (ip, profile) = bungeecord_login(
+            &client_address(),
+            &address,
+            "Steve".to_string(),
+            SECRET,
+            true,
+        )
+        .expect("a matching token should be accepted");
 
         assert_eq!(ip, IpAddr::from([192, 0, 2, 10]));
 
@@ -251,7 +264,13 @@ mod tests {
         let address =
             forwarded_address(r#"[{"name":"textures","value":"skin","signature":"sig"}]"#);
 
-        let result = bungeecord_login(&client_address(), &address, "Steve".to_string(), SECRET);
+        let result = bungeecord_login(
+            &client_address(),
+            &address,
+            "Steve".to_string(),
+            SECRET,
+            true,
+        );
 
         assert!(matches!(result, Err(BungeeCordError::MissingToken)));
     }
@@ -260,7 +279,13 @@ mod tests {
     fn rejects_mismatched_bungeeguard_token() {
         let address = forwarded_address(&properties_array(&[&token_property("wrong-token")]));
 
-        let result = bungeecord_login(&client_address(), &address, "Steve".to_string(), SECRET);
+        let result = bungeecord_login(
+            &client_address(),
+            &address,
+            "Steve".to_string(),
+            SECRET,
+            true,
+        );
 
         assert!(matches!(result, Err(BungeeCordError::InvalidToken)));
     }
@@ -270,7 +295,13 @@ mod tests {
         let properties = properties_array(&[&token_property(SECRET), &token_property(SECRET)]);
         let address = forwarded_address(&properties);
 
-        let result = bungeecord_login(&client_address(), &address, "Steve".to_string(), SECRET);
+        let result = bungeecord_login(
+            &client_address(),
+            &address,
+            "Steve".to_string(),
+            SECRET,
+            true,
+        );
 
         assert!(matches!(result, Err(BungeeCordError::InvalidToken)));
     }
@@ -282,16 +313,26 @@ mod tests {
             "mc.example.com",
             "Steve".to_string(),
             SECRET,
+            true,
         );
 
         assert!(matches!(result, Err(BungeeCordError::MissingToken)));
     }
 
     #[test]
-    fn ignores_token_when_no_secret_is_configured() {
+    fn rejects_online_mode_when_secret_is_empty() {
         let address = forwarded_address(&properties_array(&[&token_property(SECRET)]));
 
-        let result = bungeecord_login(&client_address(), &address, "Steve".to_string(), "");
+        let result = bungeecord_login(&client_address(), &address, "Steve".to_string(), "", true);
+
+        assert!(matches!(result, Err(BungeeCordError::MissingSecret)));
+    }
+
+    #[test]
+    fn ignores_token_when_no_secret_is_configured_offline_mode() {
+        let address = forwarded_address(&properties_array(&[&token_property(SECRET)]));
+
+        let result = bungeecord_login(&client_address(), &address, "Steve".to_string(), "", false);
 
         assert!(
             result.is_ok(),
