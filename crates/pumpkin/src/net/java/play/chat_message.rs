@@ -13,13 +13,6 @@ impl JavaClient {
     ) {
         player.update_last_action_time();
 
-        if let Some(command) = chat_message.message.strip_prefix('/') {
-            let command_packet = SChatCommand { command };
-            self.handle_chat_command(player, server, &command_packet)
-                .await;
-            return;
-        }
-
         let gameprofile = &player.gameprofile;
 
         if let Err(err) = self.validate_chat_message(server, player, &chat_message) {
