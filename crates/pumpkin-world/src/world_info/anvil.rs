@@ -806,7 +806,8 @@ mod test {
         original.spawn_yaw = 45.0;
         original.border_size = 2048.0;
         original.border_center_x = 8.0;
-        original.day_time = 12_345;
+        original.day_time = 6_789;
+        original.game_time = 12_345;
         original.map_id = 3;
 
         AnvilLevelInfo
