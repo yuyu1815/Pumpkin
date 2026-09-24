@@ -86,6 +86,11 @@ pub trait BlockBehaviour: Send + Sync {
         BlockActionResult::Pass
     }
 
+    /// Handles START_DESTROY_BLOCK before normal block breaking.
+    fn on_attack(&self, _args: AttackArgs<'_>) -> bool {
+        false
+    }
+
     fn get_screen_handler_factory(
         &self,
         _args: GetScreenHandlerFactoryArgs<'_>,
@@ -364,6 +369,11 @@ pub struct OnLandedUponArgs<'a> {
 
 pub struct UpdateEntityMovementAfterFallOnArgs<'a> {
     pub entity: &'a dyn EntityBase,
+}
+
+pub struct AttackArgs<'a> {
+    pub world: &'a Arc<World>,
+    pub position: &'a BlockPos,
 }
 
 pub struct BrokenArgs<'a> {

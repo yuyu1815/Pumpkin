@@ -41,6 +41,16 @@ impl BedrockClient {
                     return;
                 }
 
+                if server.block_registry.attack(block, &world, &location) {
+                    player.stop_mining();
+                    let state = world.get_block_state(&location);
+                    self.try_enqueue_client_packet(&CUpdateBlock::new(
+                        location,
+                        pumpkin_data::BlockState::to_be_network_id(state.id),
+                    ));
+                    return;
+                }
+
                 let inventory = player.inventory();
                 let mut held = inventory.held_item();
                 let before = held.clone();
@@ -192,6 +202,16 @@ impl BedrockClient {
                         && same_block
                         && speed * elapsed as f32 >= MIN_PREDICTED_BREAK_PROGRESS
                     {
+                        if server.block_registry.attack(block, &world, &location) {
+                            player.stop_mining();
+                            let state = world.get_block_state(&location);
+                            self.try_enqueue_client_packet(&CUpdateBlock::new(
+                                location,
+                                pumpkin_data::BlockState::to_be_network_id(state.id),
+                            ));
+                            return;
+                        }
+
                         player.stop_mining();
 
                         let can_harvest = player.can_harvest(state, block);

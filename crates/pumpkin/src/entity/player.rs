@@ -2819,29 +2819,43 @@ impl Player {
                     if finished
                         && (delayed || matches!(p.client.as_ref(), ClientPlatform::Bedrock(_)))
                     {
-                        p.stop_mining();
-
                         let block = Block::from_state_id(state.id);
-                        let can_harvest = p.can_harvest(state, block);
-                        let flags = if can_harvest {
-                            pumpkin_world::world::BlockFlags::NOTIFY_ALL
+                        if delayed
+                            && matches!(p.client.as_ref(), ClientPlatform::Java(_))
+                            && server_clone.as_ref().is_some_and(|server| {
+                                server.block_registry.attack(block, &world, &pos)
+                            })
+                        {
+                            p.stop_mining();
+                            p.reset_block_change(pos);
                         } else {
-                            pumpkin_world::world::BlockFlags::SKIP_DROPS
-                                | pumpkin_world::world::BlockFlags::NOTIFY_ALL
-                        };
-                        if world.break_block(&pos, Some(&p), flags).is_some() {
-                            if let Some(server) = server_clone {
-                                server
-                                    .block_registry
-                                    .broken(&world, block, &p, &pos, &server, state);
+                            p.stop_mining();
+
+                            let can_harvest = p.can_harvest(state, block);
+                            let flags = if can_harvest {
+                                pumpkin_world::world::BlockFlags::NOTIFY_ALL
+                            } else {
+                                pumpkin_world::world::BlockFlags::SKIP_DROPS
+                                    | pumpkin_world::world::BlockFlags::NOTIFY_ALL
+                            };
+                            if world.break_block(&pos, Some(&p), flags).is_some() {
+                                if let Some(server) = server_clone {
+                                    server
+                                        .block_registry
+                                        .broken(&world, block, &p, &pos, &server, state);
+                                }
+                                p.apply_tool_damage_for_block_break(state);
+                                if can_harvest {
+                                    p.add_exhaustion(MINE_BLOCK_EXHAUSTION);
+                                }
+                                let item_id = p.inventory().held_item().item.id;
+                                p.increment_stat(StatisticCategory::Used, item_id as i32, 1);
+                                p.increment_stat(
+                                    StatisticCategory::Mined,
+                                    block.id.as_u16() as i32,
+                                    1,
+                                );
                             }
-                            p.apply_tool_damage_for_block_break(state);
-                            if can_harvest {
-                                p.add_exhaustion(MINE_BLOCK_EXHAUSTION);
-                            }
-                            let item_id = p.inventory().held_item().item.id;
-                            p.increment_stat(StatisticCategory::Used, item_id as i32, 1);
-                            p.increment_stat(StatisticCategory::Mined, block.id.as_u16() as i32, 1);
                         }
                     }
                 } else {

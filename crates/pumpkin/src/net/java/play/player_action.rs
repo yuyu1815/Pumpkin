@@ -28,7 +28,7 @@ impl JavaClient {
                     player.stop_mining_if_target_changed(position);
                     let entity = &player.get_entity();
                     let world = entity.world.load_full();
-                    let (block, state) = world.get_block_and_state(&position);
+                    let (block, _) = world.get_block_and_state(&position);
 
                     // Vanilla rejects mutation when mayBuild is false before firing block-damage
                     // hooks. Adventure can_break predicates are not yet evaluated by the item
@@ -52,9 +52,20 @@ impl JavaClient {
                             .plugin_manager
                             .fire_blocking(&server_arc, &mut event);
                         if event.cancelled {
+                            player.stop_mining();
+                            self.sync_block_state_to_client(&world, position);
                             self.update_sequence(player_action.sequence.0);
                             return;
                         }
+                    }
+
+                    // Block-damage plugins may have replaced the target.
+                    let (block, state) = world.get_block_and_state(&position);
+                    if server.block_registry.attack(block, &world, &position) {
+                        player.stop_mining();
+                        self.sync_block_state_to_client(&world, position);
+                        self.update_sequence(player_action.sequence.0);
+                        return;
                     }
 
                     if block == &pumpkin_data::Block::NOTE_BLOCK {
@@ -269,6 +280,13 @@ impl JavaClient {
                             location,
                             player.start_mining_time.load(Ordering::Relaxed),
                         );
+                        self.update_sequence(player_action.sequence.0);
+                        return;
+                    }
+
+                    if server.block_registry.attack(block, &world, &location) {
+                        player.stop_mining();
+                        self.sync_block_state_to_client(&world, location);
                         self.update_sequence(player_action.sequence.0);
                         return;
                     }
