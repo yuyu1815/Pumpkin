@@ -20,9 +20,9 @@ use crate::world_info::{
     data_files::{
         minecraft_data_dir, read_game_rules, read_wandering_trader, read_weather,
         read_world_clocks, read_world_gen_settings, write_custom_boss_events_stub,
-        write_game_rules, write_random_sequences_stub, write_scheduled_events_stub,
-        write_scoreboard_stub, write_stopwatches_stub, write_wandering_trader, write_weather,
-        write_world_clocks, write_world_gen_settings,
+        write_game_rules, write_random_sequences_stub, write_scoreboard_stub,
+        write_stopwatches_stub, write_wandering_trader, write_weather, write_world_clocks,
+        write_world_gen_settings,
     },
     default_data_packs,
 };
@@ -282,6 +282,9 @@ fn level_data_from_nbt(data: &NbtCompound, seed: i64) -> LevelData {
     if let Some(day_time) = data.get_long("DayTime") {
         level_data.day_time = day_time;
     }
+    if let Some(game_time) = data.get_long("Time") {
+        level_data.game_time = game_time;
+    }
     if let Some(clear_weather_time) = data.get_int("clearWeatherTime") {
         level_data.clear_weather_time = clear_weather_time;
     }
@@ -340,6 +343,7 @@ fn level_data_to_nbt(info: &LevelData, data: &mut NbtCompound) {
     data.put_compound("Version", world_version_to_nbt(&info.world_version));
     data.put_int("version", info.level_version);
     data.put_int("map_id", info.map_id);
+    data.put_long("Time", info.game_time);
     put_world_gen_settings_seed(data, info.world_gen_settings.seed);
 }
 
@@ -509,11 +513,6 @@ impl WorldInfoWriter for AnvilLevelInfo {
         // custom_boss_events.dat
         if let Err(e) = write_custom_boss_events_stub(level_folder, data_version) {
             error!("Failed to write custom_boss_events.dat: {e}");
-        }
-
-        // scheduled_events.dat
-        if let Err(e) = write_scheduled_events_stub(level_folder, data_version) {
-            error!("Failed to write scheduled_events.dat: {e}");
         }
 
         // random_sequences.dat
@@ -835,6 +834,7 @@ mod test {
         assert_eq!(data.get_double("BorderSize"), Some(2048.0));
         assert_eq!(data.get_double("BorderCenterX"), Some(8.0));
         assert_eq!(data.get_int("map_id"), Some(3));
+        assert_eq!(data.get_long("Time"), Some(12345));
         assert!(data.get_long("LastPlayed").is_some_and(|played| played > 0));
 
         let version = data.get_compound("Version").unwrap();
@@ -887,6 +887,7 @@ mod test {
             },
             data_version: 4189,
             day_time: 1727,
+            game_time: 12345,
             difficulty: Difficulty::Normal,
             difficulty_locked: false,
             game_rules: GameRuleRegistry {
@@ -1060,7 +1061,6 @@ mod test {
             "wandering_trader.dat",
             "world_clocks.dat",
             "world_gen_settings.dat",
-            "scheduled_events.dat",
             "custom_boss_events.dat",
             "weather.dat",
         ];

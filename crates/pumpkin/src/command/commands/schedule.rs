@@ -1,5 +1,3 @@
-use std::sync::atomic::Ordering;
-
 use pumpkin_data::translation;
 use pumpkin_util::PermissionLvl;
 use pumpkin_util::permission::{Permission, PermissionDefault, PermissionRegistry};
@@ -77,8 +75,8 @@ fn execute_schedule(context: &CommandContext, replace: bool) -> Result<i32, Comm
     }
 
     let server = context.server();
-    let current_tick = server.tick_count.load(Ordering::Relaxed) as u64;
-    let tick_time = current_tick + (time as u64);
+    let current_tick = server.game_time();
+    let tick_time = current_tick.saturating_add(time as u64);
     let is_tag = function_name.starts_with('#');
 
     server.scheduled_functions.schedule(

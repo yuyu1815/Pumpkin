@@ -324,6 +324,15 @@ impl Server {
             level_info,
         };
         let server = Arc::new(server);
+        match crate::server::scheduler::ScheduledFunctionQueue::load_from_world_dir(&world_path) {
+            Ok(loaded) => server.scheduled_functions.restore(loaded.snapshot()),
+            Err(error) => {
+                server.scheduled_functions.disable_persistence();
+                warn!(
+                    "Failed to load data/scheduled_events.dat: {error}; scheduled event persistence is disabled to preserve the original file"
+                );
+            }
+        }
 
         // Fetch / generate keys in background tasks to avoid blocking startup
         let server_clone = server.clone();
@@ -535,9 +544,39 @@ impl Server {
     }
 
     pub fn save_world_info(&self) -> Result<(), WorldInfoError> {
-        let level_data = self.level_info.load();
+        let mut level_data = (**self.level_info.load()).clone();
+        if let Some(overworld) = self
+            .worlds
+            .load()
+            .iter()
+            .find(|world| world.dimension.minecraft_name == Dimension::OVERWORLD.minecraft_name)
+        {
+            let time = overworld
+                .level_time
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            level_data.game_time = time.world_age;
+            level_data.day_time = time.time_of_day;
+        }
+        let world_path = self.basic_config.get_world_path();
         self.world_info_writer
-            .write_world_info(&level_data, &self.basic_config.get_world_path())
+            .write_world_info(&level_data, &world_path)?;
+        self.scheduled_functions
+            .save_to_world_dir(&world_path)
+            .map_err(|error| WorldInfoError::SerializationError(error))
+    }
+
+    /// Absolute overworld game time used by `/schedule` and scheduled function ticking.
+    #[must_use]
+    pub fn game_time(&self) -> u64 {
+        self.worlds
+            .load()
+            .iter()
+            .find(|world| world.dimension.minecraft_name == Dimension::OVERWORLD.minecraft_name)
+            .map_or_else(
+                || self.level_info.load().game_time.max(0) as u64,
+                |world| world.get_world_age().max(0) as u64,
+            )
     }
 
     pub fn reload_datapacks(&self, server: &Arc<Self>) {
@@ -794,12 +833,8 @@ impl Server {
         for world in self.worlds.load().iter() {
             world.shutdown().await?;
         }
-        let level_data = self.level_info.load();
-        // then lets save the world info
-
-        self.world_info_writer
-            .write_world_info(&level_data, &self.basic_config.get_world_path())
-            .map_err(|error| format!("Failed to save level.dat: {error}"))?;
+        self.save_world_info()
+            .map_err(|error| format!("Failed to save world info: {error}"))?;
         info!("Completed worlds");
         Ok(())
     }
@@ -1174,10 +1209,7 @@ impl Server {
             .execute_function(self, &source, "#minecraft:tick");
 
         self.task_scheduler.tick(self);
-        self.scheduled_functions.tick(
-            self,
-            self.tick_count.load(std::sync::atomic::Ordering::Relaxed) as u64,
-        );
+        self.scheduled_functions.tick(self, self.game_time());
 
         let worlds = self.worlds.load();
         let handle = self.runtime.clone();
