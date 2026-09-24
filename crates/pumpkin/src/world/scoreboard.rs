@@ -1191,9 +1191,9 @@ impl ScoreboardBuilder {
             ScoreboardScore::new(entity_s.clone(), obj_s.clone(), VarInt(value), None, None);
         self.scoreboard
             .scores
-            .entry(entity_s)
+            .entry(obj_s)
             .or_default()
-            .insert(obj_s, score);
+            .insert(entity_s, score);
         self
     }
 
@@ -1265,5 +1265,24 @@ impl BedrockScoreboardBuilder {
     #[must_use]
     pub fn build(self) -> BedrockScoreboard {
         self.scoreboard
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scoreboard_builder_stores_scores_by_objective() {
+        let mut scoreboard = ScoreboardBuilder::new()
+            .objective("objective", TextComponent::empty())
+            .score("entity", "objective", 7)
+            .build();
+
+        assert_eq!(scoreboard.get_score_value("entity", "objective"), Some(7));
+
+        scoreboard.set_score_value(&NoTarget, "entity", "objective", 13);
+
+        assert_eq!(scoreboard.get_score_value("entity", "objective"), Some(13));
     }
 }
