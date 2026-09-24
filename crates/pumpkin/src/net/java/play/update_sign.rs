@@ -1,6 +1,10 @@
 #[allow(clippy::wildcard_imports)]
 use super::*;
 
+fn has_editor_grant(editor: Option<uuid::Uuid>, sender: uuid::Uuid) -> bool {
+    editor == Some(sender)
+}
+
 impl JavaClient {
     pub fn handle_sign_update(&self, player: &Player, sign_data: &SUpdateSign<'_>) {
         let world = player.get_entity().world.load_full();
@@ -20,9 +24,7 @@ impl JavaClient {
             .currently_editing_player()
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if let Some(editor_id) = currently_editing
-            && editor_id != player.gameprofile.id
-        {
+        if !has_editor_grant(currently_editing, player.gameprofile.id) {
             return;
         }
 
@@ -47,6 +49,14 @@ impl JavaClient {
             }
         }
 
+        let mut editor = sign_entity
+            .currently_editing_player()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if !has_editor_grant(*editor, player.gameprofile.id) {
+            return;
+        }
+
         let text = sign_entity.get_text(sign_data.is_front_text);
 
         *text
@@ -58,10 +68,24 @@ impl JavaClient {
             sign_data.line_3.into(),
             sign_data.line_4.into(),
         ];
-        *sign_entity
-            .currently_editing_player()
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+        *editor = None;
+        drop(editor);
         world.update_block_entity(&block_entity);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::has_editor_grant;
+    use uuid::Uuid;
+
+    #[test]
+    fn editor_grant_must_match_sender() {
+        let sender = Uuid::from_u128(1);
+        let other = Uuid::from_u128(2);
+
+        assert!(!has_editor_grant(None, sender));
+        assert!(!has_editor_grant(Some(other), sender));
+        assert!(has_editor_grant(Some(sender), sender));
     }
 }
