@@ -228,6 +228,18 @@ mod tests {
     use pumpkin_util::math::position::BlockPos;
 
     #[test]
+    fn pixel_updates_mark_map_dirty_for_broadcast() {
+        let map_be = MapBlockEntity::new(BlockPos::new(0, 0, 0), 42);
+        map_be.clear_dirty();
+
+        map_be.set_pixel(10, 20, 15);
+
+        assert!(map_be.is_dirty());
+        assert_eq!(map_be.get_pixel(10, 20), 15);
+        assert_eq!(map_be.get_colors()[20 * 128 + 10], 15);
+    }
+
+    #[test]
     fn map_block_entity_pixels_and_colors() {
         let pos = BlockPos::new(10, 64, -5);
         let map_be = MapBlockEntity::new(pos, 42);
