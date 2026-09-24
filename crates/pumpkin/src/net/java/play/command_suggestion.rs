@@ -16,16 +16,18 @@ impl JavaClient {
             .command_dispatcher
             .load()
             .suggest_with_range(cmd, &player.get_command_source(server));
-        let (start, length) = packet_suggestion_range(
+        let Some((start, length)) = packet_suggestion_range(
             packet.command,
             suggestions.range.start,
             suggestions.range.end,
-        );
+        ) else {
+            return;
+        };
 
         let response = CCommandSuggestions::new(
             packet.id,
-            (start as i32).into(),
-            (length as i32).into(),
+            start.into(),
+            length.into(),
             suggestions
                 .suggestions
                 .into_iter()
@@ -45,12 +47,23 @@ impl JavaClient {
 
 /// Convert a dispatcher range (UTF-8 bytes relative to the slashless command)
 /// to the Java client packet's UTF-16 character indices in the full command.
-fn packet_suggestion_range(command: &str, range_start: usize, range_end: usize) -> (usize, usize) {
-    let start = 1 + command[1..1 + range_start].encode_utf16().count();
-    let length = command[1 + range_start..1 + range_end]
-        .encode_utf16()
-        .count();
-    (start, length)
+fn packet_suggestion_range(
+    command: &str,
+    range_start: usize,
+    range_end: usize,
+) -> Option<(i32, i32)> {
+    let command = command.strip_prefix('/')?;
+    if range_start > range_end
+        || range_end > command.len()
+        || !command.is_char_boundary(range_start)
+        || !command.is_char_boundary(range_end)
+    {
+        return None;
+    }
+
+    let start = 1usize.checked_add(command[..range_start].encode_utf16().count())?;
+    let length = command[range_start..range_end].encode_utf16().count();
+    Some((i32::try_from(start).ok()?, i32::try_from(length).ok()?))
 }
 
 #[cfg(test)]
@@ -63,7 +76,7 @@ mod tests {
         let range = 16..command.len() - 1;
         assert_eq!(
             packet_suggestion_range(command, range.start, range.end),
-            (17, 7)
+            Some((17, 7))
         );
     }
 
@@ -73,7 +86,7 @@ mod tests {
         let range = 16..command.len() - 1;
         assert_eq!(
             packet_suggestion_range(command, range.start, range.end),
-            (17, 9)
+            Some((17, 9))
         );
     }
 
@@ -84,7 +97,27 @@ mod tests {
         let range = start..command.len() - 1;
         assert_eq!(
             packet_suggestion_range(command, range.start, range.end),
-            (8, 7)
+            Some((8, 7))
         );
+    }
+
+    #[test]
+    fn reversed_range_is_invalid() {
+        assert_eq!(packet_suggestion_range("/hello", 4, 2), None);
+    }
+
+    #[test]
+    fn out_of_bounds_range_is_invalid() {
+        assert_eq!(packet_suggestion_range("/hello", 0, 6), None);
+    }
+
+    #[test]
+    fn range_inside_multibyte_character_is_invalid() {
+        assert_eq!(packet_suggestion_range("/é", 1, 2), None);
+    }
+
+    #[test]
+    fn range_inside_emoji_is_invalid() {
+        assert_eq!(packet_suggestion_range("/😀", 1, 4), None);
     }
 }
