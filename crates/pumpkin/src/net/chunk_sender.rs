@@ -332,15 +332,18 @@ impl ChunkSender {
         let mut dispatched_positions = Vec::with_capacity(encoded_chunks.len());
         let version = batch.target_version;
 
-        if version >= JavaMinecraftVersion::V_1_20_2
-            && let ClientPlatform::Java(java_client) = client
-        {
-            java_client.try_send_packet(&CChunkBatchStart);
-        }
-
+        let mut batch_started = false;
         for chunk in encoded_chunks {
             if !self.pending_chunks.contains(&chunk.position) {
                 continue;
+            }
+
+            if !batch_started
+                && version >= JavaMinecraftVersion::V_1_20_2
+                && let ClientPlatform::Java(java_client) = client
+            {
+                java_client.try_send_packet(&CChunkBatchStart);
+                batch_started = true;
             }
 
             client.try_enqueue_packet(chunk.payload.clone());

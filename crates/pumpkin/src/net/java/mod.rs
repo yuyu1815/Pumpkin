@@ -2105,8 +2105,9 @@ impl JavaClient {
 #[cfg(test)]
 mod egress_accounting_tests {
     use super::{ConfigurationPhase, JavaClient, OutgoingPacketOrigin};
+    use crate::net::chunk_sender::{ChunkSender, EncodedChunk, PreparedBatch};
     use crate::net::java::pending::PendingConnection;
-    use crate::net::{GameProfile, PacketRateLimiter, PlayerConfig};
+    use crate::net::{ClientPlatform, GameProfile, PacketRateLimiter, PlayerConfig};
     use arc_swap::ArcSwap;
     use bytes::Bytes;
     use pumpkin_protocol::{ConnectionState, java::client::play::CPlayDisconnect};
@@ -2162,6 +2163,40 @@ mod egress_accounting_tests {
         })
         .await
         .expect("egress packet was not accounted");
+    }
+
+    #[tokio::test]
+    async fn filtered_chunk_batch_does_not_send_an_unmatched_start() {
+        let (java, _peer) = fixture().await;
+        java.version.store(JavaMinecraftVersion::V_26_2);
+        java.connection_state.store(ConnectionState::Play);
+        java.configuration_phase.store(ConfigurationPhase::Play);
+        let chunk = pumpkin_world::chunk::ChunkData::empty_sync(0, 0);
+        let batch = PreparedBatch {
+            chunks: Vec::new(),
+            epoch_snapshot: 0,
+            target_version: JavaMinecraftVersion::V_26_2,
+        };
+        let encoded = [EncodedChunk {
+            position: pumpkin_util::math::vector2::Vector2::new(0, 0),
+            payload: Bytes::new(),
+            light_payload: None,
+            chunk_ref: Arc::downgrade(&chunk),
+        }];
+        let mut sender = ChunkSender::new();
+        let mut client = ClientPlatform::Java(java);
+
+        assert!(sender.commit_batch(&batch, &encoded, &client, 0).is_empty());
+        let ClientPlatform::Java(java) = &mut client else {
+            unreachable!();
+        };
+        assert!(
+            java.outgoing_packet_recv
+                .as_mut()
+                .expect("fixture receiver must exist")
+                .try_recv()
+                .is_err()
+        );
     }
 
     #[tokio::test]
