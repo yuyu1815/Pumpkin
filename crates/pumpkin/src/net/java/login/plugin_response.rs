@@ -18,6 +18,7 @@ impl PendingConnection {
                 expected_challenge,
             ) {
                 Ok((profile, new_address)) => {
+                    self.online_profile_verified = true;
                     self.gameprofile = Some(profile.clone());
                     self.address = new_address;
                     self.finish_login(server, &profile).await
@@ -34,6 +35,7 @@ impl PendingConnection {
                 plugin_response,
             ) {
                 Ok((profile, new_address)) => {
+                    self.online_profile_verified = true;
                     self.gameprofile = Some(profile.clone());
                     self.address = new_address;
                     self.finish_login(server, &profile).await

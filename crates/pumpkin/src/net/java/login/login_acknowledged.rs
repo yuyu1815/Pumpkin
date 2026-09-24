@@ -14,6 +14,11 @@ impl PendingConnection {
             .await;
             return Some(PacketHandlerResult::Stop);
         }
+        if !super::super::claim_login_acknowledged(&self.login_protocol_phase) {
+            self.kick(TextComponent::text("Unexpected login acknowledgement"))
+                .await;
+            return Some(PacketHandlerResult::Stop);
+        }
         self.connection_state.store(ConnectionState::Config);
         self.send_packet_now(&server.get_branding()).await;
 

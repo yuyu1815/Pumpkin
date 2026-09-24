@@ -26,8 +26,16 @@ impl PendingConnection {
             return Some(PacketHandlerResult::Stop);
         }
 
+        if self.login_protocol_phase.load() != LoginProtocolPhase::AwaitingLoginStart {
+            self.kick(TextComponent::text("Unexpected login start"))
+                .await;
+            return Some(PacketHandlerResult::Stop);
+        }
+
         let proxy = &server.advanced_config.networking.proxy;
         if proxy.enabled {
+            self.login_protocol_phase
+                .store(LoginProtocolPhase::AwaitingAuthenticationResponse);
             if proxy.vine.enabled {
                 if self.version.load().is_modern() {
                     vine::vine_login(self).await;
@@ -58,6 +66,7 @@ impl PendingConnection {
                     &proxy.bungeecord.secret,
                 ) {
                     Ok((_ip, profile)) => {
+                        self.online_profile_verified = true;
                         self.gameprofile = Some(profile.clone());
                         self.finish_login(server, &profile).await
                     }
@@ -70,7 +79,15 @@ impl PendingConnection {
                 None
             }
         } else {
-            let id = if server.advanced_config.networking.java.online_mode {
+            let online_mode = server.advanced_config.networking.java.online_mode;
+            if online_mode && !server.advanced_config.networking.java.encryption {
+                self.kick(TextComponent::text(
+                    "Online mode requires encryption for authentication",
+                ))
+                .await;
+                return Some(PacketHandlerResult::Stop);
+            }
+            let id = if online_mode {
                 login_start.uuid
             } else {
                 offline_uuid(&login_start.name).unwrap_or_else(|_| uuid::Uuid::nil())
@@ -90,6 +107,8 @@ impl PendingConnection {
             self.gameprofile = Some(profile.clone());
 
             if server.advanced_config.networking.java.encryption {
+                self.login_protocol_phase
+                    .store(LoginProtocolPhase::AwaitingAuthenticationResponse);
                 let verify_token: [u8; 4] = rand::random();
                 self.verify_token = Some(verify_token);
                 self.send_packet_now(

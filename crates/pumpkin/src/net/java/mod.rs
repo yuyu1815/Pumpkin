@@ -85,6 +85,23 @@ use crate::plugin::player::player_custom_payload::PlayerCustomPayloadEvent;
 use crate::{error::PumpkinError, server::Server};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub(crate) enum LoginProtocolPhase {
+    AwaitingLoginStart,
+    AwaitingAuthenticationResponse,
+    AwaitingLoginAcknowledged,
+    Complete,
+}
+
+fn claim_login_acknowledged(phase: &AtomicCell<LoginProtocolPhase>) -> bool {
+    phase
+        .compare_exchange(
+            LoginProtocolPhase::AwaitingLoginAcknowledged,
+            LoginProtocolPhase::Complete,
+        )
+        .is_ok()
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum ConfigurationPhase {
     NotInConfiguration,
     AwaitingResourcePack,
@@ -2351,13 +2368,30 @@ mod egress_accounting_tests {
 #[cfg(test)]
 mod configuration_state_tests {
     use super::{
-        ConfigurationPhase, KnownPacksSelection, ResourcePackResponseAction, claim_finish,
-        claim_reconfiguration, claim_reconfiguration_ack, registry_entries_for_known_packs,
-        require_empty_body, resource_pack_response_action, resource_pack_uuid,
-        resource_pack_uuid_matches,
+        ConfigurationPhase, KnownPacksSelection, LoginProtocolPhase, ResourcePackResponseAction,
+        claim_finish, claim_login_acknowledged, claim_reconfiguration, claim_reconfiguration_ack,
+        registry_entries_for_known_packs, require_empty_body, resource_pack_response_action,
+        resource_pack_uuid, resource_pack_uuid_matches,
     };
     use crossbeam::atomic::AtomicCell;
     use pumpkin_protocol::{KnownPack, java::server::config::ResourcePackResponseResult};
+
+    #[test]
+    fn login_acknowledgement_requires_login_success_and_is_single_use() {
+        let phase = AtomicCell::new(LoginProtocolPhase::AwaitingAuthenticationResponse);
+        assert!(!claim_login_acknowledged(&phase));
+        assert_eq!(
+            phase.load(),
+            LoginProtocolPhase::AwaitingAuthenticationResponse
+        );
+
+        // finish_login moves every supported offline, authenticated-online, and
+        // trusted-forwarding flow here only after sending Login Success.
+        phase.store(LoginProtocolPhase::AwaitingLoginAcknowledged);
+        assert!(claim_login_acknowledged(&phase));
+        assert_eq!(phase.load(), LoginProtocolPhase::Complete);
+        assert!(!claim_login_acknowledged(&phase));
+    }
     use std::sync::{Arc, Mutex};
 
     #[test]

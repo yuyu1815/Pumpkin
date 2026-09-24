@@ -44,7 +44,7 @@ use crate::{
     server::Server,
 };
 
-use super::{ConfigurationPhase, JavaClient, require_empty_body};
+use super::{ConfigurationPhase, JavaClient, LoginProtocolPhase, require_empty_body};
 
 const BRAND_CHANNEL_PREFIX: &str = "minecraft:brand";
 
@@ -94,16 +94,19 @@ pub struct PendingConnection {
     pub version: AtomicCell<JavaMinecraftVersion>,
     pub connection_state: AtomicCell<ConnectionState>,
     pub(crate) configuration_phase: AtomicCell<ConfigurationPhase>,
+    pub(crate) login_protocol_phase: AtomicCell<LoginProtocolPhase>,
     pub(crate) known_packs_state: super::KnownPacksState,
     pub close_token: CancellationToken,
     pub network_writer: TCPNetworkEncoder<BufWriter<OwnedWriteHalf>>,
     pub network_reader: TCPNetworkDecoder<BufReader<OwnedReadHalf>>,
     pub gameprofile: Option<GameProfile>,
+    pub(crate) online_profile_verified: bool,
     pub config: Option<PlayerConfig>,
     pub brand: Option<String>,
     pub packet_limiter: PacketRateLimiter,
     pub verify_token: Option<[u8; 4]>,
     pub vine_challenge: Option<[u8; 16]>,
+    pub(crate) velocity_message_id: Option<i32>,
 }
 
 impl PendingConnection {
@@ -133,16 +136,19 @@ impl PendingConnection {
             version: AtomicCell::new(CURRENT_MC_VERSION),
             connection_state: AtomicCell::new(ConnectionState::HandShake),
             configuration_phase: AtomicCell::new(ConfigurationPhase::NotInConfiguration),
+            login_protocol_phase: AtomicCell::new(LoginProtocolPhase::AwaitingLoginStart),
             known_packs_state: std::sync::Arc::new(std::sync::Mutex::new(None)),
             close_token: CancellationToken::new(),
             network_writer: TCPNetworkEncoder::new(BufWriter::new(write)),
             network_reader: TCPNetworkDecoder::new(BufReader::new(read)),
             gameprofile: None,
+            online_profile_verified: false,
             config: None,
             brand: None,
             packet_limiter,
             verify_token: None,
             vine_challenge: None,
+            velocity_message_id: None,
         }
     }
 

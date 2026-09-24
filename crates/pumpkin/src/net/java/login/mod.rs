@@ -23,7 +23,7 @@ use crate::{
         EncryptionError, GameProfile, PacketHandlerResult,
         authentication::{self, AuthError},
         can_not_join, is_valid_player_name,
-        java::{ConfigurationPhase, pending::PendingConnection},
+        java::{ConfigurationPhase, LoginProtocolPhase, pending::PendingConnection},
         offline_uuid,
         proxy::{bungeecord, velocity, vine},
     },

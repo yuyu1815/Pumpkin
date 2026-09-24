@@ -5,6 +5,10 @@ fn may_omit_verify_token(version: JavaMinecraftVersion) -> bool {
     (JavaMinecraftVersion::V_1_19_3..JavaMinecraftVersion::V_1_20_2).contains(&version)
 }
 
+fn profile_is_acceptable(online_mode: bool, online_profile_verified: bool) -> bool {
+    !online_mode || online_profile_verified
+}
+
 impl PendingConnection {
     async fn verify_encryption_token(
         &mut self,
@@ -33,6 +37,11 @@ impl PendingConnection {
         encryption_response: SEncryptionResponse,
     ) -> Option<PacketHandlerResult> {
         debug!("Handling encryption");
+        if self.login_protocol_phase.load() != LoginProtocolPhase::AwaitingAuthenticationResponse {
+            self.kick(TextComponent::text("Unexpected encryption response"))
+                .await;
+            return Some(PacketHandlerResult::Stop);
+        }
         if let Err(error) = self
             .verify_encryption_token(server, &encryption_response.verify_token)
             .await
@@ -70,7 +79,10 @@ impl PendingConnection {
                 .authenticate(server, &shared_secret, &profile_name)
                 .await
             {
-                Ok(new_profile) => self.gameprofile = Some(new_profile),
+                Ok(new_profile) => {
+                    self.gameprofile = Some(new_profile);
+                    self.online_profile_verified = true;
+                }
                 Err(error) => {
                     self.kick(match error {
                         AuthError::FailedResponse => TextComponent::translate_cross(
@@ -149,6 +161,15 @@ impl PendingConnection {
         server: &Arc<Server>,
         profile: &GameProfile,
     ) -> Option<PacketHandlerResult> {
+        if !profile_is_acceptable(
+            server.advanced_config.networking.java.online_mode,
+            self.online_profile_verified,
+        ) {
+            self.kick(TextComponent::text("Online profile was not authenticated"))
+                .await;
+            return Some(PacketHandlerResult::Stop);
+        }
+
         let mut pre_login_event =
             crate::plugin::api::events::player::async_player_pre_login::AsyncPlayerPreLoginEvent {
                 player_name: profile.name.clone(),
@@ -176,9 +197,13 @@ impl PendingConnection {
         );
         self.send_packet_now(&packet).await;
         if self.version.load().supports_configuration_state() {
+            self.login_protocol_phase
+                .store(LoginProtocolPhase::AwaitingLoginAcknowledged);
             return None;
         }
 
+        self.login_protocol_phase
+            .store(LoginProtocolPhase::Complete);
         self.connection_state.store(ConnectionState::Play);
         let config = self.config.clone().unwrap_or_default();
         if let Some(reason) = can_not_join(profile, &self.address, server).await {
@@ -252,7 +277,14 @@ impl PendingConnection {
 mod tests {
     use pumpkin_util::version::JavaMinecraftVersion;
 
-    use super::may_omit_verify_token;
+    use super::{may_omit_verify_token, profile_is_acceptable};
+
+    #[test]
+    fn online_mode_rejects_an_unverified_login_start_profile() {
+        assert!(!profile_is_acceptable(true, false));
+        assert!(profile_is_acceptable(true, true));
+        assert!(profile_is_acceptable(false, false));
+    }
 
     #[test]
     fn only_profile_key_versions_may_omit_the_verify_token() {
