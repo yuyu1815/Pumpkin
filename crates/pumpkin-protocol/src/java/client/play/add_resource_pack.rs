@@ -45,7 +45,7 @@ impl ClientPacket for CAddResourcePack<'_> {
             write.write_uuid(self.uuid)?;
         }
         write.write_string(self.url)?;
-        write.write_string(self.hash)?;
+        write.write_string_bounded(self.hash, 40)?;
         if *version >= JavaMinecraftVersion::V_1_17 {
             write.write_bool(self.forced)?;
             if let Some(prompt) = &self.prompt_message {
@@ -56,5 +56,26 @@ impl ClientPacket for CAddResourcePack<'_> {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn write_hash(hash: &str) -> Result<(), crate::ser::WritingError> {
+        let uuid = uuid::Uuid::nil();
+        let packet = CAddResourcePack::new(&uuid, "", hash, false, None);
+        packet.write_packet_data(Vec::new(), &JavaMinecraftVersion::V_26_2)
+    }
+
+    #[test]
+    fn accepts_40_byte_hash() {
+        assert!(write_hash(&"a".repeat(40)).is_ok());
+    }
+
+    #[test]
+    fn rejects_41_byte_hash() {
+        assert!(write_hash(&"a".repeat(41)).is_err());
     }
 }
