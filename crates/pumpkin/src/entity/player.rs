@@ -398,6 +398,28 @@ pub enum SpamType {
     Command,
 }
 
+fn is_within_block_interaction_range(
+    eye_position: Vector3<f64>,
+    position: &BlockPos,
+    block_interaction_range: f64,
+    additional_range: f64,
+) -> bool {
+    if !eye_position.x.is_finite()
+        || !eye_position.y.is_finite()
+        || !eye_position.z.is_finite()
+        || !block_interaction_range.is_finite()
+        || block_interaction_range < 0.0
+        || !additional_range.is_finite()
+        || additional_range < 0.0
+    {
+        return false;
+    }
+
+    let range = block_interaction_range + additional_range;
+    range.is_finite()
+        && BoundingBox::from_block(position).squared_magnitude(eye_position) < range * range
+}
+
 pub struct Player {
     /// The underlying living entity object that represents the player.
     pub living_entity: LivingEntity,
@@ -4139,23 +4161,23 @@ impl Player {
     }
 
     pub fn block_interaction_range(&self) -> f64 {
-        if self.gamemode.load() == GameMode::Creative {
-            5.0
-        } else {
-            4.5
-        }
+        self.living_entity
+            .get_attribute_value(&Attributes::BLOCK_INTERACTION_RANGE)
     }
 
     pub fn can_interact_with_block_at(&self, position: &BlockPos, additional_range: f64) -> bool {
-        let d = self.block_interaction_range() + additional_range;
-        let box_pos = BoundingBox::from_block(position);
-        let entity_pos = self.living_entity.entity.pos.load();
-        let eye_height = self.living_entity.entity.get_eye_height();
-        box_pos.squared_magnitude(Vector3 {
-            x: entity_pos.x,
-            y: entity_pos.y + eye_height,
-            z: entity_pos.z,
-        }) < d * d
+        is_within_block_interaction_range(
+            self.eye_position(),
+            position,
+            self.block_interaction_range(),
+            additional_range,
+        )
+    }
+
+    fn open_container_is_valid(&self) -> bool {
+        self.open_container_pos
+            .load()
+            .is_none_or(|position| self.can_interact_with_block_at(&position, 4.0))
     }
 
     #[must_use]
@@ -5662,6 +5684,21 @@ impl Player {
 
     pub fn on_rename_item(self: &Arc<Self>, packet: &SRenameItem<'_>) {
         self.update_last_action_time();
+        if !self.open_container_is_valid() {
+            return;
+        }
+        let screen_handler_arc = self
+            .current_screen_handler
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        if !screen_handler_arc
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .can_use(self.as_ref())
+        {
+            return;
+        }
 
         let mut prepare_event =
             crate::plugin::api::events::inventory::prepare_anvil::PrepareAnvilEvent::new(
@@ -5907,6 +5944,10 @@ impl Player {
         };
 
         if i32::from(sync_id) != packet.sync_id.0 {
+            return;
+        }
+
+        if !self.open_container_is_valid() {
             return;
         }
 
@@ -6261,7 +6302,10 @@ impl Player {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
 
-        if i32::from(screen_handler.sync_id()) != packet.window_id.0 {
+        if i32::from(screen_handler.sync_id()) != packet.window_id.0
+            || !self.open_container_is_valid()
+            || !screen_handler.can_use(self)
+        {
             return;
         }
 
@@ -7949,10 +7993,51 @@ impl InventoryPlayer for Player {
 #[cfg(test)]
 mod tests {
     use super::{
-        bedrock_inventory_slot, hand_swap_inventory_slots, read_root_vehicle, write_root_vehicle,
+        bedrock_inventory_slot, hand_swap_inventory_slots, is_within_block_interaction_range,
+        read_root_vehicle, write_root_vehicle,
     };
     use pumpkin_nbt::{compound::NbtCompound, tag::NbtTag};
+    use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
     use uuid::Uuid;
+
+    #[test]
+    fn remote_block_menu_click_gate_preserves_inventory_and_near_range_is_allowed() {
+        let block_pos = BlockPos::new(0, 0, 0);
+        let far_eye = Vector3::new(100.0, 1.0, 0.5);
+        let near_eye = Vector3::new(4.0, 1.0, 0.5);
+        assert!(!is_within_block_interaction_range(
+            far_eye, &block_pos, 4.5, 4.0
+        ));
+        let mut container = vec![1, 2];
+        let mut cursor = 3;
+        let mut player_inventory = vec![4, 5];
+
+        // Model the slot mutation after sync-ID/slot validation; distance must reject it.
+        if is_within_block_interaction_range(far_eye, &block_pos, 4.5, 4.0) {
+            container[0] = 9;
+            cursor = 9;
+            player_inventory[0] = 9;
+        }
+        assert_eq!(container, [1, 2]);
+        assert_eq!(cursor, 3);
+        assert_eq!(player_inventory, [4, 5]);
+
+        assert!(is_within_block_interaction_range(
+            near_eye, &block_pos, 4.5, 4.0
+        ));
+        assert!(!is_within_block_interaction_range(
+            Vector3::new(f64::NAN, 1.0, 0.5),
+            &block_pos,
+            4.5,
+            4.0,
+        ));
+        assert!(!is_within_block_interaction_range(
+            Vector3::new(5.5, 1.0, 0.5),
+            &block_pos,
+            4.5,
+            0.0,
+        ));
+    }
 
     #[test]
     fn hand_swap_sync_covers_selected_and_off_hand_slots() {
