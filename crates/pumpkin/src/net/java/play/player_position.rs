@@ -2,6 +2,22 @@
 use super::*;
 
 impl JavaClient {
+    fn is_finite_position(position: Vector3<f64>) -> bool {
+        position.x.is_finite() && position.y.is_finite() && position.z.is_finite()
+    }
+
+    fn is_finite_position_rotation(position: Vector3<f64>, yaw: f32, pitch: f32) -> bool {
+        Self::is_finite_position(position) && yaw.is_finite() && pitch.is_finite()
+    }
+
+    fn invalid_player_movement(&self) {
+        self.try_kick(&TextComponent::translate_cross(
+            translation::java::MULTIPLAYER_DISCONNECT_INVALID_PLAYER_MOVEMENT,
+            translation::java::MULTIPLAYER_DISCONNECT_INVALID_PLAYER_MOVEMENT,
+            [],
+        ));
+    }
+
     pub(super) const fn clamp_horizontal(pos: f64) -> f64 {
         pos.clamp(-3.0E7, 3.0E7)
     }
@@ -73,7 +89,7 @@ impl JavaClient {
         }
         // y = feet Y
         let position = packet.position;
-        if position.x.is_nan() || position.y.is_nan() || position.z.is_nan() {
+        if !Self::is_finite_position(position) {
             self.try_kick(&TextComponent::translate_cross(
                 translation::java::MULTIPLAYER_DISCONNECT_INVALID_PLAYER_MOVEMENT,
                 translation::java::MULTIPLAYER_DISCONNECT_INVALID_PLAYER_MOVEMENT,
@@ -193,6 +209,10 @@ impl JavaClient {
         if !player.has_client_loaded() {
             return;
         }
+        if !Self::is_finite_position_rotation(packet.position, packet.yaw, packet.pitch) {
+            self.invalid_player_movement();
+            return;
+        }
         // A movement packet was received this tick — tracked for SClientTickEnd zeroing.
         self.received_movement_this_tick
             .store(true, Ordering::Relaxed);
@@ -216,19 +236,6 @@ impl JavaClient {
         }
         // y = feet Y
         let position = packet.position;
-        if !position.x.is_finite()
-            || !position.y.is_finite()
-            || !position.z.is_finite()
-            || !packet.yaw.is_finite()
-            || !packet.pitch.is_finite()
-        {
-            self.try_kick(&TextComponent::translate_cross(
-                translation::java::MULTIPLAYER_DISCONNECT_INVALID_PLAYER_MOVEMENT,
-                translation::java::MULTIPLAYER_DISCONNECT_INVALID_PLAYER_MOVEMENT,
-                [],
-            ));
-            return;
-        }
 
         let position = Vector3::new(
             Self::clamp_horizontal(position.x),
@@ -363,6 +370,55 @@ impl JavaClient {
             player.get_entity().yaw.load(),
             player.get_entity().pitch.load(),
             Vec::new(),
+        ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::JavaClient;
+    use pumpkin_util::math::vector3::Vector3;
+
+    #[test]
+    fn position_validation_rejects_non_finite_coordinates() {
+        assert!(JavaClient::is_finite_position(Vector3::new(1.0, 2.0, 3.0)));
+        assert!(!JavaClient::is_finite_position(Vector3::new(
+            f64::INFINITY,
+            0.0,
+            0.0
+        )));
+        assert!(!JavaClient::is_finite_position(Vector3::new(
+            0.0,
+            f64::NEG_INFINITY,
+            0.0
+        )));
+        assert!(!JavaClient::is_finite_position(Vector3::new(
+            0.0,
+            0.0,
+            f64::NAN
+        )));
+    }
+
+    #[test]
+    fn position_rotation_validation_rejects_non_finite_angles() {
+        let position = Vector3::new(1.0, 2.0, 3.0);
+        assert!(JavaClient::is_finite_position_rotation(
+            position, 45.0, -30.0
+        ));
+        assert!(!JavaClient::is_finite_position_rotation(
+            position,
+            f32::NAN,
+            0.0
+        ));
+        assert!(!JavaClient::is_finite_position_rotation(
+            position,
+            0.0,
+            f32::INFINITY
+        ));
+        assert!(!JavaClient::is_finite_position_rotation(
+            position,
+            0.0,
+            f32::NEG_INFINITY
         ));
     }
 }
