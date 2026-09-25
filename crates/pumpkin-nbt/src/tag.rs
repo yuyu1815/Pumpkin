@@ -213,6 +213,16 @@ impl NbtTag {
         tag_id: u8,
         depth: usize,
     ) -> Result<(), Error> {
+        stacker::maybe_grow(32 * 1024, 1024 * 1024, || {
+            Self::skip_data_depth_inner(reader, tag_id, depth)
+        })
+    }
+
+    fn skip_data_depth_inner<'a, R: NbtReadHelper<'a>>(
+        reader: &mut R,
+        tag_id: u8,
+        depth: usize,
+    ) -> Result<(), Error> {
         match tag_id {
             END_ID => Ok(()),
             BYTE_ID => reader.skip_i8(),
@@ -307,6 +317,17 @@ impl NbtTag {
     /// Deserializes a payload whose type is identified by `tag_id` with depth tracking.
     #[allow(clippy::too_many_lines)]
     pub fn deserialize_data_depth<'a, R: NbtReadHelper<'a>>(
+        reader: &mut R,
+        tag_id: u8,
+        depth: usize,
+    ) -> Result<Self, Error> {
+        stacker::maybe_grow(32 * 1024, 1024 * 1024, || {
+            Self::deserialize_data_depth_inner(reader, tag_id, depth)
+        })
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn deserialize_data_depth_inner<'a, R: NbtReadHelper<'a>>(
         reader: &mut R,
         tag_id: u8,
         depth: usize,
