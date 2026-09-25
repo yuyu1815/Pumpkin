@@ -136,7 +136,7 @@ mod tests {
             .region_folder
             .join("r.0.0.mca")
             .with_extension("tmp");
-        tokio::fs::create_dir(&blocked_temp)
+        tokio::fs::create_dir_all(&blocked_temp)
             .await
             .expect("block Anvil temp path");
 
@@ -150,22 +150,25 @@ mod tests {
             Ok(1)
         );
 
-        for _ in 0..10_000 {
-            let done = output
-                .lock()
-                .unwrap()
-                .iter()
-                .any(|line| line.contains("Unable to save") || line.contains("Saving failed"));
-            if done {
-                break;
-            }
-            tokio::task::yield_now().await;
-        }
+        let received_error =
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                loop {
+                    if output.lock().unwrap().iter().any(|line| {
+                        line.contains("Unable to save") || line.contains("Saving failed")
+                    }) {
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .is_ok();
         let output = output.lock().unwrap().clone();
         assert!(
-            output
-                .iter()
-                .any(|line| line.contains("Unable to save") || line.contains("Saving failed")),
+            received_error
+                && output
+                    .iter()
+                    .any(|line| line.contains("Unable to save") || line.contains("Saving failed")),
             "flush error feedback missing: {output:?}"
         );
         assert!(
