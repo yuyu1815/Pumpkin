@@ -68,6 +68,10 @@ impl JavaClient {
         if !player.has_client_loaded() {
             return;
         }
+        if !Self::is_finite_position(packet.position) {
+            self.invalid_player_movement();
+            return;
+        }
         // A movement packet was received this tick — tracked for SClientTickEnd zeroing.
         self.received_movement_this_tick
             .store(true, Ordering::Relaxed);
@@ -89,14 +93,6 @@ impl JavaClient {
         }
         // y = feet Y
         let position = packet.position;
-        if !Self::is_finite_position(position) {
-            self.try_kick(&TextComponent::translate_cross(
-                translation::java::MULTIPLAYER_DISCONNECT_INVALID_PLAYER_MOVEMENT,
-                translation::java::MULTIPLAYER_DISCONNECT_INVALID_PLAYER_MOVEMENT,
-                [],
-            ));
-            return;
-        }
         let position = Vector3::new(
             Self::clamp_horizontal(position.x),
             Self::clamp_vertical(position.y),
