@@ -123,6 +123,42 @@ pub struct NbtStreamReader<R>(
     pub R,
 );
 
+/// Charges estimated heap allocation while parsing an NBT value.
+#[derive(Debug, Clone)]
+pub struct NbtAccounter {
+    quota: usize,
+    accounted: usize,
+}
+
+impl NbtAccounter {
+    /// Creates an allocation accounter with the given maximum quota.
+    #[must_use]
+    pub const fn new(quota: usize) -> Self {
+        Self {
+            quota,
+            accounted: 0,
+        }
+    }
+
+    /// Returns the estimated allocation charged so far.
+    #[must_use]
+    pub const fn accounted(&self) -> usize {
+        self.accounted
+    }
+
+    fn charge(&mut self, amount: usize) -> Result<()> {
+        let total = self
+            .accounted
+            .checked_add(amount)
+            .ok_or(Error::NbtQuotaExceeded { quota: self.quota })?;
+        if total > self.quota {
+            return Err(Error::NbtQuotaExceeded { quota: self.quota });
+        }
+        self.accounted = total;
+        Ok(())
+    }
+}
+
 impl<'a, R: Read + Seek> NbtDataSource<'a> for NbtStreamReader<R> {
     fn read_u8(&mut self) -> Result<u8> {
         let mut buf = [0u8; 1];
@@ -319,6 +355,11 @@ pub trait NbtReadHelper<'a> {
     /// Underlying byte source.
     type Reader: NbtDataSource<'a>;
 
+    /// Charges estimated allocation; unbounded readers leave accounting disabled.
+    fn account(&mut self, _amount: usize) -> Result<()> {
+        Ok(())
+    }
+
     /// Returns the underlying byte source.
     fn reader(&mut self) -> &mut Self::Reader;
 
@@ -396,12 +437,32 @@ pub trait NbtReadHelper<'a> {
 /// Reads Java Edition NBT primitives using big-endian numeric encoding.
 pub struct NbtReadHelperJava<D> {
     reader: D,
+    accounter: Option<NbtAccounter>,
 }
 
 impl<D> NbtReadHelperJava<D> {
-    /// Creates a Java Edition reader over `r`.
+    /// Creates a Java Edition reader over `r` without allocation accounting.
     pub const fn new(r: D) -> Self {
-        Self { reader: r }
+        Self {
+            reader: r,
+            accounter: None,
+        }
+    }
+
+    /// Creates a Java Edition reader with an estimated-allocation quota.
+    pub const fn with_quota(r: D, quota: usize) -> Self {
+        Self {
+            reader: r,
+            accounter: Some(NbtAccounter::new(quota)),
+        }
+    }
+
+    /// Returns estimated allocation charged so far.
+    pub const fn accounted(&self) -> usize {
+        match &self.accounter {
+            Some(accounter) => accounter.accounted(),
+            None => 0,
+        }
     }
 }
 
@@ -427,6 +488,13 @@ impl<'a, D: NbtDataSource<'a>> NbtReadHelperJava<D> {
 
 impl<'a, D: NbtDataSource<'a>> NbtReadHelper<'a> for NbtReadHelperJava<D> {
     type Reader = D;
+
+    fn account(&mut self, amount: usize) -> Result<()> {
+        if let Some(accounter) = &mut self.accounter {
+            accounter.charge(amount)?;
+        }
+        Ok(())
+    }
 
     fn reader(&mut self) -> &mut D {
         &mut self.reader
@@ -602,6 +670,7 @@ mod tests {
     use std::io::Cursor;
 
     use crate::serializer::{NbtWriteHelper, NbtWriteHelperBedrock};
+    use crate::{Error, Nbt, NbtCompound, NbtTag};
 
     use super::{NbtReadHelper, NbtReadHelperBedrock, NbtReadHelperJava};
 
@@ -616,6 +685,61 @@ mod tests {
         let long_bytes: Vec<u8> = longs.iter().flat_map(|value| value.to_be_bytes()).collect();
         let mut reader = NbtReadHelperJava::new(Cursor::new(long_bytes.as_slice()));
         assert_eq!(reader.get_i64_array(longs.len()).unwrap(), longs);
+    }
+
+    #[test]
+    fn java_allocation_accounting_matches_official_charge_formulas() {
+        let mut compound = NbtCompound::new();
+        compound.put("b", NbtTag::ByteArray(vec![1, 2].into()));
+        compound.put("i", NbtTag::IntArray(vec![1, 2].into()));
+        compound.put("l", NbtTag::LongArray(vec![1, 2].into()));
+        compound.put("s", NbtTag::String("A😀".into()));
+        compound.put("list", NbtTag::List(vec![NbtTag::Byte(1), NbtTag::Byte(2)]));
+        let bytes = Nbt::from(compound).write_unnamed();
+        // Compound(48) + key costs (66 * 4 + 72), child values
+        // (26, 32, 40, 42, 62), and the terminating End(8).
+        let expected = 48 + (66 * 4 + 72) + 26 + 32 + 40 + 42 + 62 + 8;
+        for quota in [expected, expected + 1] {
+            let mut reader = NbtReadHelperJava::with_quota(Cursor::new(bytes.as_ref()), quota);
+            Nbt::read_unnamed(&mut reader).unwrap();
+            assert_eq!(reader.accounted(), expected);
+        }
+        let mut reader = NbtReadHelperJava::with_quota(Cursor::new(bytes.as_ref()), expected - 1);
+        assert!(matches!(
+            Nbt::read_unnamed(&mut reader),
+            Err(Error::NbtQuotaExceeded { .. })
+        ));
+    }
+
+    #[test]
+    fn java_allocation_accounting_preserves_depth_limit() {
+        let mut bytes = Vec::new();
+        bytes.push(crate::LIST_ID);
+        for _ in 0..514 {
+            bytes.push(crate::LIST_ID);
+            bytes.extend_from_slice(&1i32.to_be_bytes());
+        }
+        bytes.push(crate::END_ID);
+        bytes.extend_from_slice(&0i32.to_be_bytes());
+        let mut reader = NbtReadHelperJava::with_quota(Cursor::new(bytes), usize::MAX);
+        assert!(matches!(
+            NbtTag::deserialize(&mut reader),
+            Err(Error::MaxDepthExceeded)
+        ));
+    }
+
+    #[test]
+    fn java_compound_charges_duplicate_keys_without_new_entry_cost() {
+        let bytes = [1, 0, 1, b'a', 1, 1, 0, 1, b'a', 2, 0];
+        let mut reader = NbtReadHelperJava::with_quota(Cursor::new(bytes.as_slice()), 168);
+        let compound = NbtCompound::deserialize_content(&mut reader).unwrap();
+        assert_eq!(compound.get_byte("a"), Some(2));
+        assert_eq!(reader.accounted(), 168);
+        let mut reader = NbtReadHelperJava::with_quota(Cursor::new(bytes.as_slice()), 167);
+        assert!(matches!(
+            NbtCompound::deserialize_content(&mut reader),
+            Err(Error::NbtQuotaExceeded { .. })
+        ));
     }
 
     #[test]

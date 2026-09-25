@@ -161,9 +161,18 @@ impl<'a> ServerPacket<'a> for CRespawn {
         if !v1_20_2 {
             let dimension = if v1_16_2 && *version < JavaMinecraftVersion::V_1_19 {
                 let mut cursor = std::io::Cursor::new(*read);
-                let mut reader = pumpkin_nbt::deserializer::NbtReadHelperJava::new(&mut cursor);
-                let _nbt = pumpkin_nbt::Nbt::read(&mut reader).map_err(|e| {
-                    ReadingError::Message(format!("Invalid dimension type NBT: {e}"))
+                let mut reader = pumpkin_nbt::deserializer::NbtReadHelperJava::with_quota(
+                    &mut cursor,
+                    pumpkin_nbt::NETWORK_NBT_QUOTA,
+                );
+                let _nbt = pumpkin_nbt::Nbt::read(&mut reader).map_err(|error| match error {
+                    pumpkin_nbt::Error::NbtQuotaExceeded { quota } => {
+                        ReadingError::NbtQuotaExceeded { quota }
+                    }
+                    pumpkin_nbt::Error::Incomplete(error) => {
+                        ReadingError::Incomplete(format!("Invalid dimension type NBT: {error}"))
+                    }
+                    error => ReadingError::Message(format!("Invalid dimension type NBT: {error}")),
                 })?;
                 let bytes_read = cursor.position() as usize;
                 *read = &read[bytes_read..];

@@ -58,7 +58,7 @@ impl NbtCompound {
         reader: &mut R,
         depth: usize,
     ) -> Result<(), Error> {
-        if depth > crate::MAX_NBT_DEPTH {
+        if depth >= crate::MAX_NBT_DEPTH {
             return Err(Error::MaxDepthExceeded);
         }
 
@@ -88,20 +88,34 @@ impl NbtCompound {
         reader: &mut R,
         depth: usize,
     ) -> Result<Self, Error> {
-        if depth > crate::MAX_NBT_DEPTH {
+        if depth >= crate::MAX_NBT_DEPTH {
             return Err(Error::MaxDepthExceeded);
         }
 
+        reader.account(48)?;
         let mut compound = Self::new();
 
         loop {
             let tag_id = reader.get_u8()?;
 
             if tag_id == END_ID {
+                reader.account(8)?;
                 break;
             }
 
             let name = reader.get_string()?;
+            let key_cost = name
+                .encode_utf16()
+                .count()
+                .checked_mul(2)
+                .and_then(|len| len.checked_add(28))
+                .ok_or(Error::LargeLength(name.len()))?;
+            let new_key = !compound.child_tags.contains_key(name.as_ref());
+            reader.account(
+                key_cost
+                    .checked_add(if new_key { 36 } else { 0 })
+                    .ok_or(Error::LargeLength(name.len()))?,
+            )?;
             let tag = NbtTag::deserialize_data_depth(reader, tag_id, depth + 1)?;
 
             compound.child_tags.insert(name.into(), tag);

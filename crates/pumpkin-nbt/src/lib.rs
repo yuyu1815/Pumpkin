@@ -66,6 +66,8 @@ pub const LONG_ARRAY_ID: u8 = 0x0C;
 pub const MAX_ARRAY_LENGTH: usize = 512_000;
 /// Maximum nesting depth allowed when decoding NBT compound or list tags.
 pub const MAX_NBT_DEPTH: usize = 512;
+/// Official 26.2 network NBT estimated-allocation quota.
+pub const NETWORK_NBT_QUOTA: usize = 2_097_152;
 
 /// Errors produced while reading, writing, or converting NBT data.
 #[derive(Error, Debug)]
@@ -106,6 +108,9 @@ pub enum Error {
     /// NBT nesting depth exceeded the maximum allowed limit.
     #[error("NBT depth exceeded maximum allowed limit")]
     MaxDepthExceeded,
+    /// Parsing this NBT document would exceed its estimated-allocation quota.
+    #[error("NBT allocation quota exceeded (quota: {quota} bytes)")]
+    NbtQuotaExceeded { quota: usize },
     /// A list tag specified an invalid element tag type.
     #[error("Invalid element tag type for list: {0}")]
     InvalidListTag(u8),

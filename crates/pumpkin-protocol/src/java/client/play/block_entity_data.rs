@@ -1,6 +1,6 @@
-use std::io::{Cursor, Read, Write};
+use std::io::{Cursor, Write};
 
-use flate2::{Compression, read::GzDecoder, write::GzEncoder};
+use flate2::{Compression, write::GzEncoder};
 use pumpkin_data::block_entity_type_id_remap::remap_block_entity_type_id_for_version;
 use pumpkin_data::packet::clientbound::play::BLOCK_ENTITY_DATA;
 use pumpkin_macros::java_packet;
@@ -10,7 +10,10 @@ use pumpkin_util::{math::position::BlockPos, version::JavaMinecraftVersion};
 
 use crate::{
     ClientPacket, ServerPacket, VarInt,
-    ser::{NetworkReadExt, NetworkWriteExt, ReadingError, WritingError},
+    ser::{
+        MAX_COMPRESSED_NBT_EXPANSION, NetworkReadExt, NetworkWriteExt, ReadingError, WritingError,
+        decompress_gzip_bounded,
+    },
 };
 
 /// Updates the NBT data of a block entity (e.g., signs, chests, or banners).
@@ -160,11 +163,7 @@ pub fn read_nbt_payload(
             }
             let compressed = &bytebuf[..length as usize];
             *bytebuf = &bytebuf[length as usize..];
-            let mut decoder = GzDecoder::new(compressed);
-            let mut decompressed = Vec::new();
-            decoder
-                .read_to_end(&mut decompressed)
-                .map_err(|e| ReadingError::Message(e.to_string()))?;
+            let decompressed = decompress_gzip_bounded(compressed, MAX_COMPRESSED_NBT_EXPANSION)?;
             if decompressed.len() >= 3
                 && decompressed[0] == 0x0A
                 && decompressed[1] == 0

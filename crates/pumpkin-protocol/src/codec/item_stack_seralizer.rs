@@ -227,18 +227,30 @@ fn read_component_id_for_version(
 
 fn decode_custom_name(component_data: &[u8]) -> Result<Box<dyn DataComponentImpl>, ReadingError> {
     let mut cursor = Cursor::new(component_data);
-    let mut nbt_reader = pumpkin_nbt::deserializer::NbtReadHelperJava::new(&mut cursor);
-    let tag = NbtTag::deserialize(&mut nbt_reader)
-        .map_err(|err| ReadingError::Message(format!("Failed to decode CustomName NBT: {err}")))?;
+    let mut nbt_reader = pumpkin_nbt::deserializer::NbtReadHelperJava::with_quota(
+        &mut cursor,
+        pumpkin_nbt::NETWORK_NBT_QUOTA,
+    );
+    let tag = NbtTag::deserialize(&mut nbt_reader).map_err(|err| match err {
+        pumpkin_nbt::Error::NbtQuotaExceeded { quota } => ReadingError::NbtQuotaExceeded { quota },
+        pumpkin_nbt::Error::Incomplete(err) => ReadingError::Incomplete(err.to_string()),
+        err => ReadingError::Message(format!("Failed to decode CustomName NBT: {err}")),
+    })?;
     let name = TextComponent::from_nbt(&tag);
     Ok(CustomNameImpl { name }.to_dyn())
 }
 
 fn decode_item_name(component_data: &[u8]) -> Result<Box<dyn DataComponentImpl>, ReadingError> {
     let mut cursor = Cursor::new(component_data);
-    let mut nbt_reader = pumpkin_nbt::deserializer::NbtReadHelperJava::new(&mut cursor);
-    let tag = NbtTag::deserialize(&mut nbt_reader)
-        .map_err(|err| ReadingError::Message(format!("Failed to decode ItemName NBT: {err}")))?;
+    let mut nbt_reader = pumpkin_nbt::deserializer::NbtReadHelperJava::with_quota(
+        &mut cursor,
+        pumpkin_nbt::NETWORK_NBT_QUOTA,
+    );
+    let tag = NbtTag::deserialize(&mut nbt_reader).map_err(|err| match err {
+        pumpkin_nbt::Error::NbtQuotaExceeded { quota } => ReadingError::NbtQuotaExceeded { quota },
+        pumpkin_nbt::Error::Incomplete(err) => ReadingError::Incomplete(err.to_string()),
+        err => ReadingError::Message(format!("Failed to decode ItemName NBT: {err}")),
+    })?;
     let name = match tag {
         NbtTag::String(name) => name.to_string(),
         NbtTag::Compound(compound) => compound
@@ -256,9 +268,15 @@ fn decode_item_name(component_data: &[u8]) -> Result<Box<dyn DataComponentImpl>,
 
 fn decode_custom_data(component_data: &[u8]) -> Result<Box<dyn DataComponentImpl>, ReadingError> {
     let mut cursor = Cursor::new(component_data);
-    let mut nbt_reader = pumpkin_nbt::deserializer::NbtReadHelperJava::new(&mut cursor);
-    let tag = NbtTag::deserialize(&mut nbt_reader)
-        .map_err(|err| ReadingError::Message(format!("Failed to decode CustomData NBT: {err}")))?;
+    let mut nbt_reader = pumpkin_nbt::deserializer::NbtReadHelperJava::with_quota(
+        &mut cursor,
+        pumpkin_nbt::NETWORK_NBT_QUOTA,
+    );
+    let tag = NbtTag::deserialize(&mut nbt_reader).map_err(|err| match err {
+        pumpkin_nbt::Error::NbtQuotaExceeded { quota } => ReadingError::NbtQuotaExceeded { quota },
+        pumpkin_nbt::Error::Incomplete(err) => ReadingError::Incomplete(err.to_string()),
+        err => ReadingError::Message(format!("Failed to decode CustomData NBT: {err}")),
+    })?;
     let data = match tag {
         NbtTag::Compound(compound) => compound,
         _ => pumpkin_nbt::compound::NbtCompound::new(),

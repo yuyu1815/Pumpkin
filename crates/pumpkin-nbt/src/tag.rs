@@ -213,10 +213,6 @@ impl NbtTag {
         tag_id: u8,
         depth: usize,
     ) -> Result<(), Error> {
-        if depth > crate::MAX_NBT_DEPTH {
-            return Err(Error::MaxDepthExceeded);
-        }
-
         match tag_id {
             END_ID => Ok(()),
             BYTE_ID => reader.skip_i8(),
@@ -238,6 +234,9 @@ impl NbtTag {
             }
             STRING_ID => reader.skip_string(),
             LIST_ID => {
+                if depth >= crate::MAX_NBT_DEPTH {
+                    return Err(Error::MaxDepthExceeded);
+                }
                 let tag_type_id = reader.get_u8()?;
                 let len = reader.get_i32()?;
                 if len < 0 {
@@ -258,7 +257,7 @@ impl NbtTag {
 
                 Ok(())
             }
-            COMPOUND_ID => NbtCompound::skip_content_depth(reader, depth + 1),
+            COMPOUND_ID => NbtCompound::skip_content_depth(reader, depth),
             INT_ARRAY_ID => {
                 let len = reader.get_i32()?;
                 if len < 0 {
@@ -312,33 +311,38 @@ impl NbtTag {
         tag_id: u8,
         depth: usize,
     ) -> Result<Self, Error> {
-        if depth > crate::MAX_NBT_DEPTH {
-            return Err(Error::MaxDepthExceeded);
-        }
-
         match tag_id {
-            END_ID => Ok(Self::End),
+            END_ID => {
+                reader.account(8)?;
+                Ok(Self::End)
+            }
             BYTE_ID => {
+                reader.account(9)?;
                 let byte = reader.get_i8()?;
                 Ok(Self::Byte(byte))
             }
             SHORT_ID => {
+                reader.account(10)?;
                 let short = reader.get_i16()?;
                 Ok(Self::Short(short))
             }
             INT_ID => {
+                reader.account(12)?;
                 let int = reader.get_i32()?;
                 Ok(Self::Int(int))
             }
             LONG_ID => {
+                reader.account(16)?;
                 let long = reader.get_i64()?;
                 Ok(Self::Long(long))
             }
             FLOAT_ID => {
+                reader.account(12)?;
                 let float = reader.get_f32()?;
                 Ok(Self::Float(float))
             }
             DOUBLE_ID => {
+                reader.account(16)?;
                 let double = reader.get_f64()?;
                 Ok(Self::Double(double))
             }
@@ -352,10 +356,24 @@ impl NbtTag {
                 if len > crate::MAX_ARRAY_LENGTH {
                     return Err(Error::LargeLength(len));
                 }
+                reader.account(24usize.checked_add(len).ok_or(Error::LargeLength(len))?)?;
                 Ok(Self::ByteArray(reader.get_byte_array(len)?.into()))
             }
-            STRING_ID => Ok(Self::String(reader.get_string()?.into_owned().into())),
+            STRING_ID => {
+                let value = reader.get_string()?;
+                let charge = value
+                    .encode_utf16()
+                    .count()
+                    .checked_mul(2)
+                    .and_then(|len| len.checked_add(36))
+                    .ok_or(Error::LargeLength(value.len()))?;
+                reader.account(charge)?;
+                Ok(Self::String(value.into_owned().into()))
+            }
             LIST_ID => {
+                if depth >= crate::MAX_NBT_DEPTH {
+                    return Err(Error::MaxDepthExceeded);
+                }
                 let tag_type_id = reader.get_u8()?;
                 let len = reader.get_i32()?;
                 if len < 0 {
@@ -370,6 +388,11 @@ impl NbtTag {
                     return Err(Error::LargeLength(len));
                 }
 
+                let charge = len
+                    .checked_mul(4)
+                    .and_then(|n| n.checked_add(36))
+                    .ok_or(Error::LargeLength(len))?;
+                reader.account(charge)?;
                 let mut list = Vec::with_capacity(len.min(4096));
                 for _ in 0..len {
                     let tag = Self::deserialize_data_depth(reader, tag_type_id, depth + 1)?;
@@ -382,8 +405,7 @@ impl NbtTag {
                 Ok(Self::List(list))
             }
             COMPOUND_ID => Ok(Self::Compound(NbtCompound::deserialize_content_depth(
-                reader,
-                depth + 1,
+                reader, depth,
             )?)),
             INT_ARRAY_ID => {
                 let len = reader.get_i32()?;
@@ -396,6 +418,11 @@ impl NbtTag {
                     return Err(Error::LargeLength(len));
                 }
 
+                let charge = len
+                    .checked_mul(4)
+                    .and_then(|n| n.checked_add(24))
+                    .ok_or(Error::LargeLength(len))?;
+                reader.account(charge)?;
                 Ok(Self::IntArray(reader.get_i32_array(len)?))
             }
             LONG_ARRAY_ID => {
@@ -409,6 +436,11 @@ impl NbtTag {
                     return Err(Error::LargeLength(len));
                 }
 
+                let charge = len
+                    .checked_mul(8)
+                    .and_then(|n| n.checked_add(24))
+                    .ok_or(Error::LargeLength(len))?;
+                reader.account(charge)?;
                 Ok(Self::LongArray(reader.get_i64_array(len)?))
             }
             _ => Err(Error::UnknownTagId(tag_id)),
@@ -560,5 +592,76 @@ impl From<f64> for NbtTag {
 impl From<bool> for NbtTag {
     fn from(value: bool) -> Self {
         Self::Byte(i8::from(value))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use crate::deserializer::NbtReadHelperJava;
+    use crate::{Error, MAX_NBT_DEPTH};
+
+    use super::NbtTag;
+
+    #[test]
+    fn java_numeric_tags_use_official_accounting_charges() {
+        let cases = [
+            (crate::BYTE_ID, 1, 9),
+            (crate::SHORT_ID, 2, 10),
+            (crate::INT_ID, 4, 12),
+            (crate::LONG_ID, 8, 16),
+            (crate::FLOAT_ID, 4, 12),
+            (crate::DOUBLE_ID, 8, 16),
+        ];
+
+        for (tag_id, payload_len, charge) in cases {
+            let bytes = vec![0; payload_len];
+            let mut reader = NbtReadHelperJava::with_quota(Cursor::new(bytes.as_slice()), charge);
+            NbtTag::deserialize_data(&mut reader, tag_id).unwrap();
+            assert_eq!(reader.accounted(), charge);
+
+            let mut reader =
+                NbtReadHelperJava::with_quota(Cursor::new(bytes.as_slice()), charge - 1);
+            assert!(matches!(
+                NbtTag::deserialize_data(&mut reader, tag_id),
+                Err(Error::NbtQuotaExceeded { .. })
+            ));
+        }
+    }
+
+    fn nested_lists(count: usize) -> Vec<u8> {
+        let mut bytes = vec![crate::LIST_ID];
+        for depth in 0..count {
+            let child_type = if depth + 1 == count {
+                crate::END_ID
+            } else {
+                crate::LIST_ID
+            };
+            bytes.push(child_type);
+            bytes.extend_from_slice(
+                &(if child_type != crate::END_ID {
+                    1i32
+                } else {
+                    0i32
+                })
+                .to_be_bytes(),
+            );
+        }
+        bytes
+    }
+
+    #[test]
+    fn java_nbt_depth_allows_512_containers_and_rejects_the_next() {
+        let bytes = nested_lists(MAX_NBT_DEPTH);
+        let mut reader = NbtReadHelperJava::new(Cursor::new(bytes.as_slice()));
+        NbtTag::deserialize(&mut reader).unwrap();
+
+        let bytes = nested_lists(MAX_NBT_DEPTH + 1);
+        let mut reader = NbtReadHelperJava::new(Cursor::new(bytes.as_slice()));
+        assert!(matches!(
+            NbtTag::deserialize(&mut reader),
+            Err(Error::MaxDepthExceeded)
+        ));
     }
 }

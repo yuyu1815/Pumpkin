@@ -29,6 +29,8 @@ pub enum ReadingError {
     TooLarge(String),
     #[error("{0}")]
     Message(String),
+    #[error("NBT allocation quota exceeded (quota: {quota} bytes)")]
+    NbtQuotaExceeded { quota: usize },
 }
 
 impl serde::de::Error for ReadingError {
@@ -53,6 +55,34 @@ impl serde::ser::Error for WritingError {
     fn custom<T: std::fmt::Display>(msg: T) -> Self {
         Self::Serde(msg.to_string())
     }
+}
+
+fn map_nbt_error(error: pumpkin_nbt::Error) -> ReadingError {
+    match error {
+        pumpkin_nbt::Error::NbtQuotaExceeded { quota } => ReadingError::NbtQuotaExceeded { quota },
+        pumpkin_nbt::Error::Incomplete(error) => ReadingError::Incomplete(error.to_string()),
+        error => ReadingError::Message(error.to_string()),
+    }
+}
+
+// Raw gzip expansion cap, independent of the NBT allocation accounter quota.
+pub(crate) const MAX_COMPRESSED_NBT_EXPANSION: usize = crate::MAX_PACKET_DATA_SIZE;
+
+pub(crate) fn decompress_gzip_bounded(
+    compressed: &[u8],
+    limit: usize,
+) -> Result<Vec<u8>, ReadingError> {
+    let mut decompressed = Vec::new();
+    flate2::read::GzDecoder::new(compressed)
+        .take(limit as u64 + 1)
+        .read_to_end(&mut decompressed)
+        .map_err(|error| ReadingError::Message(error.to_string()))?;
+    if decompressed.len() > limit {
+        return Err(ReadingError::TooLarge(format!(
+            "decompressed NBT exceeds raw expansion limit of {limit} bytes"
+        )));
+    }
+    Ok(decompressed)
 }
 
 struct NetworkReadDataSource<'a, R: NetworkReadExt + ?Sized>(&'a mut R);
@@ -238,21 +268,19 @@ pub trait NetworkReadExt {
             if tag_id == pumpkin_nbt::END_ID {
                 return Ok(None);
             }
-            let mut helper =
-                pumpkin_nbt::deserializer::NbtReadHelperJava::new(NetworkReadDataSource(self));
+            let mut helper = pumpkin_nbt::deserializer::NbtReadHelperJava::with_quota(
+                NetworkReadDataSource(self),
+                pumpkin_nbt::NETWORK_NBT_QUOTA,
+            );
             if *version < JavaMinecraftVersion::V_1_20_2 {
-                let _name = helper
-                    .get_string()
-                    .map_err(|e| ReadingError::Message(e.to_string()))?;
+                let _name = helper.get_string().map_err(map_nbt_error)?;
             }
             let tag = if tag_id == pumpkin_nbt::COMPOUND_ID {
                 NbtTag::Compound(
-                    NbtCompound::deserialize_content(&mut helper)
-                        .map_err(|e| ReadingError::Message(e.to_string()))?,
+                    NbtCompound::deserialize_content(&mut helper).map_err(map_nbt_error)?,
                 )
             } else {
-                NbtTag::deserialize_data(&mut helper, tag_id)
-                    .map_err(|e| ReadingError::Message(e.to_string()))?
+                NbtTag::deserialize_data(&mut helper, tag_id).map_err(map_nbt_error)?
             };
             Ok(Some(tag))
         } else {
@@ -262,30 +290,23 @@ pub trait NetworkReadExt {
             }
             let mut compressed = vec![0u8; length as usize];
             self.read_bytes_to_buf(&mut compressed)?;
-            let mut decoder = flate2::read::GzDecoder::new(&compressed[..]);
-            let mut decompressed = Vec::new();
-            decoder
-                .read_to_end(&mut decompressed)
-                .map_err(|e| ReadingError::Message(e.to_string()))?;
+            let decompressed = decompress_gzip_bounded(&compressed, MAX_COMPRESSED_NBT_EXPANSION)?;
             let mut cursor = std::io::Cursor::new(decompressed);
-            let mut helper = pumpkin_nbt::deserializer::NbtReadHelperJava::new(&mut cursor);
-            let tag_id = helper
-                .get_u8()
-                .map_err(|e| ReadingError::Message(e.to_string()))?;
+            let mut helper = pumpkin_nbt::deserializer::NbtReadHelperJava::with_quota(
+                &mut cursor,
+                pumpkin_nbt::NETWORK_NBT_QUOTA,
+            );
+            let tag_id = helper.get_u8().map_err(map_nbt_error)?;
             if tag_id == pumpkin_nbt::END_ID {
                 return Ok(None);
             }
-            let _name = helper
-                .get_string()
-                .map_err(|e| ReadingError::Message(e.to_string()))?;
+            let _name = helper.get_string().map_err(map_nbt_error)?;
             let tag = if tag_id == pumpkin_nbt::COMPOUND_ID {
                 NbtTag::Compound(
-                    NbtCompound::deserialize_content(&mut helper)
-                        .map_err(|e| ReadingError::Message(e.to_string()))?,
+                    NbtCompound::deserialize_content(&mut helper).map_err(map_nbt_error)?,
                 )
             } else {
-                NbtTag::deserialize_data(&mut helper, tag_id)
-                    .map_err(|e| ReadingError::Message(e.to_string()))?
+                NbtTag::deserialize_data(&mut helper, tag_id).map_err(map_nbt_error)?
             };
             Ok(Some(tag))
         }
@@ -452,9 +473,11 @@ impl<'a> NetworkReadSliceExt<'a> for &'a [u8] {
                 .map_err(|e| ReadingError::Message(format!("Invalid component JSON: {e}")))
         } else {
             let mut cursor = std::io::Cursor::new(*self);
-            let mut nbt_reader = pumpkin_nbt::deserializer::NbtReadHelperJava::new(&mut cursor);
-            let nbt = NbtTag::deserialize(&mut nbt_reader)
-                .map_err(|e| ReadingError::Message(format!("Invalid component NBT: {e}")))?;
+            let mut nbt_reader = pumpkin_nbt::deserializer::NbtReadHelperJava::with_quota(
+                &mut cursor,
+                pumpkin_nbt::NETWORK_NBT_QUOTA,
+            );
+            let nbt = NbtTag::deserialize(&mut nbt_reader).map_err(map_nbt_error)?;
             let bytes_read = cursor.position() as usize;
             *self = &self[bytes_read..];
             let json_value = nbt_tag_to_json(&nbt);
@@ -477,28 +500,25 @@ impl<'a> NetworkReadSliceExt<'a> for &'a [u8] {
                 return Ok(None);
             }
             let mut cursor = std::io::Cursor::new(*self);
-            let mut helper = pumpkin_nbt::deserializer::NbtReadHelperJava::new(&mut cursor);
-            let tag_id = helper
-                .get_u8()
-                .map_err(|e| ReadingError::Message(e.to_string()))?;
+            let mut helper = pumpkin_nbt::deserializer::NbtReadHelperJava::with_quota(
+                &mut cursor,
+                pumpkin_nbt::NETWORK_NBT_QUOTA,
+            );
+            let tag_id = helper.get_u8().map_err(map_nbt_error)?;
             if tag_id == pumpkin_nbt::END_ID {
                 let pos = cursor.position() as usize;
                 *self = &(*self)[pos..];
                 return Ok(None);
             }
             if *version < JavaMinecraftVersion::V_1_20_2 {
-                let _name = helper
-                    .get_string()
-                    .map_err(|e| ReadingError::Message(e.to_string()))?;
+                let _name = helper.get_string().map_err(map_nbt_error)?;
             }
             let tag = if tag_id == pumpkin_nbt::COMPOUND_ID {
                 NbtTag::Compound(
-                    NbtCompound::deserialize_content(&mut helper)
-                        .map_err(|e| ReadingError::Message(e.to_string()))?,
+                    NbtCompound::deserialize_content(&mut helper).map_err(map_nbt_error)?,
                 )
             } else {
-                NbtTag::deserialize_data(&mut helper, tag_id)
-                    .map_err(|e| ReadingError::Message(e.to_string()))?
+                NbtTag::deserialize_data(&mut helper, tag_id).map_err(map_nbt_error)?
             };
             let pos = cursor.position() as usize;
             *self = &(*self)[pos..];
@@ -516,30 +536,23 @@ impl<'a> NetworkReadSliceExt<'a> for &'a [u8] {
             }
             let compressed = &(*self)[..length];
             *self = &(*self)[length..];
-            let mut decoder = flate2::read::GzDecoder::new(compressed);
-            let mut decompressed = Vec::new();
-            decoder
-                .read_to_end(&mut decompressed)
-                .map_err(|e| ReadingError::Message(e.to_string()))?;
+            let decompressed = decompress_gzip_bounded(compressed, MAX_COMPRESSED_NBT_EXPANSION)?;
             let mut cursor = std::io::Cursor::new(decompressed);
-            let mut helper = pumpkin_nbt::deserializer::NbtReadHelperJava::new(&mut cursor);
-            let tag_id = helper
-                .get_u8()
-                .map_err(|e| ReadingError::Message(e.to_string()))?;
+            let mut helper = pumpkin_nbt::deserializer::NbtReadHelperJava::with_quota(
+                &mut cursor,
+                pumpkin_nbt::NETWORK_NBT_QUOTA,
+            );
+            let tag_id = helper.get_u8().map_err(map_nbt_error)?;
             if tag_id == pumpkin_nbt::END_ID {
                 return Ok(None);
             }
-            let _name = helper
-                .get_string()
-                .map_err(|e| ReadingError::Message(e.to_string()))?;
+            let _name = helper.get_string().map_err(map_nbt_error)?;
             let tag = if tag_id == pumpkin_nbt::COMPOUND_ID {
                 NbtTag::Compound(
-                    NbtCompound::deserialize_content(&mut helper)
-                        .map_err(|e| ReadingError::Message(e.to_string()))?,
+                    NbtCompound::deserialize_content(&mut helper).map_err(map_nbt_error)?,
                 )
             } else {
-                NbtTag::deserialize_data(&mut helper, tag_id)
-                    .map_err(|e| ReadingError::Message(e.to_string()))?
+                NbtTag::deserialize_data(&mut helper, tag_id).map_err(map_nbt_error)?
             };
             Ok(Some(tag))
         }
@@ -889,11 +902,7 @@ pub fn read_nbt_payload(
             }
             let compressed = &bytebuf[..length as usize];
             *bytebuf = &bytebuf[length as usize..];
-            let mut decoder = flate2::read::GzDecoder::new(compressed);
-            let mut decompressed = Vec::new();
-            decoder
-                .read_to_end(&mut decompressed)
-                .map_err(|e| ReadingError::Message(e.to_string()))?;
+            let decompressed = decompress_gzip_bounded(compressed, MAX_COMPRESSED_NBT_EXPANSION)?;
             if decompressed.len() >= 3
                 && decompressed[0] == 0x0A
                 && decompressed[1] == 0
@@ -1273,6 +1282,7 @@ impl<W: Write> NetworkWriteExt for W {
 mod tests {
     use super::{NetworkReadExt, NetworkWriteExt, ReadingError, WritingError};
     use crate::codec::var_int::VarInt;
+    use pumpkin_util::version::JavaMinecraftVersion;
 
     #[test]
     fn bounded_string_uses_utf16_units_but_writes_utf8_bytes() {
@@ -1326,6 +1336,48 @@ mod tests {
         assert!(matches!(
             input.get_list(|input| input.get_u8()),
             Err(ReadingError::Incomplete(_))
+        ));
+    }
+
+    #[test]
+    fn network_nbt_decode_enforces_allocation_quota() {
+        let len = 262_142i32; // 24 + 8*n = 2,097,160, above 2 MiB.
+        let mut encoded = vec![pumpkin_nbt::LONG_ARRAY_ID];
+        encoded.extend_from_slice(&len.to_be_bytes());
+        encoded.resize(5 + len as usize * 8, 0);
+        let mut input = std::io::Cursor::new(encoded);
+        assert!(matches!(
+            input.get_nbt_with_version(&JavaMinecraftVersion::V_26_2),
+            Err(ReadingError::NbtQuotaExceeded {
+                quota: pumpkin_nbt::NETWORK_NBT_QUOTA
+            })
+        ));
+    }
+
+    #[test]
+    fn network_nbt_decode_preserves_truncation_as_incomplete() {
+        let mut input = std::io::Cursor::new([pumpkin_nbt::LONG_ARRAY_ID, 0, 0, 0, 1]);
+        assert!(matches!(
+            input.get_nbt_with_version(&JavaMinecraftVersion::V_26_2),
+            Err(ReadingError::Incomplete(_))
+        ));
+    }
+
+    #[test]
+    fn bounded_gzip_decompression_accepts_limit_and_rejects_limit_plus_one() {
+        use flate2::{Compression, write::GzEncoder};
+        use std::io::Write;
+
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(b"12345").unwrap();
+        let compressed = encoder.finish().unwrap();
+        assert_eq!(
+            super::decompress_gzip_bounded(&compressed, 5).unwrap(),
+            b"12345"
+        );
+        assert!(matches!(
+            super::decompress_gzip_bounded(&compressed, 4),
+            Err(ReadingError::TooLarge(_))
         ));
     }
 
