@@ -602,7 +602,7 @@ mod tests {
     #[test]
     fn java_list_and_string_charge_base_before_reading_payload() {
         for tag_id in [crate::LIST_ID, crate::STRING_ID] {
-            let mut reader = NbtReadHelperJava::with_quota(Cursor::new([]), 35);
+            let mut reader = NbtReadHelperJava::with_quota(Cursor::new(&[][..]), 35);
             assert!(matches!(
                 NbtTag::deserialize_data(&mut reader, tag_id),
                 Err(Error::NbtQuotaExceeded { .. })
