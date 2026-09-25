@@ -10,6 +10,38 @@ use crate::{
 
 // decrypt -> decompress -> raw
 
+async fn decode_frame_length(reader: &mut (impl AsyncRead + Unpin)) -> Result<u64, ReadingError> {
+    let mut length = 0u64;
+    for index in 0..3 {
+        let byte = reader.read_u8().await.map_err(|err| {
+            if index == 0
+                && matches!(
+                    err.kind(),
+                    std::io::ErrorKind::UnexpectedEof
+                        | std::io::ErrorKind::ConnectionReset
+                        | std::io::ErrorKind::ConnectionAborted
+                        | std::io::ErrorKind::BrokenPipe
+                )
+            {
+                ReadingError::CleanEOF("VarInt21".to_string())
+            } else {
+                ReadingError::Incomplete(err.to_string())
+            }
+        })?;
+        length |= u64::from(byte & 0x7f) << (index * 7);
+        if byte & 0x80 == 0 {
+            return if length == 0 {
+                Err(ReadingError::Message(
+                    "VarInt21 length must be positive".into(),
+                ))
+            } else {
+                Ok(length)
+            };
+        }
+    }
+    Err(ReadingError::TooLarge("VarInt21".to_string()))
+}
+
 pub enum DecompressionReader<R: AsyncRead + Unpin> {
     Decompress(ZlibDecoder<BufReader<R>>),
     None(R),
@@ -114,16 +146,12 @@ impl<R: AsyncRead + Unpin> TCPNetworkDecoder<R> {
             .as_mut()
             .ok_or_else(|| PacketDecodeError::Message("Reader missing".into()))?;
 
-        let packet_len = VarInt::decode_async(reader)
-            .await
-            .map_err(|err| match err {
-                ReadingError::CleanEOF(_) => PacketDecodeError::ConnectionClosed,
-                err => PacketDecodeError::MalformedLength(err.to_string()),
-            })?;
+        let packet_len = decode_frame_length(reader).await.map_err(|err| match err {
+            ReadingError::CleanEOF(_) => PacketDecodeError::ConnectionClosed,
+            err => PacketDecodeError::MalformedLength(err.to_string()),
+        })?;
 
-        let packet_len = packet_len.0 as u64;
-
-        if !(0..=MAX_PACKET_SIZE).contains(&packet_len) {
+        if !(1..=MAX_PACKET_SIZE).contains(&packet_len) {
             Err(PacketDecodeError::OutOfBounds)?;
         }
 
@@ -223,6 +251,30 @@ mod tests {
     use flate2::Compression;
     use flate2::write::ZlibEncoder;
     use tokio::io::AsyncWriteExt;
+
+    #[tokio::test]
+    async fn decode_frame_length_enforces_varint21() {
+        for (encoded, expected) in [
+            (&[1][..], 1),
+            (&[0x80, 1][..], 128),
+            (&[0x80, 0x80, 1][..], 16_384),
+            (&[0xff, 0xff, 0x7f][..], (1 << 21) - 1),
+        ] {
+            assert_eq!(
+                decode_frame_length(&mut &encoded[..]).await.unwrap(),
+                expected
+            );
+        }
+
+        for encoded in [
+            &[0][..],
+            &[0x80, 0x80, 0x80][..],
+            &[0x80, 0x80, 0x80, 1][..],
+            &[0xff, 0xff, 0xff][..],
+        ] {
+            assert!(decode_frame_length(&mut &encoded[..]).await.is_err());
+        }
+    }
 
     /// Helper function to compress data using libdeflater's Zlib compressor
     fn compress_zlib(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {

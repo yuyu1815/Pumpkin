@@ -217,13 +217,12 @@ pub trait NetworkReadExt {
     ) -> Result<Vec<G>, ReadingError> {
         const MAX_LIST_SIZE: usize = 65536;
 
-        let len = self.get_var_int()?.0 as usize;
-        if len > MAX_LIST_SIZE {
-            return Err(ReadingError::TooLarge(format!(
-                "List length {len} exceeds limit"
-            )));
+        let len = self.get_var_int()?.0;
+        if len < 0 {
+            return Err(ReadingError::Message(format!("Negative list length {len}")));
         }
-        let mut list = Vec::with_capacity(len);
+        let len = len as usize;
+        let mut list = Vec::with_capacity(len.min(MAX_LIST_SIZE));
         for _ in 0..len {
             list.push(parse(self)?);
         }
@@ -1159,11 +1158,11 @@ impl<W: Write> NetworkWriteExt for W {
     }
 
     fn write_string_bounded(&mut self, data: &str, bound: usize) -> Result<(), WritingError> {
-        if data.len() > bound {
+        let char_count = data.encode_utf16().count();
+        if char_count > bound {
             return Err(WritingError::Message(format!(
                 "string length {} exceeds bound {}",
-                data.len(),
-                bound
+                char_count, bound
             )));
         }
         self.write_var_int(&data.len().try_into().map_err(|_| {
@@ -1267,5 +1266,78 @@ impl<W: Write> NetworkWriteExt for W {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{NetworkReadExt, NetworkWriteExt, ReadingError, WritingError};
+    use crate::codec::var_int::VarInt;
+
+    #[test]
+    fn bounded_string_uses_utf16_units_but_writes_utf8_bytes() {
+        let mut ascii = Vec::new();
+        ascii.write_string_bounded("ab", 2).unwrap();
+        assert_eq!(ascii, b"\x02ab");
+        assert!(matches!(
+            Vec::new().write_string_bounded("abc", 2),
+            Err(WritingError::Message(_))
+        ));
+
+        let mut non_ascii = Vec::new();
+        non_ascii.write_string_bounded("é", 1).unwrap();
+        assert_eq!(non_ascii, b"\x02\xc3\xa9");
+
+        let mut emoji = Vec::new();
+        emoji.write_string_bounded("😀", 2).unwrap();
+        assert_eq!(emoji, b"\x04\xf0\x9f\x98\x80");
+        assert!(matches!(
+            Vec::new().write_string_bounded("😀", 1),
+            Err(WritingError::Message(_))
+        ));
+    }
+
+    #[test]
+    fn list_accepts_more_than_initial_capacity_limit() {
+        const ITEM_COUNT: usize = 65_537;
+
+        let mut encoded = Vec::new();
+        encoded.write_var_int(&VarInt(ITEM_COUNT as i32)).unwrap();
+        for _ in 0..ITEM_COUNT {
+            encoded.extend_from_slice(&[0, 0, 0]);
+        }
+        assert!(encoded.len() <= 1_048_576);
+
+        let mut input = std::io::Cursor::new(&encoded);
+        let items = input
+            .get_list(|input| Ok((input.get_u8()?, input.get_u8()?, input.get_u8()?)))
+            .unwrap();
+        assert_eq!(items.len(), ITEM_COUNT);
+        assert!(items.iter().all(|item| *item == (0, 0, 0)));
+        assert_eq!(input.position() as usize, encoded.len());
+    }
+
+    #[test]
+    fn huge_list_count_with_short_input_returns_error() {
+        let mut encoded = Vec::new();
+        encoded.write_var_int(&VarInt(i32::MAX)).unwrap();
+
+        let mut input = std::io::Cursor::new(encoded);
+        assert!(matches!(
+            input.get_list(|input| input.get_u8()),
+            Err(ReadingError::Incomplete(_))
+        ));
+    }
+
+    #[test]
+    fn negative_list_count_is_rejected() {
+        let mut encoded = Vec::new();
+        encoded.write_var_int(&VarInt(-1)).unwrap();
+
+        let mut input = std::io::Cursor::new(encoded);
+        assert!(matches!(
+            input.get_list(|input| input.get_u8()),
+            Err(ReadingError::Message(_))
+        ));
     }
 }

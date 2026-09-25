@@ -1,4 +1,3 @@
-use std::io::Read;
 use std::io::Write;
 
 use crate::ReadingError;
@@ -76,14 +75,63 @@ impl BitSet {
         Ok(())
     }
 
-    pub fn decode(read: &mut impl Read) -> Result<Self, ReadingError> {
-        // Read length
-        let length = read.get_var_int()?;
-        let mut array: Vec<i64> = Vec::with_capacity(length.0 as usize);
-        for _ in 0..length.0 {
-            let long = read.get_i64_be()?;
-            array.push(long);
+    pub fn decode(read: &mut &[u8]) -> Result<Self, ReadingError> {
+        let length = read.get_var_int()?.0;
+        let length = usize::try_from(length)
+            .map_err(|_| ReadingError::Message(format!("Negative bit set length {length}")))?;
+        if length > read.len() / std::mem::size_of::<i64>() {
+            return Err(ReadingError::Incomplete(format!(
+                "Bit set length {length} exceeds remaining data"
+            )));
+        }
+
+        let mut array = Vec::with_capacity(length);
+        for _ in 0..length {
+            array.push(read.get_i64_be()?);
         }
         Ok(Self(array.into_boxed_slice()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::codec::var_int::VarInt;
+
+    fn encoded(length: i32, data: &[u8]) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        VarInt(length).encode(&mut bytes).unwrap();
+        bytes.extend_from_slice(data);
+        bytes
+    }
+
+    #[test]
+    fn decode_rejects_negative_length() {
+        let bytes = encoded(-1, &[]);
+        assert!(BitSet::decode(&mut bytes.as_slice()).is_err());
+    }
+
+    #[test]
+    fn decode_rejects_truncated_length_and_data() {
+        let truncated_length = [0x80];
+        assert!(BitSet::decode(&mut truncated_length.as_slice()).is_err());
+
+        let bytes = encoded(1, &[0; 7]);
+        assert!(BitSet::decode(&mut bytes.as_slice()).is_err());
+    }
+
+    #[test]
+    fn decode_accepts_empty_and_exact_boundary_data() {
+        let empty = encoded(0, &[]);
+        assert_eq!(
+            BitSet::decode(&mut empty.as_slice()).unwrap(),
+            BitSet::default()
+        );
+
+        let bytes = encoded(1, &42i64.to_be_bytes());
+        assert_eq!(
+            BitSet::decode(&mut bytes.as_slice()).unwrap(),
+            BitSet::from_i64(42)
+        );
     }
 }
