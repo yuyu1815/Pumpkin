@@ -696,9 +696,9 @@ mod tests {
         compound.put("s", NbtTag::String("A😀".into()));
         compound.put("list", NbtTag::List(vec![NbtTag::Byte(1), NbtTag::Byte(2)]));
         let bytes = Nbt::from(compound).write_unnamed();
-        // Compound(48) + key costs (66 * 4 + 72), child values
-        // (26, 32, 40, 42, 62), and the terminating End(8).
-        let expected = 48 + (66 * 4 + 72) + 26 + 32 + 40 + 42 + 62 + 8;
+        // Compound(48) + key and new-entry costs (66 * 4 + 72),
+        // child values (26, 32, 40, 42, 62); the terminating End is free.
+        let expected = 48 + (66 * 4 + 72) + 26 + 32 + 40 + 42 + 62;
         for quota in [expected, expected + 1] {
             let mut reader = NbtReadHelperJava::with_quota(Cursor::new(bytes.as_ref()), quota);
             Nbt::read_unnamed(&mut reader).unwrap();
@@ -731,11 +731,13 @@ mod tests {
     #[test]
     fn java_compound_charges_duplicate_keys_without_new_entry_cost() {
         let bytes = [1, 0, 1, b'a', 1, 1, 0, 1, b'a', 2, 0];
-        let mut reader = NbtReadHelperJava::with_quota(Cursor::new(bytes.as_slice()), 168);
+        // Compound(48) + both key costs(30 each) + one entry(36) + children(9 each).
+        let expected = 48 + 30 + 30 + 36 + 9 + 9;
+        let mut reader = NbtReadHelperJava::with_quota(Cursor::new(bytes.as_slice()), expected);
         let compound = NbtCompound::deserialize_content(&mut reader).unwrap();
         assert_eq!(compound.get_byte("a"), Some(2));
-        assert_eq!(reader.accounted(), 168);
-        let mut reader = NbtReadHelperJava::with_quota(Cursor::new(bytes.as_slice()), 167);
+        assert_eq!(reader.accounted(), expected);
+        let mut reader = NbtReadHelperJava::with_quota(Cursor::new(bytes.as_slice()), expected - 1);
         assert!(matches!(
             NbtCompound::deserialize_content(&mut reader),
             Err(Error::NbtQuotaExceeded { .. })

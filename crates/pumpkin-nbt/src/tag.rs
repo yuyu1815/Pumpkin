@@ -312,10 +312,7 @@ impl NbtTag {
         depth: usize,
     ) -> Result<Self, Error> {
         match tag_id {
-            END_ID => {
-                reader.account(8)?;
-                Ok(Self::End)
-            }
+            END_ID => Ok(Self::End),
             BYTE_ID => {
                 reader.account(9)?;
                 let byte = reader.get_i8()?;
@@ -360,12 +357,12 @@ impl NbtTag {
                 Ok(Self::ByteArray(reader.get_byte_array(len)?.into()))
             }
             STRING_ID => {
+                reader.account(36)?;
                 let value = reader.get_string()?;
                 let charge = value
                     .encode_utf16()
                     .count()
                     .checked_mul(2)
-                    .and_then(|len| len.checked_add(36))
                     .ok_or(Error::LargeLength(value.len()))?;
                 reader.account(charge)?;
                 Ok(Self::String(value.into_owned().into()))
@@ -374,6 +371,7 @@ impl NbtTag {
                 if depth >= crate::MAX_NBT_DEPTH {
                     return Err(Error::MaxDepthExceeded);
                 }
+                reader.account(36)?;
                 let tag_type_id = reader.get_u8()?;
                 let len = reader.get_i32()?;
                 if len < 0 {
@@ -388,10 +386,7 @@ impl NbtTag {
                     return Err(Error::LargeLength(len));
                 }
 
-                let charge = len
-                    .checked_mul(4)
-                    .and_then(|n| n.checked_add(36))
-                    .ok_or(Error::LargeLength(len))?;
+                let charge = len.checked_mul(4).ok_or(Error::LargeLength(len))?;
                 reader.account(charge)?;
                 let mut list = Vec::with_capacity(len.min(4096));
                 for _ in 0..len {
@@ -599,10 +594,22 @@ impl From<bool> for NbtTag {
 mod tests {
     use std::io::Cursor;
 
-    use crate::deserializer::NbtReadHelperJava;
+    use crate::deserializer::{NbtReadHelper, NbtReadHelperJava};
     use crate::{Error, MAX_NBT_DEPTH};
 
     use super::NbtTag;
+
+    #[test]
+    fn java_list_and_string_charge_base_before_reading_payload() {
+        for tag_id in [crate::LIST_ID, crate::STRING_ID] {
+            let mut reader = NbtReadHelperJava::with_quota(Cursor::new([]), 35);
+            assert!(matches!(
+                NbtTag::deserialize_data(&mut reader, tag_id),
+                Err(Error::NbtQuotaExceeded { .. })
+            ));
+            assert_eq!(reader.reader().position(), 0);
+        }
+    }
 
     #[test]
     fn java_numeric_tags_use_official_accounting_charges() {
