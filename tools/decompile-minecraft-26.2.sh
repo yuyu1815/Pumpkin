@@ -63,19 +63,27 @@ elif [[ $# -eq 2 ]]; then
     exit 2
 fi
 
-for command in curl unzip sha1sum sha256sum java javac awk grep find tr; do
+for command in curl unzip sha1sum sha256sum java javac awk grep find tr realpath; do
     command -v "$command" >/dev/null || fail "required command not found: $command"
 done
 require_jdk21
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 REPO_ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd -P)
-[[ ! -e "$OUT_DIR" && ! -L "$OUT_DIR" ]] \
-    || fail "OUTPUT_DIRECTORY already exists; choose a new, empty path"
-mkdir -p -- "$OUT_DIR"
-OUT_DIR=$(cd -- "$OUT_DIR" && pwd -P)
+canonical_out_dir=$(realpath -m -- "$OUT_DIR") \
+    || fail "could not canonicalize OUTPUT_DIRECTORY safely"
+[[ -n "$canonical_out_dir" ]] \
+    || fail "could not canonicalize OUTPUT_DIRECTORY safely"
+OUT_DIR=$canonical_out_dir
 [[ "$OUT_DIR" != "$REPO_ROOT" && "$OUT_DIR" != "$REPO_ROOT"/* ]] \
     || fail "OUTPUT_DIRECTORY must be outside the Pumpkin repository"
+if [[ -e "$OUT_DIR" || -L "$OUT_DIR" ]]; then
+    [[ -d "$OUT_DIR" ]] \
+        || fail "OUTPUT_DIRECTORY exists and is not a directory; choose a new path"
+    [[ -z "$(find "$OUT_DIR" -mindepth 1 -print -quit)" ]] \
+        || fail "OUTPUT_DIRECTORY is not empty; choose a new or cleared path"
+fi
+mkdir -p -- "$OUT_DIR"
 
 CACHE_DIR="$OUT_DIR/cache"
 WORK_DIR="$OUT_DIR/work"
