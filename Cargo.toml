@@ -127,7 +127,8 @@ debug = true
 strip = false
 
 [profile.dev]
-debug = false
+# デバッグ情報をラインテーブルのみに絞る（容量激減・ビルド高速化）
+debug = 1
 
 [workspace.dependencies]
 tokio = { version = "1.53", default-features = false }
