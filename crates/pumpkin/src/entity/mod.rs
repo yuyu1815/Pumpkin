@@ -4517,6 +4517,11 @@ mod tests {
     }
 
     #[test]
+    fn default_entity_cast_any_identifies_default_entity() {
+        assert!(DefaultEntity.cast_any().is::<DefaultEntity>());
+    }
+
+    #[test]
     fn entity_base_does_not_block_building_by_default() {
         assert!(!DefaultEntity.blocks_building());
     }
