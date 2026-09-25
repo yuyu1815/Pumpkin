@@ -63,7 +63,7 @@ mod tests {
         packet.write_packet_data(&mut bytes, &version).unwrap();
 
         let mut expected = component.encode_for_version(&version).to_vec();
-        expected.extend_from_slice(&[1, 2, 0xFF, 0xFF, 0xFF, 0x0F, 3]);
+        expected.extend_from_slice(&[1, 2, 0xFF, 0xFF, 0xFF, 0xFF, 0x0F, 3]);
         assert_eq!(bytes, expected);
 
         let mut input = bytes.as_slice();

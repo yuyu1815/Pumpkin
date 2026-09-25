@@ -510,7 +510,7 @@ mod number_format_style_tests {
         NumberFormat::Styled(Style::default())
             .write(&mut bytes)
             .unwrap();
-        assert_eq!(bytes, [1, 10, 0, 0]);
+        assert_eq!(bytes, [1, 10, 0]);
     }
 
     #[test]
