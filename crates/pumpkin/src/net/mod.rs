@@ -23,8 +23,6 @@ use pumpkin_util::{
     version::{BedrockMinecraftVersion, JavaMinecraftVersion},
 };
 use serde::{Deserialize, Deserializer};
-use sha1::Digest;
-use sha2::Sha256;
 use tokio::task::JoinHandle;
 
 use thiserror::Error;
@@ -72,7 +70,7 @@ where
 }
 
 pub fn offline_uuid(username: &str) -> Result<Uuid, uuid::Error> {
-    Uuid::from_slice(&Sha256::digest(username)[..16])
+    Ok(pumpkin_util::uuid::offline_player_uuid(username))
 }
 
 /// Represents a player's configuration settings.

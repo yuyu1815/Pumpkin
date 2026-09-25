@@ -42,14 +42,24 @@ impl<'a> ServerPacket<'a> for SLoginStart {
             }
         }
 
-        let uuid = uuid.unwrap_or_else(|| {
-            uuid::Uuid::new_v3(
-                &uuid::Uuid::nil(),
-                format!("OfflinePlayer:{name}").as_bytes(),
-            )
-        });
+        let uuid = uuid.unwrap_or_else(|| pumpkin_util::uuid::offline_player_uuid(&name));
 
         Ok(Self { name, uuid })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_uuid_uses_minecraft_offline_uuid() {
+        let mut input = &[7, b'U', b'u', b'i', b'd', b'B', b'o', b't'][..];
+        let packet = SLoginStart::read(&mut input, &JavaMinecraftVersion::V_1_18_2).unwrap();
+        assert_eq!(
+            packet.uuid,
+            uuid::Uuid::parse_str("5cd85936-ba17-3080-8970-d7782f16c9b5").unwrap()
+        );
     }
 }
 

@@ -1,5 +1,15 @@
 use uuid::Uuid;
 
+/// Generates the UUID used by Minecraft for players in offline mode.
+#[must_use]
+pub fn offline_player_uuid(name: &str) -> Uuid {
+    let digest = md5::compute([b"OfflinePlayer:".as_slice(), name.as_bytes()].concat());
+    let mut bytes = digest.0;
+    bytes[6] = (bytes[6] & 0x0f) | 0x30;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    Uuid::from_bytes(bytes)
+}
+
 /// Parses a UUID similar to the way that Java does, which makes it ideal for
 /// keeping the same behaviors sometimes.
 #[must_use]
@@ -72,6 +82,10 @@ mod test {
 
     #[test]
     fn parse_uuids() {
+        assert_eq!(
+            crate::uuid::offline_player_uuid("UuidBot"),
+            Uuid::parse_str("5cd85936-ba17-3080-8970-d7782f16c9b5").unwrap()
+        );
         assert_eq!(
             parse_uuid_array("3d569d3a-93ef-44a0-9f1c-f69db9d37a56"),
             Some([1029086522, -1813035872, -1625491811, -1177322922])
