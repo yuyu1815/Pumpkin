@@ -234,7 +234,7 @@ fn should_emit_swim(outer_gate_non_air: bool, step_emitted: bool, in_water: bool
     outer_gate_non_air && !step_emitted && in_water
 }
 
-fn should_drop_experience(reward: i32, catalyst_consumed: bool) -> bool {
+fn should_drop_experience(reward: u32, catalyst_consumed: bool) -> bool {
     reward > 0 && !catalyst_consumed
 }
 
@@ -2083,7 +2083,7 @@ impl LivingEntity {
         source: Option<&dyn EntityBase>,
         cause: Option<&dyn EntityBase>,
     ) {
-        let world = self.entity.world.load();
+        let world = self.entity.world.load().clone();
         let Some(dyn_self) = world.get_entity_by_id(self.entity.entity_id) else {
             return;
         };

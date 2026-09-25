@@ -19,8 +19,11 @@ pub struct SculkEventSource {
     pub dampens_vibrations: bool,
 }
 
-fn catalyst_experience_charge(eligible: bool, reward: i32) -> Option<i32> {
-    (eligible && reward > 0).then_some(reward)
+fn catalyst_experience_charge(eligible: bool, reward: u32) -> Option<i32> {
+    eligible
+        .then(|| i32::try_from(reward).ok())
+        .flatten()
+        .filter(|charge| *charge > 0)
 }
 
 fn prefer_catalyst(current: Option<(f64, BlockPos)>, candidate: (f64, BlockPos)) -> bool {
@@ -33,14 +36,12 @@ fn prefer_catalyst(current: Option<(f64, BlockPos)>, candidate: (f64, BlockPos))
 }
 
 fn sculk_event_listeners(event: pumpkin_data::game_event::GameEvent) -> (bool, bool) {
-    use pumpkin_data::tag::Taggable;
+    use pumpkin_data::tag::{RegistryKey, get_tag_values};
     (
-        event
-            .is_tagged_with("minecraft:vibrations")
-            .unwrap_or(false),
-        event
-            .is_tagged_with("minecraft:shrieker_can_listen")
-            .unwrap_or(false),
+        get_tag_values(RegistryKey::GameEvent, "minecraft:vibrations")
+            .is_some_and(|events| events.contains(&event.name())),
+        get_tag_values(RegistryKey::GameEvent, "minecraft:shrieker_can_listen")
+            .is_some_and(|events| events.contains(&event.name())),
     )
 }
 
@@ -2708,24 +2709,40 @@ impl World {
         source: Option<crate::world::SculkEventSource>,
         affected_state: Option<pumpkin_data::BlockStateId>,
     ) {
-        self.emit_game_event_internal(event_key.into(), position, source, affected_state, None);
+        self.emit_game_event_internal(event_key.into(), position, source, affected_state);
     }
 
     pub(crate) fn emit_entity_die(
-        &self,
+        self: &Arc<Self>,
         position: Vector3<f64>,
         source: crate::world::SculkEventSource,
         experience_eligible: bool,
-        experience_reward: i32,
+        experience_reward: u32,
     ) -> bool {
-        self.emit_game_event_internal(
+        let mut event = crate::plugin::api::events::world::generic_game::GenericGameEvent::new(
             "entity_die".to_owned(),
             position,
-            Some(source),
-            None,
-            Some((experience_eligible, experience_reward)),
-        )
-        .1
+        );
+        if let Some(server) = self.server.upgrade() {
+            server.plugin_manager.fire_blocking(&server, &mut event);
+        }
+        if event.cancelled {
+            return false;
+        }
+        let Some(game_event) = pumpkin_data::game_event::GameEvent::from_name(&event.event_key)
+        else {
+            return false;
+        };
+        let catalyst_consumed = game_event == pumpkin_data::game_event::GameEvent::EntityDie
+            && self.dispatch_catalyst_death(
+                game_event,
+                true,
+                event.position,
+                experience_eligible,
+                experience_reward,
+            );
+        self.dispatch_sculk_vibration(game_event, event.position, Some(source), None);
+        catalyst_consumed
     }
 
     fn emit_game_event_internal(
@@ -2734,7 +2751,6 @@ impl World {
         position: Vector3<f64>,
         source: Option<crate::world::SculkEventSource>,
         affected_state: Option<pumpkin_data::BlockStateId>,
-        catalyst_experience: Option<(bool, i32)>,
     ) -> (bool, bool) {
         let mut event = crate::plugin::api::events::world::generic_game::GenericGameEvent::new(
             event_key, position,
@@ -2747,13 +2763,7 @@ impl World {
         }
         let catalyst_consumed = pumpkin_data::game_event::GameEvent::from_name(&event.event_key)
             .is_some_and(|game_event| {
-                self.dispatch_sculk_vibration(
-                    game_event,
-                    event.position,
-                    source,
-                    affected_state,
-                    catalyst_experience,
-                )
+                self.dispatch_sculk_vibration(game_event, event.position, source, affected_state)
             });
         (false, catalyst_consumed)
     }
@@ -2814,7 +2824,6 @@ impl World {
         position: Vector3<f64>,
         source: Option<SculkEventSource>,
         affected_state: Option<pumpkin_data::BlockStateId>,
-        catalyst_experience: Option<(bool, i32)>,
     ) -> bool {
         use crate::block::blocks::redstone::sculk_sensor::{
             VibrationCandidate, select_vibration, vibration_frequency,
@@ -2824,11 +2833,8 @@ impl World {
             sculk_sensor::{PendingVibration, SculkSensorBlockEntity},
             sculk_shrieker::SculkShriekerBlockEntity,
         };
-        let catalyst_consumed = catalyst_experience.is_some_and(|(eligible, reward)| {
-            event == pumpkin_data::game_event::GameEvent::EntityDie
-                && source.is_some()
-                && self.dispatch_catalyst_death(event, true, position, eligible, reward)
-        });
+        use pumpkin_data::tag::Taggable;
+        let catalyst_consumed = false;
         let (sensor_listens, shrieker_listens) = sculk_event_listeners(event);
         if !sensor_listens && !shrieker_listens {
             return catalyst_consumed;
@@ -3038,12 +3044,12 @@ impl World {
     }
 
     fn dispatch_catalyst_death(
-        &self,
+        self: &Arc<Self>,
         event: pumpkin_data::game_event::GameEvent,
         has_entity_source: bool,
         event_position: Vector3<f64>,
         experience_eligible: bool,
-        experience_reward: i32,
+        experience_reward: u32,
     ) -> bool {
         use crate::block::blocks::sculk::sculk_catalyst::{bloom, hears_entity_death};
         use crate::block::entities::sculk_catalyst::SculkCatalystBlockEntity;

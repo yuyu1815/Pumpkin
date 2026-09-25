@@ -120,7 +120,7 @@ impl SculkShriekerBlock {
     ) -> Option<Arc<crate::entity::player::Player>> {
         let entity = world.get_entity_by_uuid(source)?;
         if let Some(player) = entity.get_player() {
-            return Some(player.clone());
+            return world.get_player_by_uuid(player.gameprofile.id);
         }
         if let Some(owner) = entity
             .get_item_entity()
@@ -133,7 +133,7 @@ impl SculkShriekerBlock {
             && let Some(owner) = world.get_entity_by_id(owner_id)
             && let Some(player) = owner.get_player()
         {
-            return Some(player.clone());
+            return world.get_player_by_uuid(player.gameprofile.id);
         }
         entity
             .get_entity()
@@ -141,7 +141,11 @@ impl SculkShriekerBlock {
             .lock()
             .ok()?
             .iter()
-            .find_map(|passenger| passenger.get_player().cloned())
+            .find_map(|passenger| {
+                passenger
+                    .get_player()
+                    .and_then(|player| world.get_player_by_uuid(player.gameprofile.id))
+            })
     }
 
     pub fn try_activate(world: &Arc<World>, pos: &BlockPos, source: Option<uuid::Uuid>) -> bool {
@@ -299,7 +303,7 @@ impl SculkShriekerBlock {
         };
         for nearby in world.get_nearby_players(center, DARKNESS_RADIUS) {
             nearby.send_effect(&darkness);
-            nearby.living_entity.add_effect(darkness);
+            nearby.living_entity.add_effect(darkness.clone());
         }
     }
 }

@@ -8,6 +8,7 @@ use pumpkin_util::{
     random::{RandomGenerator, xoroshiro128::Xoroshiro},
 };
 use pumpkin_world::{
+    chunk::io::Dirtiable,
     generation::feature::features::sculk::{
         SculkLevel,
         spreader::{ChargeCursor, SculkSpreader},
@@ -202,7 +203,7 @@ fn write_cursors(spreader: &SculkSpreader) -> Vec<NbtTag> {
                     pumpkin_data::BlockDirection::all()
                         .into_iter()
                         .filter(|direction| faces & (1 << direction.to_index()) != 0)
-                        .map(|direction| NbtTag::String(direction_name(direction).to_owned()))
+                        .map(|direction| NbtTag::String(direction_name(direction).into()))
                         .collect(),
                 );
             }

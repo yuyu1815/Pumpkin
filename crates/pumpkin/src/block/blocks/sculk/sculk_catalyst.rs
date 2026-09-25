@@ -49,7 +49,7 @@ pub fn hears_entity_death(
 
 /// Starts the Catalyst's eight-tick bloom pulse.
 pub fn bloom(
-    world: &crate::world::World,
+    world: &std::sync::Arc<crate::world::World>,
     catalyst_position: &pumpkin_util::math::position::BlockPos,
     effect_position: &pumpkin_util::math::position::BlockPos,
 ) {

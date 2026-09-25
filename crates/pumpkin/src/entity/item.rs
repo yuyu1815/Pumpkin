@@ -6,6 +6,7 @@ use pumpkin_data::damage::DamageType;
 use pumpkin_data::data_component_impl::DamageResistantImpl;
 use pumpkin_data::data_component_impl::DamageResistantType;
 use pumpkin_data::item_stack::ItemStack;
+use pumpkin_data::tag::Taggable;
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_protocol::bedrock::client::CAddItemActor;
 use pumpkin_protocol::bedrock::network_item::ItemStackWrapper;
