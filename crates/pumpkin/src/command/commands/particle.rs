@@ -31,6 +31,34 @@ const ERROR_FAILED: CommandErrorType<0> = CommandErrorType::new(
     translation::java::COMMANDS_PARTICLE_FAILED,
 );
 
+fn supports_empty_particle_options(particle: Particle) -> bool {
+    !matches!(
+        particle,
+        Particle::Block
+            | Particle::BlockMarker
+            | Particle::BlockCrumble
+            | Particle::Dust
+            | Particle::DustColorTransition
+            | Particle::DustPillar
+            | Particle::DragonBreath
+            | Particle::Effect
+            | Particle::EntityEffect
+            | Particle::FallingDust
+            | Particle::Flash
+            | Particle::Geyser
+            | Particle::GeyserBase
+            | Particle::GeyserPlume
+            | Particle::GeyserPoof
+            | Particle::InstantEffect
+            | Particle::Item
+            | Particle::SculkCharge
+            | Particle::Shriek
+            | Particle::TintedLeaves
+            | Particle::Trail
+            | Particle::Vibration
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 fn send_particles(
     source: &CommandSource,
@@ -42,13 +70,18 @@ fn send_particles(
     force: bool,
     viewers: Option<Vec<Arc<Player>>>,
 ) -> Result<i32, CommandSyntaxError> {
+    if !supports_empty_particle_options(particle) {
+        return Err(ERROR_FAILED.create_without_context());
+    }
+
     let world = source.world().clone();
     let players: Vec<Arc<Player>> = viewers.unwrap_or_else(|| world.players.load().to_vec());
 
     let offset = Vector3::new(delta.x as f32, delta.y as f32, delta.z as f32);
+    // Protocol order is overrideLimiter (force), then alwaysShow (false).
     let packet = CParticle::new(
-        force,
         false,
+        force,
         pos,
         offset,
         speed,
