@@ -18,6 +18,8 @@ pub struct SClientInformationPlay<'a> {
     pub main_hand: VarInt,
     pub text_filtering: bool,
     pub server_listing: bool,
+    /// Particle display setting (0: All, 1: Decreased, 2: Minimal), added in 26.2
+    pub particle_status: u8,
 }
 
 impl<'a> ServerPacket<'a> for SClientInformationPlay<'a> {
@@ -42,6 +44,17 @@ impl<'a> ServerPacket<'a> for SClientInformationPlay<'a> {
         } else {
             true
         };
+        let particle_status = if version >= &JavaMinecraftVersion::V_26_2 {
+            let status = bytebuf.get_u8()?;
+            if status > 2 {
+                return Err(ReadingError::Message(format!(
+                    "Invalid particle status: {status}"
+                )));
+            }
+            status
+        } else {
+            0
+        };
 
         Ok(Self {
             locale,
@@ -52,6 +65,7 @@ impl<'a> ServerPacket<'a> for SClientInformationPlay<'a> {
             main_hand,
             text_filtering,
             server_listing,
+            particle_status,
         })
     }
 }
@@ -76,6 +90,15 @@ impl crate::ClientPacket for SClientInformationPlay<'_> {
         }
         if version >= &JavaMinecraftVersion::V_1_18 {
             write.write_bool(self.server_listing)?;
+        }
+        if version >= &JavaMinecraftVersion::V_26_2 {
+            if self.particle_status > 2 {
+                return Err(crate::ser::WritingError::Message(format!(
+                    "Invalid particle status: {}",
+                    self.particle_status
+                )));
+            }
+            write.write_u8(self.particle_status)?;
         }
         Ok(())
     }

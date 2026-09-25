@@ -28,6 +28,8 @@ pub struct SClientInformationConfig<'a> {
     pub text_filtering: bool,
     /// Whether the player should appear in the server's online player list
     pub server_listing: bool,
+    /// Particle display setting (0: All, 1: Decreased, 2: Minimal), added in 26.2
+    pub particle_status: u8,
 }
 
 impl<'a> ServerPacket<'a> for SClientInformationConfig<'a> {
@@ -52,6 +54,17 @@ impl<'a> ServerPacket<'a> for SClientInformationConfig<'a> {
         } else {
             true
         };
+        let particle_status = if version >= &JavaMinecraftVersion::V_26_2 {
+            let status = bytebuf.get_u8()?;
+            if status > 2 {
+                return Err(ReadingError::Message(format!(
+                    "Invalid particle status: {status}"
+                )));
+            }
+            status
+        } else {
+            0
+        };
 
         Ok(Self {
             locale,
@@ -62,6 +75,7 @@ impl<'a> ServerPacket<'a> for SClientInformationConfig<'a> {
             main_hand,
             text_filtering,
             server_listing,
+            particle_status,
         })
     }
 }
@@ -87,6 +101,66 @@ impl crate::ClientPacket for SClientInformationConfig<'_> {
         if version >= &JavaMinecraftVersion::V_1_18 {
             write.write_bool(self.server_listing)?;
         }
+        if version >= &JavaMinecraftVersion::V_26_2 {
+            if self.particle_status > 2 {
+                return Err(crate::ser::WritingError::Message(format!(
+                    "Invalid particle status: {}",
+                    self.particle_status
+                )));
+            }
+            write.write_u8(self.particle_status)?;
+        }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ClientPacket;
+
+    #[test]
+    fn client_information_26_2_particle_status_roundtrips_in_both_states() {
+        let version = JavaMinecraftVersion::V_26_2;
+        let config = SClientInformationConfig {
+            locale: "en_us",
+            view_distance: 8,
+            chat_mode: VarInt(0),
+            chat_colors: true,
+            skin_parts: 0x7f,
+            main_hand: VarInt(1),
+            text_filtering: false,
+            server_listing: true,
+            particle_status: 2,
+        };
+        let play = crate::java::server::play::SClientInformationPlay {
+            locale: config.locale,
+            view_distance: config.view_distance,
+            chat_mode: config.chat_mode,
+            chat_colors: config.chat_colors,
+            skin_parts: config.skin_parts,
+            main_hand: config.main_hand,
+            text_filtering: config.text_filtering,
+            server_listing: config.server_listing,
+            particle_status: config.particle_status,
+        };
+        for (encoded, read) in [
+            (config.serialize_packet(&version).unwrap(), 0),
+            (play.serialize_packet(&version).unwrap(), 1),
+        ] {
+            let payload = &encoded[1..];
+            let mut remaining = payload;
+            let status = if read == 0 {
+                SClientInformationConfig::read(&mut remaining, &version)
+                    .unwrap()
+                    .particle_status
+            } else {
+                crate::java::server::play::SClientInformationPlay::read(&mut remaining, &version)
+                    .unwrap()
+                    .particle_status
+            };
+            assert_eq!(status, 2);
+            assert!(remaining.is_empty());
+        }
     }
 }
