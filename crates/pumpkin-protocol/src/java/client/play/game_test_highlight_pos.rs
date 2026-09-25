@@ -26,7 +26,7 @@ impl ClientPacket for CGameTestHighlightPos {
     fn write_packet_data(
         &self,
         mut write: impl std::io::Write,
-        version: &JavaMinecraftVersion,
+        _version: &JavaMinecraftVersion,
     ) -> Result<(), WritingError> {
         for pos in [&self.absolute_pos, &self.relative_pos] {
             write.write_var_int(&VarInt(pos.0.x))?;
@@ -73,6 +73,6 @@ mod tests {
             CGameTestHighlightPos::read(&mut input, &JavaMinecraftVersion::V_26_2).unwrap();
         assert_eq!(decoded.absolute_pos, packet.absolute_pos);
         assert_eq!(decoded.relative_pos, packet.relative_pos);
-        assert_eq!(input, &[]);
+        assert!(input.is_empty());
     }
 }
