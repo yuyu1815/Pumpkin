@@ -1,4 +1,5 @@
 use super::World;
+use pumpkin_data::dimension::Dimension;
 use pumpkin_protocol::java::client::play::{CGameEvent, GameEvent};
 use rand::RngExt;
 
@@ -25,8 +26,6 @@ pub struct Weather {
     pub old_rain_level: f32,
     pub thunder_level: f32,
     pub old_thunder_level: f32,
-
-    pub weather_cycle_enabled: bool,
 }
 
 impl Default for Weather {
@@ -48,7 +47,6 @@ impl Weather {
             old_rain_level: 0.0,
             thunder_level: 0.0,
             old_thunder_level: 0.0,
-            weather_cycle_enabled: true,
         }
     }
 
@@ -77,10 +75,15 @@ impl Weather {
         }
     }
 
-    pub fn tick_weather(&mut self, world: &World) {
-        if !self.weather_cycle_enabled {
-            self.advance_weather_cycle();
+    pub fn tick_weather(&mut self, world: &World, advance_weather: bool) {
+        if !world.dimension.has_skylight
+            || world.dimension.has_ceiling
+            || world.dimension.minecraft_name == Dimension::THE_END.minecraft_name
+        {
+            return;
         }
+
+        self.advance_weather_cycle_if_enabled(advance_weather);
 
         // Update visual transitions
         self.old_rain_level = self.rain_level;
@@ -111,6 +114,12 @@ impl Weather {
                 GameEvent::ThunderLevelChange,
                 self.thunder_level,
             ));
+        }
+    }
+
+    fn advance_weather_cycle_if_enabled(&mut self, advance_weather: bool) {
+        if advance_weather {
+            self.advance_weather_cycle();
         }
     }
 
@@ -155,6 +164,28 @@ impl Weather {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::Weather;
+
+    #[test]
+    fn advance_weather_rule_controls_weather_cycle() {
+        let mut weather = Weather {
+            rain_time: 1,
+            raining: true,
+            ..Weather::new()
+        };
+
+        weather.advance_weather_cycle_if_enabled(false);
+        assert_eq!(weather.rain_time, 1);
+        assert!(weather.raining);
+
+        weather.advance_weather_cycle_if_enabled(true);
+        assert_eq!(weather.rain_time, 0);
+        assert!(!weather.raining);
+    }
+}
+
 impl Clone for Weather {
     fn clone(&self) -> Self {
         Self {
@@ -167,7 +198,6 @@ impl Clone for Weather {
             old_rain_level: self.old_rain_level,
             thunder_level: self.thunder_level,
             old_thunder_level: self.old_thunder_level,
-            weather_cycle_enabled: self.weather_cycle_enabled,
         }
     }
 }

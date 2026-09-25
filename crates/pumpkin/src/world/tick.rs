@@ -257,16 +257,14 @@ impl World {
             )
         };
 
-        let (should_reset_weather, weather_cycle_enabled) = {
+        let advance_weather = self.level_info.load().game_rules.advance_weather;
+        let should_reset_weather = {
             let mut weather = self
                 .weather
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            weather.tick_weather(self);
-            (
-                weather.raining || weather.thundering,
-                weather.weather_cycle_enabled,
-            )
+            weather.tick_weather(self, advance_weather);
+            weather.raining || weather.thundering
         };
 
         if self.should_skip_night() && is_night {
@@ -285,7 +283,7 @@ impl World {
                 player.wake_up();
             }
 
-            if weather_cycle_enabled && should_reset_weather {
+            if advance_weather && should_reset_weather {
                 let mut weather = self
                     .weather
                     .lock()
