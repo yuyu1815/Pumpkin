@@ -5,8 +5,8 @@ use pumpkin_util::math::position::BlockPos;
 use pumpkin_util::math::vector3::Vector3;
 
 use super::EnchantmentEntityEffectExt;
+use crate::entity::Entity;
 use crate::entity::player::Player;
-use crate::entity::{Entity, EntityBase};
 use crate::world::World;
 
 /// Enchantment entity effect that replaces a block at an offset position.
