@@ -265,6 +265,16 @@ mod tests {
             source: None,
             projectile_owner: None,
         });
+        *sensor.selector_vibration.lock().unwrap() = Some(PendingVibration {
+            event: GameEvent::Step,
+            distance: 2.25,
+            position: Vector3::new(4.5, 5.5, 6.5),
+            delay: 0,
+            tick: 7,
+            frequency: 1,
+            source: None,
+            projectile_owner: None,
+        });
         let mut nbt = NbtCompound::new();
         sensor.write_nbt(&mut nbt);
         let restored = SculkSensorBlockEntity::from_nbt(&nbt, position);
@@ -272,6 +282,7 @@ mod tests {
         assert_eq!(vibration.event, GameEvent::Step);
         assert_eq!(vibration.delay, 2);
         assert_eq!(vibration.position.x, 4.5);
+        assert_eq!(restored.selector_vibration.lock().unwrap().unwrap().tick, 7);
         assert_eq!(
             nbt.get_compound("listener")
                 .unwrap()

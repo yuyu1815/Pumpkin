@@ -38,10 +38,18 @@ fn prefer_catalyst(current: Option<(f64, BlockPos)>, candidate: (f64, BlockPos))
 fn sculk_event_listeners(event: pumpkin_data::game_event::GameEvent) -> (bool, bool) {
     use pumpkin_data::tag::{RegistryKey, get_tag_values};
     (
-        get_tag_values(RegistryKey::GameEvent, "minecraft:vibrations")
-            .is_some_and(|events| events.contains(&event.name())),
-        get_tag_values(RegistryKey::GameEvent, "minecraft:shrieker_can_listen")
-            .is_some_and(|events| events.contains(&event.name())),
+        get_tag_values(RegistryKey::GameEvent, "minecraft:vibrations").is_some_and(|events| {
+            events
+                .iter()
+                .any(|name| pumpkin_data::game_event::GameEvent::from_name(name) == Some(event))
+        }),
+        get_tag_values(RegistryKey::GameEvent, "minecraft:shrieker_can_listen").is_some_and(
+            |events| {
+                events
+                    .iter()
+                    .any(|name| pumpkin_data::game_event::GameEvent::from_name(name) == Some(event))
+            },
+        ),
     )
 }
 
@@ -3616,7 +3624,7 @@ mod tests {
         assert_eq!(sculk_event_listeners(GameEvent::Step), (true, false));
         assert_eq!(
             sculk_event_listeners(GameEvent::SculkSensorTendrilsClicking),
-            (true, true)
+            (false, true)
         );
         assert_eq!(
             sculk_event_listeners(GameEvent::JukeboxPlay),
