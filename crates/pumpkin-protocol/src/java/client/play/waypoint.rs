@@ -26,14 +26,21 @@ pub enum WaypointTarget {
 
 #[derive(Clone, Debug)]
 pub struct WaypointIcon<'a> {
-    pub style: Option<&'a str>,
-    pub color: i32,
+    pub style: &'a str,
+    /// Packed RGB (`0xRRGGBB`); `None` represents an absent color.
+    pub color: Option<u32>,
+}
+
+#[derive(Clone, Debug)]
+pub enum WaypointIdentifier<'a> {
+    Uuid(Uuid),
+    String(&'a str),
 }
 
 #[derive(Clone, Debug)]
 pub struct TrackedWaypoint<'a> {
-    pub identifier: Uuid,
-    pub icon: Option<WaypointIcon<'a>>,
+    pub identifier: WaypointIdentifier<'a>,
+    pub icon: WaypointIcon<'a>,
     pub target: WaypointTarget,
 }
 
@@ -41,8 +48,11 @@ impl TrackedWaypoint<'_> {
     #[must_use]
     pub const fn empty(identifier: Uuid) -> Self {
         Self {
-            identifier,
-            icon: None,
+            identifier: WaypointIdentifier::Uuid(identifier),
+            icon: WaypointIcon {
+                style: "minecraft:default",
+                color: None,
+            },
             target: WaypointTarget::Empty,
         }
     }
@@ -50,11 +60,11 @@ impl TrackedWaypoint<'_> {
     #[must_use]
     pub const fn set_position(
         identifier: Uuid,
-        icon: Option<WaypointIcon<'_>>,
+        icon: WaypointIcon<'_>,
         position: BlockPos,
     ) -> TrackedWaypoint<'_> {
         TrackedWaypoint {
-            identifier,
+            identifier: WaypointIdentifier::Uuid(identifier),
             icon,
             target: WaypointTarget::Position(position),
         }
@@ -88,7 +98,7 @@ impl<'a> CWaypoint<'a> {
     #[must_use]
     pub const fn add_position(
         identifier: Uuid,
-        icon: Option<WaypointIcon<'a>>,
+        icon: WaypointIcon<'a>,
         position: BlockPos,
     ) -> Self {
         Self {
@@ -100,7 +110,7 @@ impl<'a> CWaypoint<'a> {
     #[must_use]
     pub const fn update_position(
         identifier: Uuid,
-        icon: Option<WaypointIcon<'a>>,
+        icon: WaypointIcon<'a>,
         position: BlockPos,
     ) -> Self {
         Self {
@@ -114,54 +124,152 @@ impl ClientPacket for CWaypoint<'_> {
     fn write_packet_data(
         &self,
         mut write: impl Write,
-        version: &JavaMinecraftVersion,
+        _version: &JavaMinecraftVersion,
     ) -> Result<(), WritingError> {
-        // 1. Operation (TRACK = 0, UNTRACK = 1, UPDATE = 2)
         write.write_var_int(&VarInt(self.operation as i32))?;
 
-        // 2. TrackedWaypoint Identifier (UUID)
-        write.write_uuid(&self.waypoint.identifier)?;
-
-        // 3. Waypoint Icon (Optional)
-        if let Some(ref icon) = self.waypoint.icon {
-            write.write_bool(true)?;
-            if let Some(style_str) = icon.style {
+        match &self.waypoint.identifier {
+            WaypointIdentifier::Uuid(uuid) => {
                 write.write_bool(true)?;
-                // Format style as a valid ResourceLocation (e.g., "minecraft:red" or "red")
-                if style_str.contains(':') {
-                    write.write_string(style_str)?;
-                } else {
-                    let formatted = format!("minecraft:{style_str}");
-                    write.write_string(&formatted)?;
-                }
-            } else {
-                write.write_bool(false)?;
+                write.write_uuid(uuid)?;
             }
-            write.write_i32_be(icon.color)?;
+            WaypointIdentifier::String(identifier) => {
+                write.write_bool(false)?;
+                write.write_string(identifier)?;
+            }
+        }
+
+        write.write_string(self.waypoint.icon.style)?;
+        if let Some(color) = self.waypoint.icon.color {
+            write.write_bool(true)?;
+            write.write_i32_be(color as i32)?;
         } else {
             write.write_bool(false)?;
         }
 
-        // 4. Waypoint Target Payload
         match &self.waypoint.target {
+            WaypointTarget::Empty => write.write_var_int(&VarInt(0))?,
             WaypointTarget::Position(pos) => {
-                write.write_var_int(&VarInt(0))?;
-                write.write_block_pos(pos, version)?;
+                write.write_var_int(&VarInt(1))?;
+                write.write_var_int(&VarInt(pos.0.x))?;
+                write.write_var_int(&VarInt(pos.0.y))?;
+                write.write_var_int(&VarInt(pos.0.z))?;
             }
             WaypointTarget::Chunk { x, z } => {
-                write.write_var_int(&VarInt(1))?;
-                write.write_i32_be(*x)?;
-                write.write_i32_be(*z)?;
+                write.write_var_int(&VarInt(2))?;
+                write.write_var_int(&VarInt(*x))?;
+                write.write_var_int(&VarInt(*z))?;
             }
             WaypointTarget::Azimuth(angle) => {
-                write.write_var_int(&VarInt(2))?;
-                write.write_f32_be(*angle)?;
-            }
-            WaypointTarget::Empty => {
                 write.write_var_int(&VarInt(3))?;
+                write.write_f32_be(*angle)?;
             }
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn encode(packet: &CWaypoint<'_>) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        packet
+            .write_packet_data(&mut bytes, &JavaMinecraftVersion::V_1_21_2)
+            .unwrap();
+        bytes
+    }
+
+    fn icon(color: Option<u32>) -> WaypointIcon<'static> {
+        WaypointIcon {
+            style: "minecraft:default",
+            color,
+        }
+    }
+
+    #[test]
+    fn uuid_identifier_required_icon_absent_rgb_and_vec3i_golden() {
+        let packet = CWaypoint::add_position(Uuid::nil(), icon(None), BlockPos::new(1, -1, 2));
+        assert_eq!(
+            encode(&packet),
+            [
+                0x00, 0x01, // Track, UUID identifier
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, // UUID
+                0x11, b'm', b'i', b'n', b'e', b'c', b'r', b'a', b'f', b't', b':', b'd', b'e', b'f',
+                b'a', b'u', b'l', b't', 0x00, // absent RGB
+                0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0x0f, 0x02, // Vec3i target
+            ]
+        );
+    }
+
+    #[test]
+    fn string_identifier_and_present_rgb_golden() {
+        let packet = CWaypoint::new(
+            WaypointOperation::Update,
+            TrackedWaypoint {
+                identifier: WaypointIdentifier::String("home"),
+                icon: icon(Some(0x12_3456)),
+                target: WaypointTarget::Empty,
+            },
+        );
+        assert_eq!(
+            encode(&packet),
+            [
+                0x02, 0x00, 0x04, b'h', b'o', b'm', b'e', // Update, String identifier
+                0x11, b'm', b'i', b'n', b'e', b'c', b'r', b'a', b'f', b't', b':', b'd', b'e', b'f',
+                b'a', b'u', b'l', b't', 0x01, 0x00, 0x00, 0x12, 0x34,
+                0x56, // required Icon, present RGB
+                0x00, // Empty target
+            ]
+        );
+    }
+
+    #[test]
+    fn chunk_azimuth_and_untrack_tombstone_golden() {
+        let chunk = CWaypoint::new(
+            WaypointOperation::Track,
+            TrackedWaypoint {
+                identifier: WaypointIdentifier::String("x"),
+                icon: icon(None),
+                target: WaypointTarget::Chunk { x: -1, z: 2 },
+            },
+        );
+        assert_eq!(
+            encode(&chunk),
+            [
+                0x00, 0x00, 0x01, b'x', 0x11, b'm', b'i', b'n', b'e', b'c', b'r', b'a', b'f', b't',
+                b':', b'd', b'e', b'f', b'a', b'u', b'l', b't', 0x00, 0x02, 0xff, 0xff, 0xff, 0xff,
+                0x0f, 0x02,
+            ]
+        );
+
+        let azimuth = CWaypoint::new(
+            WaypointOperation::Update,
+            TrackedWaypoint {
+                identifier: WaypointIdentifier::Uuid(Uuid::nil()),
+                icon: icon(None),
+                target: WaypointTarget::Azimuth(1.0),
+            },
+        );
+        let mut azimuth_golden = vec![
+            0x02, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x11, b'm', b'i', b'n',
+            b'e', b'c', b'r', b'a', b'f', b't', b':', b'd', b'e', b'f', b'a', b'u', b'l', b't',
+            0x00, 0x03,
+        ];
+        azimuth_golden.extend_from_slice(&1.0_f32.to_be_bytes());
+        assert_eq!(encode(&azimuth), azimuth_golden);
+
+        let tombstone = CWaypoint::remove(Uuid::nil());
+        assert_eq!(
+            encode(&tombstone),
+            [
+                0x01, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x11, b'm', b'i', b'n',
+                b'e', b'c', b'r', b'a', b'f', b't', b':', b'd', b'e', b'f', b'a', b'u', b'l', b't',
+                0x00, 0x00,
+            ]
+        );
     }
 }

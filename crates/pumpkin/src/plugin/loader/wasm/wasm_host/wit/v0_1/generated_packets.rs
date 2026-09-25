@@ -353,19 +353,8 @@ pub fn serialize_java_packet(
             crate::net::java::JavaClient::write_packet_for_version(&p, version, &mut buf).unwrap();
             Some(buf.into())
         }
-        ClientboundPacket::CGameTestHighlightPos(data) => {
-            let p = pumpkin_protocol::java::client::play::CGameTestHighlightPos {
-                pos: pumpkin_util::math::position::BlockPos::new(
-                    data.pos.0, data.pos.1, data.pos.2,
-                ),
-                color: data.color.try_into().unwrap(),
-                label: &data.label,
-                duration_ms: data.duration_ms.try_into().unwrap(),
-            };
-            let mut buf = Vec::new();
-            crate::net::java::JavaClient::write_packet_for_version(&p, version, &mut buf).unwrap();
-            Some(buf.into())
-        }
+        ClientboundPacket::CGameTestHighlightPos(_) => None,
+        ClientboundPacket::CTestInstanceBlockStatus(_) => None,
         ClientboundPacket::CHeadRot(data) => {
             let p = pumpkin_protocol::java::client::play::CHeadRot {
                 entity_id: VarInt(data.entity_id),
@@ -1005,6 +994,18 @@ pub fn serialize_java_packet(
             crate::net::java::JavaClient::write_packet_for_version(&p, version, &mut buf).unwrap();
             Some(buf.into())
         }
+        _ => None,
+    }
+}
+
+pub fn unsupported_legacy_java_packet(packet: &ClientboundPacket) -> Option<&'static str> {
+    match packet {
+        ClientboundPacket::CGameTestHighlightPos(_) => Some(
+            "CGameTestHighlightPos is unsupported by the v0.1 WIT adapter: 26.2 requires both absolute_pos and relative_pos, but v0.1 provides only pos",
+        ),
+        ClientboundPacket::CTestInstanceBlockStatus(_) => Some(
+            "CTestInstanceBlockStatus is unsupported by the v0.1 WIT adapter: 26.2 status/size fields are incompatible with v0.1 pos/status/message",
+        ),
         _ => None,
     }
 }
@@ -1824,17 +1825,6 @@ impl ToWitClientboundJava for pumpkin_protocol::java::client::play::CGameEvent {
     }
 }
 
-impl ToWitClientboundJava for pumpkin_protocol::java::client::play::CGameTestHighlightPos<'_> {
-    fn to_wit(&self) -> ClientboundPacket {
-        ClientboundPacket::CGameTestHighlightPos(crate::plugin::loader::wasm::wasm_host::wit::v0_1::pumpkin::plugin::java_packets::CGameTestHighlightPos {
-                pos: (self.pos.0.x, self.pos.0.y, self.pos.0.z),
-                color: self.color.try_into().unwrap(),
-                label: self.label.to_string(),
-                duration_ms: self.duration_ms.try_into().unwrap(),
-        })
-    }
-}
-
 impl ToWitClientboundJava for pumpkin_protocol::java::client::play::CHeadRot {
     fn to_wit(&self) -> ClientboundPacket {
         ClientboundPacket::CHeadRot(crate::plugin::loader::wasm::wasm_host::wit::v0_1::pumpkin::plugin::java_packets::CHeadRot {
@@ -2509,11 +2499,6 @@ pub fn clientbound_java_any_to_wit(any: &dyn Any) -> Option<ClientboundPacket> {
         return Some(p.to_wit());
     }
     if let Some(p) = any.downcast_ref::<pumpkin_protocol::java::client::play::CGameEvent>() {
-        return Some(p.to_wit());
-    }
-    if let Some(p) =
-        any.downcast_ref::<pumpkin_protocol::java::client::play::CGameTestHighlightPos>()
-    {
         return Some(p.to_wit());
     }
     if let Some(p) = any.downcast_ref::<pumpkin_protocol::java::client::play::CHeadRot>() {

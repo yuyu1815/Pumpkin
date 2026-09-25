@@ -41,6 +41,13 @@ pub fn build_java_mapping() -> String {
     output.push_str("        _ => None,\n");
     output.push_str("    }\n");
     output.push_str("}\n\n");
+    output.push_str("pub fn unsupported_legacy_java_packet(packet: &ClientboundPacket) -> Option<&'static str> {\n");
+    output.push_str("    match packet {\n");
+    output.push_str("        ClientboundPacket::CGameTestHighlightPos(_) => Some(\"CGameTestHighlightPos is unsupported by the v0.1 WIT adapter: 26.2 requires both absolute_pos and relative_pos, but v0.1 provides only pos\"),\n");
+    output.push_str("        ClientboundPacket::CTestInstanceBlockStatus(_) => Some(\"CTestInstanceBlockStatus is unsupported by the v0.1 WIT adapter: 26.2 status/size fields are incompatible with v0.1 pos/status/message\"),\n");
+    output.push_str("        _ => None,\n");
+    output.push_str("    }\n");
+    output.push_str("}\n\n");
 
     output.push_str("#[must_use]\n");
     output.push_str("pub fn deserialize_java_serverbound_packet(id: i32, mut payload: &[u8], version: JavaMinecraftVersion) -> Option<ServerboundPacket> {\n");
@@ -651,6 +658,22 @@ fn process_struct(
     } else {
         struct_name.clone()
     };
+
+    if state == "play"
+        && attr_name == "java_packet"
+        && matches!(
+            struct_name.as_str(),
+            "CGameTestHighlightPos" | "CTestInstanceBlockStatus"
+        )
+    {
+        if mode == MappingMode::Serialize {
+            output.push_str(&format!(
+                "        {}::{}(_) => None,\n",
+                variant_prefix, wit_case
+            ));
+        }
+        return;
+    }
 
     let mut prep_code = String::new();
     let mut field_inits = String::new();

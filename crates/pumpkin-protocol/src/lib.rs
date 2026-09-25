@@ -13,7 +13,7 @@ use codec::var_int::VarInt;
 use hybrid_array::{Array, sizes::U1};
 use pumpkin_util::{
     resource_location::ResourceLocation,
-    text::{TextComponent, style::Style},
+    text::{TextComponent, color::Color, style::Style},
     version::JavaMinecraftVersion,
 };
 use ser::{ReadingError, WritingError};
@@ -416,16 +416,223 @@ impl NumberFormat {
     pub fn write(&self, write: &mut impl ser::NetworkWriteExt) -> Result<(), ser::WritingError> {
         match self {
             Self::Blank => write.write_var_int(&0.into()),
-            Self::Styled(_style) => {
+            Self::Styled(style) => {
                 write.write_var_int(&1.into())?;
-                // TODO: Style write
-                Ok(())
+                write_style_nbt(style, write)
             }
             Self::Fixed(text) => {
                 write.write_var_int(&2.into())?;
                 write.write_slice(&text.encode())?;
                 Ok(())
             }
+        }
+    }
+}
+
+/// Writes a Style using the unnamed NBT compound used by Minecraft's styled number format.
+pub fn write_style_nbt(
+    style: &Style,
+    write: &mut impl ser::NetworkWriteExt,
+) -> Result<(), WritingError> {
+    let mut compound = pumpkin_nbt::compound::NbtCompound::new();
+    if let Some(color) = &style.color {
+        let color = match color {
+            Color::Named(color) => color.to_string(),
+            Color::Rgb(color) => format!("#{:02x}{:02x}{:02x}", color.red, color.green, color.blue),
+            Color::Reset => {
+                return Err(WritingError::Message(
+                    "Style color `reset` is not supported by the Minecraft TextColor codec".into(),
+                ));
+            }
+        };
+        compound.put_string("color", color);
+    }
+    for (key, value) in [
+        ("bold", style.bold),
+        ("italic", style.italic),
+        ("underlined", style.underlined),
+        ("strikethrough", style.strikethrough),
+        ("obfuscated", style.obfuscated),
+    ] {
+        if let Some(value) = value {
+            compound.put_bool(key, value);
+        }
+    }
+    if let Some(insertion) = &style.insertion {
+        compound.put_string("insertion", insertion.clone());
+    }
+    if let Some(font) = &style.font {
+        let (namespace, path) = font.split_once(':').unwrap_or(("minecraft", font));
+        let valid_namespace = !namespace.is_empty()
+            && namespace
+                .bytes()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || b"_.-".contains(&c));
+        let valid_path = !path.is_empty()
+            && path
+                .bytes()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || b"_./-".contains(&c));
+        if !valid_namespace || !valid_path {
+            return Err(WritingError::Message(format!(
+                "Invalid font resource identifier: {font}"
+            )));
+        }
+        compound.put_string("font", font.clone());
+    }
+    if let Some(color) = style.shadow_color {
+        let packed = (i32::from(color.alpha) << 24)
+            | (i32::from(color.red) << 16)
+            | (i32::from(color.green) << 8)
+            | i32::from(color.blue);
+        compound.put_int("shadow_color", packed);
+    }
+    if style.click_event.is_some() {
+        return Err(WritingError::Message(
+            "Style click_event is not supported by the styled number format writer".into(),
+        ));
+    }
+    if style.hover_event.is_some() {
+        return Err(WritingError::Message(
+            "Style hover_event is not supported by the styled number format writer".into(),
+        ));
+    }
+    let bytes = pumpkin_nbt::Nbt::from(compound).write_unnamed();
+    write.write_slice(&bytes)
+}
+
+#[cfg(test)]
+mod number_format_style_tests {
+    use super::*;
+    use pumpkin_util::text::color::NamedColor;
+
+    #[test]
+    fn styled_number_format_writes_empty_compound() {
+        let mut bytes = Vec::new();
+        NumberFormat::Styled(Style::default())
+            .write(&mut bytes)
+            .unwrap();
+        assert_eq!(bytes, [1, 10, 0, 0]);
+    }
+
+    #[test]
+    fn styled_number_format_writes_rgb_color_as_hex_string() {
+        let style = Style {
+            color: Some(Color::Rgb(pumpkin_util::text::color::RGBColor {
+                red: 0x12,
+                green: 0xab,
+                blue: 0xef,
+            })),
+            ..Style::default()
+        };
+        let mut bytes = Vec::new();
+        NumberFormat::Styled(style).write(&mut bytes).unwrap();
+        assert!(
+            bytes
+                .windows(17)
+                .any(|window| window == b"\x08\x00\x05color\x00\x07#12abef")
+        );
+    }
+
+    #[test]
+    fn styled_number_format_writes_boolean_flags_as_nbt_bytes() {
+        for (key, value) in [
+            ("bold", true),
+            ("italic", false),
+            ("underlined", true),
+            ("strikethrough", false),
+            ("obfuscated", true),
+        ] {
+            let style = match key {
+                "bold" => Style {
+                    bold: Some(value),
+                    ..Style::default()
+                },
+                "italic" => Style {
+                    italic: Some(value),
+                    ..Style::default()
+                },
+                "underlined" => Style {
+                    underlined: Some(value),
+                    ..Style::default()
+                },
+                "strikethrough" => Style {
+                    strikethrough: Some(value),
+                    ..Style::default()
+                },
+                _ => Style {
+                    obfuscated: Some(value),
+                    ..Style::default()
+                },
+            };
+            let mut bytes = Vec::new();
+            NumberFormat::Styled(style).write(&mut bytes).unwrap();
+            let entry = [
+                b"\x01\x00".as_slice(),
+                &[key.len() as u8],
+                key.as_bytes(),
+                &[u8::from(value)],
+            ]
+            .concat();
+            assert!(
+                bytes.windows(entry.len()).any(|window| window == entry),
+                "{key}"
+            );
+        }
+    }
+
+    #[test]
+    fn styled_number_format_rejects_unsupported_style_fields() {
+        let cases = [
+            Style {
+                color: Some(Color::Reset),
+                ..Style::default()
+            },
+            Style {
+                click_event: Some(pumpkin_util::text::click::ClickEvent::OpenUrl {
+                    url: "https://example.com".into(),
+                }),
+                ..Style::default()
+            },
+            Style {
+                hover_event: Some(pumpkin_util::text::hover::HoverEvent::ShowText {
+                    value: vec![],
+                }),
+                ..Style::default()
+            },
+        ];
+        for style in cases {
+            assert!(matches!(
+                NumberFormat::Styled(style).write(&mut Vec::new()),
+                Err(WritingError::Message(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn styled_number_format_writes_supported_style_fields() {
+        let style = Style {
+            color: Some(Color::Named(NamedColor::Red)),
+            bold: Some(true),
+            insertion: Some("insert".into()),
+            font: Some("minecraft:uniform".into()),
+            shadow_color: Some(pumpkin_util::text::color::ARGBColor {
+                alpha: 0x80,
+                red: 1,
+                green: 2,
+                blue: 3,
+            }),
+            ..Style::default()
+        };
+        let mut bytes = Vec::new();
+        NumberFormat::Styled(style).write(&mut bytes).unwrap();
+        assert_eq!(&bytes[..2], &[1, 10]);
+        for entry in [
+            b"\x08\x00\x05color\x00\x03red".as_slice(),
+            b"\x01\x00\x04bold\x01".as_slice(),
+            b"\x08\x00\x09insertion\x00\x06insert".as_slice(),
+            b"\x08\x00\x04font\x00\x11minecraft:uniform".as_slice(),
+            b"\x03\x00\x0cshadow_color\x80\x01\x02\x03".as_slice(),
+        ] {
+            assert!(bytes.windows(entry.len()).any(|window| window == entry));
         }
     }
 }
