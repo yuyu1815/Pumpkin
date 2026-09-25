@@ -78,6 +78,10 @@ impl EntityBase for BoatEntity {
         self.vehicle.entity.is_alive()
     }
 
+    fn blocks_building(&self) -> bool {
+        true
+    }
+
     fn is_collidable(&self, _entity: Option<Box<dyn EntityBase>>) -> bool {
         true
     }

@@ -343,8 +343,17 @@ pub trait EntityBase: Send + Sync + std::any::Any {
         false
     }
 
+    fn blocks_building(&self) -> bool {
+        false
+    }
+
     fn is_collidable(&self, _entity: Option<Box<dyn EntityBase>>) -> bool {
         false
+    }
+
+    // ponytail: no supported type has source-dependent collision yet; add per-type overrides when one does.
+    fn is_collidable_with(&self, _entity: &dyn EntityBase) -> bool {
+        self.is_collidable(None)
     }
 
     fn can_hit(&self) -> bool {
@@ -4490,6 +4499,19 @@ impl Flag {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct DefaultEntity;
+
+    impl EntityBase for DefaultEntity {
+        fn get_entity(&self) -> &Entity {
+            unreachable!("default behavior must not access the backing entity")
+        }
+    }
+
+    #[test]
+    fn entity_base_does_not_block_building_by_default() {
+        assert!(!DefaultEntity.blocks_building());
+    }
 
     #[test]
     fn equipment_break_status_maps_all_slots() {

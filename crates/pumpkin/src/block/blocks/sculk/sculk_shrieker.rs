@@ -14,7 +14,10 @@ use pumpkin_data::{
     sound::{Sound, SoundCategory},
     world::WorldEvent,
 };
-use pumpkin_util::{Difficulty, math::position::BlockPos};
+use pumpkin_util::{
+    Difficulty,
+    math::{boundingbox::BoundingBox, position::BlockPos},
+};
 use pumpkin_world::tick::TickPriority;
 use pumpkin_world::world::BlockFlags;
 use rand::RngExt;
@@ -29,6 +32,33 @@ const TRACKER_KEY: &str = "warden_spawn_tracker";
 const WARDEN_SPAWN_ATTEMPTS: usize = 20;
 const WARDEN_SPAWN_HORIZONTAL_RANGE: i32 = 5;
 const WARDEN_SPAWN_VERTICAL_RANGE: i32 = 6;
+
+fn is_within_world_border(
+    bounding_box: BoundingBox,
+    center_x: f64,
+    center_z: f64,
+    diameter: f64,
+) -> bool {
+    let half = diameter / 2.0;
+    bounding_box.min.x >= center_x - half
+        && bounding_box.max.x < center_x + half
+        && bounding_box.min.z >= center_z - half
+        && bounding_box.max.z < center_z + half
+}
+
+fn blocks_warden_spawn_no_collision(
+    is_self: bool,
+    is_removed: bool,
+    is_spectator: bool,
+    same_vehicle: bool,
+    blocks_building: bool,
+    is_collidable: bool,
+) -> bool {
+    !is_self
+        && !is_removed
+        && !is_spectator
+        && ((!same_vehicle && blocks_building) || (!same_vehicle && is_collidable))
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct WardenSpawnTracker {
@@ -273,9 +303,34 @@ impl SculkShriekerBlock {
                     f64::from(z) + 0.5,
                 );
                 let warden = from_type(&EntityType::WARDEN, spawn_pos, world, uuid::Uuid::new_v4());
-                let bounding_box = warden.get_entity().bounding_box.load();
-                // is_space_empty checks blocks only; Pumpkin exposes no matching noCollision check for entities.
-                if !world.is_space_empty(bounding_box) || world.contains_any_liquid(bounding_box) {
+                let bounding_box = EntityType::WARDEN.get_spawn_bounding_box(
+                    spawn_pos.x,
+                    spawn_pos.y,
+                    spawn_pos.z,
+                );
+                let border = world
+                    .worldborder
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                if !is_within_world_border(
+                    bounding_box,
+                    border.center_x,
+                    border.center_z,
+                    border.new_diameter,
+                ) || !world.is_space_empty(bounding_box)
+                    || world.get_all_at_box(&bounding_box).iter().any(|entity| {
+                        // This newly-created Warden is not riding, so no candidate can share its vehicle.
+                        blocks_warden_spawn_no_collision(
+                            entity.get_entity().entity_id == warden.get_entity().entity_id,
+                            entity.get_entity().is_removed(),
+                            entity.is_spectator(),
+                            false,
+                            entity.blocks_building(),
+                            entity.is_collidable_with(&*warden),
+                        )
+                    })
+                    || world.contains_any_liquid(bounding_box)
+                {
                     continue;
                 }
                 spawned = world.try_spawn_entity(warden);
@@ -348,6 +403,42 @@ impl BlockBehaviour for SculkShriekerBlock {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn warden_spawn_obstruction_keeps_building_and_collision_predicates_independent() {
+        // Living entities/players block building even when their collision predicate is false.
+        assert!(blocks_warden_spawn_no_collision(
+            false, false, false, false, true, false
+        ));
+        // A non-building entity may still be collidable.
+        assert!(blocks_warden_spawn_no_collision(
+            false, false, false, false, false, true
+        ));
+        assert!(!blocks_warden_spawn_no_collision(
+            false, false, false, false, false, false
+        ));
+        assert!(!blocks_warden_spawn_no_collision(
+            true, false, false, false, true, true
+        ));
+        assert!(!blocks_warden_spawn_no_collision(
+            false, true, false, false, true, true
+        ));
+        assert!(!blocks_warden_spawn_no_collision(
+            false, false, true, false, true, true
+        ));
+        assert!(!blocks_warden_spawn_no_collision(
+            false, false, false, true, true, true
+        ));
+    }
+
+    #[test]
+    fn warden_aabb_must_fit_inside_world_border() {
+        let inside = EntityType::WARDEN.get_spawn_bounding_box(4.5, 64.0, 0.5);
+        let outside = EntityType::WARDEN.get_spawn_bounding_box(4.6, 64.0, 0.5);
+
+        assert!(is_within_world_border(inside, 0.0, 0.0, 10.0));
+        assert!(!is_within_world_border(outside, 0.0, 0.0, 10.0));
+    }
 
     #[test]
     fn spawn_y_search_starts_six_above_and_descends_through_six_below() {

@@ -1233,6 +1233,10 @@ pub trait Mob: EntityBase + Send + Sync {
     }
 }
 impl<T: Mob + Send + 'static> EntityBase for T {
+    fn blocks_building(&self) -> bool {
+        true
+    }
+
     fn dampens_vibrations(&self) -> bool {
         Mob::dampens_vibrations(self)
     }

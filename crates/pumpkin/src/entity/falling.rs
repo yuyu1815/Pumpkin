@@ -47,6 +47,10 @@ impl FallingEntity {
 }
 
 impl EntityBase for FallingEntity {
+    fn blocks_building(&self) -> bool {
+        true
+    }
+
     fn tick(&self, caller: &dyn EntityBase, _server: &Server) {
         let entity = &self.entity;
         let mut velo = entity.velocity.load();

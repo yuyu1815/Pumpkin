@@ -3534,6 +3534,10 @@ impl LivingEntity {
 }
 
 impl EntityBase for LivingEntity {
+    fn blocks_building(&self) -> bool {
+        true
+    }
+
     fn damage_with_context(
         &self,
         caller: &dyn EntityBase,

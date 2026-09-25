@@ -29,6 +29,10 @@ impl TNTEntity {
 }
 
 impl EntityBase for TNTEntity {
+    fn blocks_building(&self) -> bool {
+        true
+    }
+
     fn tick(&self, caller: &dyn EntityBase, _server: &Server) {
         let entity = &self.entity;
 
