@@ -334,6 +334,7 @@ pub struct StatusResponse {
     /// The icon displayed. (Optional)
     pub favicon: Option<String>,
     /// Whether players are forced to use secure chat.
+    #[serde(rename = "enforcesSecureChat")]
     pub enforce_secure_chat: bool,
 }
 #[derive(Clone, serde::Serialize)]
@@ -497,6 +498,25 @@ pub fn write_style_nbt(
     }
     let bytes = pumpkin_nbt::Nbt::from(compound).write_unnamed();
     write.write_slice(&bytes)
+}
+
+#[cfg(test)]
+mod status_response_tests {
+    use super::*;
+
+    #[test]
+    fn serializes_secure_chat_key_with_official_name() {
+        let response = StatusResponse {
+            version: None,
+            players: None,
+            description: TextComponent::text("test"),
+            favicon: None,
+            enforce_secure_chat: false,
+        };
+        let value = serde_json::to_value(response).unwrap();
+        assert_eq!(value["enforcesSecureChat"], false);
+        assert!(value.get("enforceSecureChat").is_none());
+    }
 }
 
 #[cfg(test)]
