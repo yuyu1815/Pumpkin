@@ -3798,7 +3798,19 @@ impl LivingEntity {
                         self.fall_distance.store(0.0);
                         // Vanilla broadcasts entity event 46 (teleport particles) on success.
                         world.send_entity_status(&self.entity, EntityStatus::Teleport, None);
-                        world.emit_game_event("teleport", center);
+                        let uuid = caller.get_entity().entity_uuid;
+                        world.emit_game_event_with_source(
+                            "teleport",
+                            center,
+                            Some(crate::world::SculkEventSource {
+                                uuid,
+                                projectile_owner: None,
+                                spectator: caller.is_spectator(),
+                                sneaking: caller.get_entity().is_sneaking(),
+                                dampens_vibrations: caller.dampens_vibrations(),
+                            }),
+                            None,
+                        );
                         world.play_sound(
                             Sound::ItemChorusFruitTeleport,
                             SoundCategory::Players,

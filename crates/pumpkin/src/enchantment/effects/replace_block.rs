@@ -5,8 +5,8 @@ use pumpkin_util::math::position::BlockPos;
 use pumpkin_util::math::vector3::Vector3;
 
 use super::EnchantmentEntityEffectExt;
-use crate::entity::Entity;
 use crate::entity::player::Player;
+use crate::entity::{Entity, EntityBase};
 use crate::world::World;
 
 /// Enchantment entity effect that replaces a block at an offset position.
@@ -44,12 +44,30 @@ impl EnchantmentEntityEffectExt for ReplaceBlock {
         world: &Arc<World>,
         _enchantment_level: i32,
         _owner: Option<&Arc<Player>>,
-        _entity: Option<&Entity>,
+        entity: Option<&Entity>,
         position: Vector3<f64>,
     ) {
         let target = self.target_position(position);
         if let Some(event) = self.trigger_game_event {
-            world.emit_game_event(event.name(), target.to_centered_f64());
+            let source = entity.and_then(|entity| {
+                let uuid = entity.entity_uuid;
+                world
+                    .get_entity_by_uuid(uuid)
+                    .map(|source| crate::world::SculkEventSource {
+                        uuid: source.get_entity().entity_uuid,
+                        projectile_owner: crate::entity::projectile::is_projectile(
+                            source.get_entity().entity_type,
+                        )
+                        .then(|| source.get_owner_id())
+                        .flatten()
+                        .and_then(|owner_id| world.get_entity_by_id(owner_id))
+                        .map(|owner| owner.get_entity().entity_uuid),
+                        spectator: source.is_spectator(),
+                        sneaking: source.get_entity().is_sneaking(),
+                        dampens_vibrations: source.dampens_vibrations(),
+                    })
+            });
+            world.emit_game_event_with_source(event.name(), target.to_centered_f64(), source, None);
         }
     }
 }

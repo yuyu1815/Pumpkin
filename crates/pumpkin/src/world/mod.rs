@@ -9,6 +9,15 @@ use std::{collections::HashMap, sync::atomic::Ordering};
 use tracing::{debug, trace, warn};
 
 pub(crate) mod active_chunks;
+
+#[derive(Clone, Copy)]
+pub struct SculkEventSource {
+    pub uuid: uuid::Uuid,
+    pub projectile_owner: Option<uuid::Uuid>,
+    pub spectator: bool,
+    pub sneaking: bool,
+    pub dampens_vibrations: bool,
+}
 mod block_access;
 mod block_entity;
 mod broadcast;
@@ -244,6 +253,73 @@ impl PartialEq for World {
 }
 
 impl Eq for World {}
+
+fn traverse_vibration_blocks(
+    from: Vector3<f64>,
+    to: Vector3<f64>,
+    mut test: impl FnMut(pumpkin_util::math::position::BlockPos) -> bool,
+) -> bool {
+    if from == to {
+        return false;
+    }
+
+    let delta = Vector3::new(to.x - from.x, to.y - from.y, to.z - from.z);
+    let start = Vector3::new(
+        from.x + delta.x * 1.0e-7,
+        from.y + delta.y * 1.0e-7,
+        from.z + delta.z * 1.0e-7,
+    );
+    let end = Vector3::new(
+        to.x - delta.x * 1.0e-7,
+        to.y - delta.y * 1.0e-7,
+        to.z - delta.z * 1.0e-7,
+    );
+    let mut block = pumpkin_util::math::position::BlockPos::floored(start.x, start.y, start.z);
+    let end_block = pumpkin_util::math::position::BlockPos::floored(end.x, end.y, end.z);
+    if test(block) {
+        return true;
+    }
+
+    let steps = [
+        delta.x.signum() as i32,
+        delta.y.signum() as i32,
+        delta.z.signum() as i32,
+    ];
+    let origin = [start.x, start.y, start.z];
+    let direction = [delta.x, delta.y, delta.z];
+    let mut t_max = [f64::INFINITY; 3];
+    let mut t_delta = [f64::INFINITY; 3];
+    let mut cell = [block.0.x, block.0.y, block.0.z];
+    for axis in 0..3 {
+        if steps[axis] != 0 {
+            let boundary = f64::from(cell[axis] + i32::from(steps[axis] > 0));
+            t_max[axis] = (boundary - origin[axis]) / direction[axis];
+            t_delta[axis] = 1.0 / direction[axis].abs();
+        }
+    }
+
+    while block != end_block {
+        // Strict comparisons intentionally resolve equal crossings Z, then Y, then X.
+        let axis = if t_max[0] < t_max[1] {
+            if t_max[0] < t_max[2] { 0 } else { 2 }
+        } else if t_max[1] < t_max[2] {
+            1
+        } else {
+            2
+        };
+        cell[axis] += steps[axis];
+        match axis {
+            0 => block.0.x = cell[0],
+            1 => block.0.y = cell[1],
+            _ => block.0.z = cell[2],
+        }
+        t_max[axis] += t_delta[axis];
+        if test(block) {
+            return true;
+        }
+    }
+    false
+}
 
 impl World {
     #[must_use]
@@ -2571,12 +2647,231 @@ impl World {
     /// Broadcasts a packet to chunk watchers, excluding specific players.
 
     pub fn emit_game_event(&self, event_key: impl Into<String>, position: Vector3<f64>) {
+        self.emit_game_event_with_source(event_key, position, None, None);
+    }
+
+    pub fn emit_game_event_with_source(
+        &self,
+        event_key: impl Into<String>,
+        position: Vector3<f64>,
+        source: Option<crate::world::SculkEventSource>,
+        affected_state: Option<pumpkin_data::BlockStateId>,
+    ) {
         let mut event = crate::plugin::api::events::world::generic_game::GenericGameEvent::new(
             event_key.into(),
             position,
         );
         if let Some(server) = self.server.upgrade() {
             server.plugin_manager.fire_blocking(&server, &mut event);
+        }
+        if !event.cancelled {
+            if let Some(game_event) =
+                pumpkin_data::game_event::GameEvent::from_name(&event.event_key)
+            {
+                self.dispatch_sculk_vibration(game_event, event.position, source, affected_state);
+            }
+        }
+    }
+
+    fn vibration_occluded(&self, event: Vector3<f64>, listener: Vector3<f64>) -> bool {
+        use pumpkin_data::tag::Taggable;
+        let event_block =
+            pumpkin_util::math::position::BlockPos::floored(event.x, event.y, event.z);
+        let event_center = Vector3::new(
+            f64::from(event_block.0.x) + 0.5,
+            f64::from(event_block.0.y) + 0.5,
+            f64::from(event_block.0.z) + 0.5,
+        );
+        [
+            (1.0, 0.0, 0.0),
+            (-1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, -1.0, 0.0),
+            (0.0, 0.0, 1.0),
+            (0.0, 0.0, -1.0),
+        ]
+        .into_iter()
+        .all(|(nx, ny, nz)| {
+            let start = Vector3::new(
+                event_center.x + nx * 9.999_999_747_378_752e-6,
+                event_center.y + ny * 9.999_999_747_378_752e-6,
+                event_center.z + nz * 9.999_999_747_378_752e-6,
+            );
+            traverse_vibration_blocks(start, listener, |block| {
+                self.get_block_state_if_loaded(&block).is_some_and(|state| {
+                    Block::from_state_id(state.id)
+                        .is_tagged_with("minecraft:occludes_vibration_signals")
+                        .unwrap_or(false)
+                })
+            })
+        })
+    }
+
+    fn dispatch_sculk_vibration(
+        &self,
+        event: pumpkin_data::game_event::GameEvent,
+        position: Vector3<f64>,
+        source: Option<SculkEventSource>,
+        affected_state: Option<pumpkin_data::BlockStateId>,
+    ) {
+        use crate::block::blocks::redstone::sculk_sensor::{
+            VibrationCandidate, select_vibration, vibration_frequency,
+        };
+        use crate::block::entities::{
+            calibrated_sculk_sensor::CalibratedSculkSensorBlockEntity,
+            sculk_sensor::{PendingVibration, SculkSensorBlockEntity},
+        };
+        let frequency = vibration_frequency(event);
+        if frequency == 0 {
+            return;
+        }
+        let ignore_sneaking = pumpkin_data::tag::get_tag_values(
+            pumpkin_data::tag::RegistryKey::GameEvent,
+            "minecraft:ignore_vibrations_sneaking",
+        )
+        .is_some_and(|events| events.contains(&event.name()));
+        if source
+            .is_some_and(|s| s.spectator || (s.sneaking && ignore_sneaking) || s.dampens_vibrations)
+        {
+            return;
+        }
+        use pumpkin_data::tag::Taggable;
+        if affected_state.is_some_and(|state| {
+            Block::from_state_id(state)
+                .is_tagged_with("minecraft:dampens_vibrations")
+                .unwrap_or(false)
+        }) {
+            return;
+        }
+        let event_block =
+            pumpkin_util::math::position::BlockPos::floored(position.x, position.y, position.z);
+        let chunk_min_x = (event_block.0.x - 16) >> 4;
+        let chunk_max_x = (event_block.0.x + 16) >> 4;
+        let chunk_min_z = (event_block.0.z - 16) >> 4;
+        let chunk_max_z = (event_block.0.z + 16) >> 4;
+        for cx in chunk_min_x..=chunk_max_x {
+            for cz in chunk_min_z..=chunk_max_z {
+                let Some(entities) = self
+                    .block_entities
+                    .get(&pumpkin_util::math::vector2::Vector2::new(cx, cz))
+                else {
+                    continue;
+                };
+                for (pos, be) in entities.iter() {
+                    let Some((selector, current, sensor_radius)) = be
+                        .as_any()
+                        .downcast_ref::<SculkSensorBlockEntity>()
+                        .map(|e| (&e.selector_vibration, &e.pending_vibration, 8.0))
+                        .or_else(|| {
+                            be.as_any()
+                                .downcast_ref::<CalibratedSculkSensorBlockEntity>()
+                                .map(|e| (&e.selector_vibration, &e.pending_vibration, 16.0))
+                        })
+                    else {
+                        continue;
+                    };
+                    let dx = pos.0.x - event_block.0.x;
+                    let dy = pos.0.y - event_block.0.y;
+                    let dz = pos.0.z - event_block.0.z;
+                    if dx * dx + dy * dy + dz * dz > (sensor_radius * sensor_radius) as i32 {
+                        continue;
+                    }
+                    if current
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .is_some()
+                    {
+                        continue;
+                    }
+                    let Some(state) = self.get_block_state_if_loaded(pos) else {
+                        continue;
+                    };
+                    let block = Block::from_state_id(state.id);
+                    if block.id == pumpkin_data::BlockId::CALIBRATED_SCULK_SENSOR {
+                        let props = pumpkin_data::block_properties::CalibratedSculkSensorLikeProperties::from_state_id(state.id);
+                        if props.sculk_sensor_phase
+                            != pumpkin_data::block_properties::SculkSensorPhase::Inactive
+                        {
+                            continue;
+                        }
+                        let facing = match props.facing {
+                            pumpkin_data::block_properties::HorizontalFacing::North => {
+                                pumpkin_data::BlockDirection::North
+                            }
+                            pumpkin_data::block_properties::HorizontalFacing::South => {
+                                pumpkin_data::BlockDirection::South
+                            }
+                            pumpkin_data::block_properties::HorizontalFacing::West => {
+                                pumpkin_data::BlockDirection::West
+                            }
+                            pumpkin_data::block_properties::HorizontalFacing::East => {
+                                pumpkin_data::BlockDirection::East
+                            }
+                        };
+                        let back_pos = pos.offset(facing.opposite().to_offset());
+                        let Some(back_state) = self.get_block_state_if_loaded(&back_pos) else {
+                            continue;
+                        };
+                        let back_block = Block::from_state_id(back_state.id);
+                        let calibrated_frequency = self.block_registry.get_weak_redstone_power(
+                            back_block,
+                            self,
+                            &back_pos,
+                            back_state,
+                            facing.opposite(),
+                        );
+                        if calibrated_frequency > 0 && calibrated_frequency != frequency as u8 {
+                            continue;
+                        }
+                    } else if block.id == pumpkin_data::BlockId::SCULK_SENSOR {
+                        if pumpkin_data::block_properties::SculkSensorLikeProperties::from_state_id(
+                            state.id,
+                        )
+                        .sculk_sensor_phase
+                            != pumpkin_data::block_properties::SculkSensorPhase::Inactive
+                        {
+                            continue;
+                        }
+                    }
+                    let center = Vector3::new(
+                        f64::from(pos.0.x) + 0.5,
+                        f64::from(pos.0.y) + 0.5,
+                        f64::from(pos.0.z) + 0.5,
+                    );
+                    let distance = (center.x - position.x)
+                        .hypot(center.y - position.y)
+                        .hypot(center.z - position.z);
+                    if !self.vibration_occluded(position, center) {
+                        continue;
+                    }
+                    let mut pending = selector
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    let candidate = VibrationCandidate {
+                        tick: self.get_world_age(),
+                        distance,
+                        frequency,
+                    };
+                    let current = pending.map(|v| VibrationCandidate {
+                        tick: v.tick,
+                        distance: v.distance,
+                        frequency: v.frequency,
+                    });
+                    let chosen = select_vibration(current, candidate);
+                    if chosen == Some(candidate) && current != Some(candidate) {
+                        *pending = Some(PendingVibration {
+                            event,
+                            distance,
+                            position,
+                            delay: distance.floor() as u32,
+                            tick: candidate.tick,
+                            frequency,
+                            source: source.map(|source| source.uuid),
+                            projectile_owner: source.and_then(|source| source.projectile_owner),
+                        });
+                    }
+                }
+            }
         }
     }
 
@@ -3031,7 +3326,9 @@ mod tests {
     use tokio::time::{Duration, timeout};
     use uuid::Uuid;
 
-    use super::{World, bedrock_block_breaking_rate, bedrock_chest_block_actor};
+    use super::{
+        World, bedrock_block_breaking_rate, bedrock_chest_block_actor, traverse_vibration_blocks,
+    };
     use crate::item::items::debug_stick::DEBUG_STICK_BLOCK_UPDATE_FLAGS;
     use pumpkin_world::world::BlockFlags;
 
@@ -3580,6 +3877,107 @@ mod tests {
         assert_eq!(actor.get_int("pairx"), Some(4));
         assert_eq!(actor.get_int("pairz"), Some(7));
         assert_eq!(actor.get_bool("pairlead"), Some(true));
+    }
+
+    #[test]
+    fn vibration_traversal_checks_nonzero_same_cell_trace() {
+        let mut visited = Vec::new();
+        assert!(!traverse_vibration_blocks(
+            Vector3::new(0.1, 0.2, 0.3),
+            Vector3::new(0.8, 0.7, 0.6),
+            |block| {
+                visited.push(block);
+                false
+            }
+        ));
+        assert_eq!(visited, [BlockPos::new(0, 0, 0)]);
+        assert!(traverse_vibration_blocks(
+            Vector3::new(0.1, 0.2, 0.3),
+            Vector3::new(0.8, 0.7, 0.6),
+            |block| block == BlockPos::new(0, 0, 0)
+        ));
+    }
+
+    #[test]
+    fn vibration_traversal_checks_start_and_endpoint_cells() {
+        let from = Vector3::new(0.5, 0.5, 0.5);
+        let to = Vector3::new(2.5, 0.5, 0.5);
+        assert!(traverse_vibration_blocks(from, to, |block| block == BlockPos::new(0, 0, 0)));
+        assert!(traverse_vibration_blocks(from, to, |block| block == BlockPos::new(2, 0, 0)));
+    }
+
+    #[test]
+    fn vibration_traversal_ties_step_z_then_y_then_x() {
+        let mut edge = Vec::new();
+        traverse_vibration_blocks(
+            Vector3::new(0.5, 0.5, 0.5),
+            Vector3::new(2.5, 2.5, 0.5),
+            |block| {
+                edge.push(block);
+                false
+            },
+        );
+        assert_eq!(
+            edge,
+            [
+                BlockPos::new(0, 0, 0),
+                BlockPos::new(0, 1, 0),
+                BlockPos::new(1, 1, 0),
+                BlockPos::new(1, 2, 0),
+                BlockPos::new(2, 2, 0),
+            ]
+        );
+
+        let mut corner = Vec::new();
+        traverse_vibration_blocks(
+            Vector3::new(0.5, 0.5, 0.5),
+            Vector3::new(1.5, 1.5, 1.5),
+            |block| {
+                corner.push(block);
+                false
+            },
+        );
+        assert_eq!(
+            corner,
+            [
+                BlockPos::new(0, 0, 0),
+                BlockPos::new(0, 0, 1),
+                BlockPos::new(0, 1, 1),
+                BlockPos::new(1, 1, 1),
+            ]
+        );
+    }
+
+    #[test]
+    fn vibration_traversal_handles_negative_coordinates() {
+        let mut visited = Vec::new();
+        traverse_vibration_blocks(
+            Vector3::new(-0.5, 0.5, 0.5),
+            Vector3::new(-2.5, 0.5, 0.5),
+            |block| {
+                visited.push(block);
+                false
+            },
+        );
+        assert_eq!(
+            visited,
+            [
+                BlockPos::new(-1, 0, 0),
+                BlockPos::new(-2, 0, 0),
+                BlockPos::new(-3, 0, 0),
+            ]
+        );
+    }
+
+    #[test]
+    fn vibration_traversal_zero_length_is_a_miss() {
+        let point = Vector3::new(0.5, 0.5, 0.5);
+        let mut visited = false;
+        assert!(!traverse_vibration_blocks(point, point, |_| {
+            visited = true;
+            true
+        }));
+        assert!(!visited);
     }
 
     #[test]

@@ -801,6 +801,10 @@ pub trait Mob: EntityBase + Send + Sync {
 
     fn get_mob_entity(&self) -> &MobEntity;
 
+    fn dampens_vibrations(&self) -> bool {
+        false
+    }
+
     fn mob_bedrock_identifier(&self) -> Option<&'static str> {
         None
     }
@@ -1229,6 +1233,10 @@ pub trait Mob: EntityBase + Send + Sync {
     }
 }
 impl<T: Mob + Send + 'static> EntityBase for T {
+    fn dampens_vibrations(&self) -> bool {
+        Mob::dampens_vibrations(self)
+    }
+
     fn get_mob(&self) -> Option<&dyn Mob> {
         Some(self)
     }

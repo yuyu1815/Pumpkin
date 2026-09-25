@@ -535,6 +535,14 @@ impl ItemEntity {
 }
 
 impl EntityBase for ItemEntity {
+    fn dampens_vibrations(&self) -> bool {
+        self.item_stack
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .item
+            .has_tag(&pumpkin_data::tag::Item::MINECRAFT_DAMPENS_VIBRATIONS)
+    }
+
     fn tick(&self, caller: &dyn EntityBase, _server: &Server) {
         let entity = &self.entity;
         self.decrement_pickup_delay();

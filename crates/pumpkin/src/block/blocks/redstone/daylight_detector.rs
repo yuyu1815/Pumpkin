@@ -10,6 +10,7 @@ use crate::block::{
     BlockActionResult, BlockBehaviour, BrokenArgs, EmitsRedstonePowerArgs, GetRedstonePowerArgs,
     NormalUseArgs, PlacedArgs,
 };
+use crate::entity::EntityBase;
 use crate::world::World;
 
 type DaylightDetectorProperties = pumpkin_data::block_properties::DaylightDetectorLikeProperties;
@@ -44,9 +45,18 @@ impl BlockBehaviour for DaylightDetectorBlock {
         let new_state = props.to_state_id(args.block);
         args.world
             .set_block_state(args.position, new_state, BlockFlags::NOTIFY_LISTENERS);
-        args.world.emit_game_event(
+        let entity = args.player.get_entity();
+        args.world.emit_game_event_with_source(
             GameEvent::BlockChange.name(),
             args.position.to_centered_f64(),
+            Some(crate::world::SculkEventSource {
+                uuid: entity.entity_uuid,
+                projectile_owner: None,
+                spectator: args.player.is_spectator(),
+                sneaking: entity.is_sneaking(),
+                dampens_vibrations: args.player.dampens_vibrations(),
+            }),
+            Some(new_state),
         );
 
         Self::update_signal_strength(args.world, args.position);

@@ -236,6 +236,11 @@ pub trait EntityBase: Send + Sync + std::any::Any {
         true
     }
 
+    /// Whether this entity behavior dampens sculk vibrations.
+    fn dampens_vibrations(&self) -> bool {
+        false
+    }
+
     /// Whether the entity is immune from explosion knockback and damage
     fn is_immune_to_explosion(&self) -> bool {
         false
@@ -2808,6 +2813,11 @@ impl Entity {
     }
     pub fn is_sneaking(&self) -> bool {
         self.sneaking.load(Ordering::Relaxed)
+    }
+
+    /// Whether this entity behavior dampens sculk vibrations.
+    pub const fn dampens_vibrations(&self) -> bool {
+        false
     }
 
     #[must_use]

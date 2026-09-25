@@ -8,28 +8,165 @@ use crate::block::{
 };
 use crate::world::World;
 use pumpkin_data::block_properties::{
-    CalibratedSculkSensorLikeProperties, HorizontalFacing, SculkSensorLikeProperties,
-    SculkSensorPhase,
+    CalibratedSculkSensorLikeProperties, SculkSensorLikeProperties, SculkSensorPhase,
 };
-use pumpkin_data::{Block, BlockDirection, BlockId, BlockState, BlockStateId};
+use pumpkin_data::{Block, BlockId, BlockState, BlockStateId};
 use pumpkin_util::math::position::BlockPos;
 use pumpkin_world::tick::TickPriority;
 use pumpkin_world::world::BlockFlags;
 
 pub struct SculkSensorBlock;
 
-impl BlockMetadata for SculkSensorBlock {
-    fn ids() -> Box<[BlockId]> {
-        [BlockId::SCULK_SENSOR, BlockId::CALIBRATED_SCULK_SENSOR].into()
+/// Comparator frequency assigned by Mojang's `VibrationSystem`.
+/// Events outside `minecraft:vibrations` intentionally return zero.
+#[must_use]
+pub(crate) const fn vibration_frequency(event: pumpkin_data::game_event::GameEvent) -> i32 {
+    use pumpkin_data::game_event::GameEvent as E;
+    match event {
+        E::Step | E::Swim | E::Flap => 1,
+        E::ProjectileLand | E::HitGround | E::Splash | E::Bounce => 2,
+        E::ItemInteractFinish | E::ProjectileShoot | E::InstrumentPlay => 3,
+        E::EntityAction | E::ElytraGlide | E::Unequip => 4,
+        E::EntityDismount | E::Equip => 5,
+        E::EntityInteract | E::Shear | E::EntityMount => 6,
+        E::EntityDamage => 7,
+        E::Drink | E::Eat => 8,
+        E::ContainerClose | E::BlockClose | E::BlockDeactivate | E::BlockDetach => 9,
+        E::ContainerOpen
+        | E::BlockOpen
+        | E::BlockActivate
+        | E::BlockAttach
+        | E::PrimeFuse
+        | E::NoteBlockPlay => 10,
+        E::BlockChange => 11,
+        E::BlockDestroy | E::FluidPickup => 12,
+        E::BlockPlace | E::FluidPlace => 13,
+        E::EntityPlace | E::LightningStrike | E::Teleport => 14,
+        E::EntityDie | E::Explode => 15,
+        E::Resonate1 => 1,
+        E::Resonate2 => 2,
+        E::Resonate3 => 3,
+        E::Resonate4 => 4,
+        E::Resonate5 => 5,
+        E::Resonate6 => 6,
+        E::Resonate7 => 7,
+        E::Resonate8 => 8,
+        E::Resonate9 => 9,
+        E::Resonate10 => 10,
+        E::Resonate11 => 11,
+        E::Resonate12 => 12,
+        E::Resonate13 => 13,
+        E::Resonate14 => 14,
+        E::Resonate15 => 15,
+        _ => 0,
     }
 }
 
-const fn horizontal_facing_to_dir(facing: HorizontalFacing) -> BlockDirection {
-    match facing {
-        HorizontalFacing::North => BlockDirection::North,
-        HorizontalFacing::South => BlockDirection::South,
-        HorizontalFacing::West => BlockDirection::West,
-        HorizontalFacing::East => BlockDirection::East,
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct VibrationCandidate {
+    pub tick: i64,
+    pub distance: f64,
+    pub frequency: i32,
+}
+
+/// Replaces a selector only within the same posting tick; exact ties retain first arrival.
+pub(crate) fn select_vibration(
+    current: Option<VibrationCandidate>,
+    candidate: VibrationCandidate,
+) -> Option<VibrationCandidate> {
+    match current {
+        None => Some(candidate),
+        Some(current) if current.tick != candidate.tick => Some(current),
+        Some(current)
+            if candidate.distance < current.distance
+                || (candidate.distance == current.distance
+                    && candidate.frequency > current.frequency) =>
+        {
+            Some(candidate)
+        }
+        Some(current) => Some(current),
+    }
+}
+
+#[must_use]
+pub(crate) fn vibration_signal(distance: f64, radius: f64) -> u8 {
+    (15 - (15.0 / radius * distance).floor() as i32).clamp(1, 15) as u8
+}
+
+#[cfg(test)]
+mod vibration_tests {
+    use super::{VibrationCandidate, select_vibration, vibration_frequency, vibration_signal};
+    use pumpkin_data::game_event::GameEvent as E;
+
+    #[test]
+    fn vibration_frequency_table_and_unknown_events() {
+        assert_eq!(vibration_frequency(E::Step), 1);
+        assert_eq!(vibration_frequency(E::Bounce), 2);
+        assert_eq!(vibration_frequency(E::ProjectileShoot), 3);
+        assert_eq!(vibration_frequency(E::EntityAction), 4);
+        assert_eq!(vibration_frequency(E::Equip), 5);
+        assert_eq!(vibration_frequency(E::Shear), 6);
+        assert_eq!(vibration_frequency(E::EntityDamage), 7);
+        assert_eq!(vibration_frequency(E::Eat), 8);
+        assert_eq!(vibration_frequency(E::BlockClose), 9);
+        assert_eq!(vibration_frequency(E::PrimeFuse), 10);
+        assert_eq!(vibration_frequency(E::BlockChange), 11);
+        assert_eq!(vibration_frequency(E::FluidPickup), 12);
+        assert_eq!(vibration_frequency(E::BlockPlace), 13);
+        assert_eq!(vibration_frequency(E::Teleport), 14);
+        assert_eq!(vibration_frequency(E::Explode), 15);
+        assert_eq!(vibration_frequency(E::Resonate13), 13);
+        assert_eq!(vibration_frequency(E::JukeboxPlay), 0);
+    }
+
+    #[test]
+    fn selector_order_and_exact_ties() {
+        let first = VibrationCandidate {
+            tick: 4,
+            distance: 3.0,
+            frequency: 4,
+        };
+        assert_eq!(select_vibration(None, first).unwrap().frequency, 4);
+        let nearer = VibrationCandidate {
+            distance: 2.0,
+            frequency: 1,
+            ..first
+        };
+        assert_eq!(select_vibration(Some(first), nearer).unwrap().distance, 2.0);
+        let freq_tie = VibrationCandidate {
+            distance: 3.0,
+            frequency: 5,
+            ..first
+        };
+        assert_eq!(
+            select_vibration(Some(first), freq_tie).unwrap().frequency,
+            5
+        );
+        let exact_tie = VibrationCandidate {
+            frequency: 4,
+            ..first
+        };
+        assert_eq!(
+            select_vibration(Some(first), exact_tie).unwrap().frequency,
+            4
+        );
+        let next_tick = VibrationCandidate { tick: 5, ..first };
+        assert_eq!(select_vibration(Some(first), next_tick).unwrap().tick, 4);
+    }
+
+    #[test]
+    fn distance_signal_uses_sensor_radius() {
+        assert_eq!(vibration_signal(0.0, 8.0), 15);
+        assert_eq!(vibration_signal(4.0, 8.0), 8);
+        assert_eq!(vibration_signal(8.0, 8.0), 1);
+        assert_eq!(vibration_signal(16.0, 16.0), 1);
+        assert_eq!(vibration_signal(30.0, 16.0), 1);
+    }
+}
+
+impl BlockMetadata for SculkSensorBlock {
+    fn ids() -> Box<[BlockId]> {
+        [BlockId::SCULK_SENSOR, BlockId::CALIBRATED_SCULK_SENSOR].into()
     }
 }
 
@@ -43,7 +180,7 @@ fn sculk_sensor_phase(block: &Block, state_id: BlockStateId) -> SculkSensorPhase
 }
 
 impl SculkSensorBlock {
-    pub fn trigger(world: &Arc<World>, pos: &BlockPos, block: &Block, power: u8) {
+    pub fn trigger(world: &Arc<World>, pos: &BlockPos, block: &Block, power: u8, frequency: i32) {
         if block.id == BlockId::SCULK_SENSOR {
             let state = world.get_block_state(pos);
             let mut props = SculkSensorLikeProperties::from_state_id(state.id);
@@ -54,7 +191,7 @@ impl SculkSensorBlock {
                     *sensor_be
                         .last_vibration_frequency
                         .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner) = power as i32;
+                        .unwrap_or_else(std::sync::PoisonError::into_inner) = frequency;
                 }
 
                 props.sculk_sensor_phase = SculkSensorPhase::Active;
@@ -67,19 +204,6 @@ impl SculkSensorBlock {
             let state = world.get_block_state(pos);
             let mut props = CalibratedSculkSensorLikeProperties::from_state_id(state.id);
             if props.sculk_sensor_phase == SculkSensorPhase::Inactive {
-                let back_dir = horizontal_facing_to_dir(props.facing).opposite();
-                let back_pos = pos.offset(back_dir.to_offset());
-                let back_state = world.get_block_state(&back_pos);
-                let back_block = Block::from_state_id(back_state.id);
-
-                let calibrated_freq = world
-                    .block_registry
-                    .get_weak_redstone_power(back_block, world, &back_pos, back_state, back_dir);
-
-                if calibrated_freq > 0 && calibrated_freq != power {
-                    return;
-                }
-
                 if let Some(be) = world.get_block_entity(pos)
                     && let Some(cal_be) = be
                         .as_any()
@@ -88,14 +212,14 @@ impl SculkSensorBlock {
                     *cal_be
                         .last_vibration_frequency
                         .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner) = power as i32;
+                        .unwrap_or_else(std::sync::PoisonError::into_inner) = frequency;
                 }
 
                 props.sculk_sensor_phase = SculkSensorPhase::Active;
                 props.power = power;
                 world.set_block_state(pos, props.to_state_id(block), BlockFlags::NOTIFY_ALL);
                 world.update_neighbors(pos, None);
-                world.schedule_block_tick(block, *pos, 30, TickPriority::Normal);
+                world.schedule_block_tick(block, *pos, 10, TickPriority::Normal);
             }
         }
     }
