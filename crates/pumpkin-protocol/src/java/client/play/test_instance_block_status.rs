@@ -1,6 +1,6 @@
 use crate::{
     ClientPacket, ServerPacket, VarInt,
-    ser::{NetworkReadSliceExt, NetworkWriteExt, ReadingError, WritingError},
+    ser::{NetworkReadExt, NetworkReadSliceExt, NetworkWriteExt, ReadingError, WritingError},
 };
 use pumpkin_data::packet::clientbound::play::TEST_INSTANCE_BLOCK_STATUS;
 use pumpkin_macros::java_packet;
@@ -69,6 +69,6 @@ mod tests {
         let mut input = bytes.as_slice();
         let decoded = CTestInstanceBlockStatus::read(&mut input, &version).unwrap();
         assert_eq!(decoded.size, packet.size);
-        assert_eq!(input, &[]);
+        assert!(input.is_empty());
     }
 }

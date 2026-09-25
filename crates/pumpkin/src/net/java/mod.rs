@@ -2110,7 +2110,13 @@ mod egress_accounting_tests {
     use crate::net::{ClientPlatform, GameProfile, PacketRateLimiter, PlayerConfig};
     use arc_swap::ArcSwap;
     use bytes::Bytes;
-    use pumpkin_protocol::{ConnectionState, java::client::play::CPlayDisconnect};
+    use pumpkin_protocol::{
+        ConnectionState,
+        java::client::play::{
+            CPlayDisconnect, CWaypoint, TrackedWaypoint, WaypointIcon, WaypointIdentifier,
+            WaypointOperation, WaypointTarget,
+        },
+    };
     use pumpkin_util::{text::TextComponent, version::JavaMinecraftVersion};
     use std::net::SocketAddr;
     use std::sync::{
@@ -2163,6 +2169,47 @@ mod egress_accounting_tests {
         })
         .await
         .expect("egress packet was not accounted");
+    }
+
+    #[tokio::test]
+    async fn rapid_waypoint_track_then_update_stays_fifo_in_writer_queue() {
+        let (mut java, _peer) = fixture().await;
+        java.version.store(JavaMinecraftVersion::V_26_2);
+        java.connection_state.store(ConnectionState::Play);
+        java.configuration_phase.store(ConfigurationPhase::Play);
+        let uuid = Uuid::from_u128(0x16);
+        let waypoint = |operation| {
+            CWaypoint::new(
+                operation,
+                TrackedWaypoint {
+                    identifier: WaypointIdentifier::Uuid(uuid),
+                    icon: WaypointIcon {
+                        style: "minecraft:default",
+                        color: None,
+                    },
+                    target: WaypointTarget::Position(pumpkin_util::math::position::BlockPos::new(
+                        1, 2, 3,
+                    )),
+                },
+            )
+        };
+        let track = waypoint(WaypointOperation::Track);
+        let update = waypoint(WaypointOperation::Update);
+        let track_data = java.serialize_packet(&track).expect("serialize Track");
+        let update_data = java.serialize_packet(&update).expect("serialize Update");
+
+        java.try_send_packet(&track);
+        java.try_send_packet(&update);
+
+        let receiver = java
+            .outgoing_packet_recv
+            .as_mut()
+            .expect("fixture receiver must exist");
+        assert_eq!(receiver.try_recv().expect("queued Track").data, track_data);
+        assert_eq!(
+            receiver.try_recv().expect("queued Update").data,
+            update_data
+        );
     }
 
     #[tokio::test]

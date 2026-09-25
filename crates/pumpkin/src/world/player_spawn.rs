@@ -989,6 +989,7 @@ impl World {
 
         debug!("Sending player teleport to {}", player.gameprofile.name);
         player.request_teleport(position, yaw, pitch);
+        player.enqueue_waypoint_tracks();
 
         let gameprofile = &player.gameprofile;
         let bedrock_player_list = CPlayerList {

@@ -70,6 +70,12 @@ impl From<BedrockScoreboard> for CustomScoreboard {
 pub struct JavaPlayer<'a>(pub &'a Player);
 
 impl JavaPlayer<'_> {
+    pub fn try_enqueue_packet<C: pumpkin_protocol::ClientPacket + Sync>(&self, packet: &C) {
+        if let ClientPlatform::Java(client) = self.0.client.as_ref() {
+            client.try_send_packet(packet);
+        }
+    }
+
     pub async fn send_packet<C: pumpkin_protocol::ClientPacket + Sync>(&self, packet: &C) {
         if let ClientPlatform::Java(client) = self.0.client.as_ref()
             && let Ok(data) = client.serialize_packet(packet)
@@ -420,7 +426,77 @@ fn is_within_block_interaction_range(
         && BoundingBox::from_block(position).squared_magnitude(eye_position) < range * range
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlayerWaypoint {
+    pub style: String,
+    pub color: Option<u32>,
+    pub position: BlockPos,
+}
+
+fn write_waypoints(nbt: &mut NbtCompound, waypoints: &HashMap<Uuid, PlayerWaypoint>) {
+    nbt.put_list(
+        "Waypoints",
+        waypoints
+            .iter()
+            .map(|(uuid, waypoint)| {
+                let mut entry = NbtCompound::new();
+                entry.put_string("UUID", uuid.to_string());
+                entry.put_string("Style", waypoint.style.clone());
+                if let Some(color) = waypoint.color {
+                    entry.put_int("Color", color as i32);
+                }
+                entry.put_int("X", waypoint.position.0.x);
+                entry.put_int("Y", waypoint.position.0.y);
+                entry.put_int("Z", waypoint.position.0.z);
+                NbtTag::Compound(entry)
+            })
+            .collect(),
+    );
+}
+
+fn read_waypoints(nbt: &NbtCompound) -> HashMap<Uuid, PlayerWaypoint> {
+    let mut waypoints = HashMap::new();
+    if let Some(entries) = nbt.get_list("Waypoints") {
+        for entry in entries
+            .iter()
+            .take(1024)
+            .filter_map(NbtTag::extract_compound)
+        {
+            let (Some(uuid), Some(style), Some(x), Some(y), Some(z)) = (
+                entry
+                    .get_string("UUID")
+                    .and_then(|s| Uuid::parse_str(s).ok()),
+                entry.get_string("Style").filter(|s| {
+                    !s.is_empty()
+                        && s.len() <= 256
+                        && pumpkin_util::identifier::Identifier::parse(s).is_ok()
+                }),
+                entry.get_int("X"),
+                entry.get_int("Y"),
+                entry.get_int("Z"),
+            ) else {
+                continue;
+            };
+            let color = entry
+                .get_int("Color")
+                .and_then(|v| u32::try_from(v).ok())
+                .filter(|v| *v <= 0xFF_FFFF);
+            waypoints.insert(
+                uuid,
+                PlayerWaypoint {
+                    style: style.to_owned(),
+                    color,
+                    position: BlockPos::new(x, y, z),
+                },
+            );
+        }
+    }
+    waypoints
+}
+
 pub struct Player {
+    /// The player's client-specific tracked waypoints, keyed by target entity UUID.
+    pub waypoints: Mutex<HashMap<Uuid, PlayerWaypoint>>,
     /// The underlying living entity object that represents the player.
     pub living_entity: LivingEntity,
     /// The player's game profile information, including their username and UUID.
@@ -596,6 +672,31 @@ struct SkinMetadata {
 }
 
 impl Player {
+    pub fn enqueue_waypoint_tracks(&self) {
+        let waypoints = self
+            .waypoints
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for (uuid, state) in waypoints.iter() {
+            let packet = pumpkin_protocol::java::client::play::CWaypoint::new(
+                pumpkin_protocol::java::client::play::WaypointOperation::Track,
+                pumpkin_protocol::java::client::play::TrackedWaypoint {
+                    identifier: pumpkin_protocol::java::client::play::WaypointIdentifier::Uuid(
+                        *uuid,
+                    ),
+                    icon: pumpkin_protocol::java::client::play::WaypointIcon {
+                        style: &state.style,
+                        color: state.color,
+                    },
+                    target: pumpkin_protocol::java::client::play::WaypointTarget::Position(
+                        state.position,
+                    ),
+                },
+            );
+            JavaPlayer(self).try_enqueue_packet(&packet);
+        }
+    }
+
     #[must_use]
     pub fn fetch_skin(properties: &[Property]) -> Option<pumpkin_protocol::bedrock::client::Skin> {
         let textures_prop = properties.iter().find(|p| &*p.name == "textures")?;
@@ -747,6 +848,7 @@ impl Player {
 
         Self {
             living_entity,
+            waypoints: Mutex::new(HashMap::new()),
             config: ArcSwap::new(Arc::new(config)),
             advancements: Arc::new(Mutex::new(
                 server
@@ -7008,12 +7110,23 @@ impl EntityBase for Player {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .write_nbt(nbt);
+        write_waypoints(
+            nbt,
+            &self
+                .waypoints
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
     }
 
     #[expect(clippy::too_many_lines)]
     fn read_custom_nbt(&self, nbt: &NbtCompound) {
         self.inventory.read_nbt_non_mut(nbt);
         self.ender_chest_inventory.read_nbt_non_mut(nbt);
+        *self
+            .waypoints
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = read_waypoints(nbt);
         self.living_entity
             .apply_current_equipment_attribute_modifiers();
 
@@ -8007,12 +8120,46 @@ impl InventoryPlayer for Player {
 #[cfg(test)]
 mod tests {
     use super::{
-        bedrock_inventory_slot, hand_swap_inventory_slots, is_within_block_interaction_range,
-        read_root_vehicle, write_root_vehicle,
+        PlayerWaypoint, bedrock_inventory_slot, hand_swap_inventory_slots,
+        is_within_block_interaction_range, read_root_vehicle, read_waypoints, write_root_vehicle,
+        write_waypoints,
     };
     use pumpkin_nbt::{compound::NbtCompound, tag::NbtTag};
     use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
+    use std::collections::HashMap;
     use uuid::Uuid;
+
+    #[test]
+    fn waypoint_state_round_trips_through_custom_nbt() {
+        let uuid = Uuid::from_u128(0x1234);
+        let waypoints = HashMap::from([(
+            uuid,
+            PlayerWaypoint {
+                style: "minecraft:default".to_owned(),
+                color: Some(0x12_3456),
+                position: BlockPos::new(-2, 64, 9),
+            },
+        )]);
+        let mut nbt = NbtCompound::new();
+        write_waypoints(&mut nbt, &waypoints);
+        assert_eq!(read_waypoints(&nbt), waypoints);
+    }
+
+    #[test]
+    fn waypoint_restore_drops_invalid_styles() {
+        let uuid = Uuid::from_u128(0x5678);
+        let waypoints = HashMap::from([(
+            uuid,
+            PlayerWaypoint {
+                style: "invalid style".to_owned(),
+                color: None,
+                position: BlockPos::new(1, 2, 3),
+            },
+        )]);
+        let mut nbt = NbtCompound::new();
+        write_waypoints(&mut nbt, &waypoints);
+        assert!(read_waypoints(&nbt).is_empty());
+    }
 
     #[test]
     fn remote_block_menu_click_gate_preserves_inventory_and_near_range_is_allowed() {
