@@ -18,6 +18,47 @@ pub struct SculkEventSource {
     pub sneaking: bool,
     pub dampens_vibrations: bool,
 }
+
+fn catalyst_experience_charge(eligible: bool, reward: i32) -> Option<i32> {
+    (eligible && reward > 0).then_some(reward)
+}
+
+fn prefer_catalyst(current: Option<(f64, BlockPos)>, candidate: (f64, BlockPos)) -> bool {
+    current.is_none_or(|current| {
+        candidate.0.total_cmp(&current.0).is_lt()
+            || (candidate.0 == current.0
+                && (candidate.1.0.x, candidate.1.0.y, candidate.1.0.z)
+                    < (current.1.0.x, current.1.0.y, current.1.0.z))
+    })
+}
+
+fn sculk_event_listeners(event: pumpkin_data::game_event::GameEvent) -> (bool, bool) {
+    use pumpkin_data::tag::Taggable;
+    (
+        event
+            .is_tagged_with("minecraft:vibrations")
+            .unwrap_or(false),
+        event
+            .is_tagged_with("minecraft:shrieker_can_listen")
+            .unwrap_or(false),
+    )
+}
+
+fn shrieker_source_eligible(
+    projectile_owner: bool,
+    direct_player: bool,
+    item_owner: bool,
+    passenger: bool,
+) -> bool {
+    projectile_owner || direct_player || item_owner || passenger
+}
+
+fn within_sculk_listener_radius(event: BlockPos, listener: BlockPos, radius: i32) -> bool {
+    let dx = listener.0.x - event.0.x;
+    let dy = listener.0.y - event.0.y;
+    let dz = listener.0.z - event.0.z;
+    dx * dx + dy * dy + dz * dz <= radius * radius
+}
 mod block_access;
 mod block_entity;
 mod broadcast;
@@ -1602,6 +1643,10 @@ impl World {
     }
 
     pub fn spawn_entity(self: &Arc<Self>, entity: Arc<dyn EntityBase>) {
+        self.try_spawn_entity(entity);
+    }
+
+    pub fn try_spawn_entity(self: &Arc<Self>, entity: Arc<dyn EntityBase>) -> bool {
         let mut event = crate::plugin::api::events::entity::entity_spawn::EntitySpawnEvent::new(
             entity.get_entity().entity_id,
             entity.get_entity().entity_type.id.to_string(),
@@ -1612,15 +1657,20 @@ impl World {
             server.plugin_manager.fire_blocking(&server, &mut event);
         }
         if event.cancelled {
-            return;
+            return false;
         }
 
         entity.init_data_tracker();
-        self.add_entity_silent(entity);
+        self.insert_entity_silent(entity)
     }
 
     #[expect(clippy::needless_pass_by_value)]
     pub fn add_entity_silent(&self, entity: Arc<dyn EntityBase>) {
+        self.insert_entity_silent(entity);
+    }
+
+    #[expect(clippy::needless_pass_by_value)]
+    fn insert_entity_silent(&self, entity: Arc<dyn EntityBase>) -> bool {
         let base_entity = entity.get_entity();
 
         // Guard against duplicate entities with the same UUID.
@@ -1632,7 +1682,7 @@ impl World {
             .iter()
             .any(|e| e.get_entity().entity_uuid == base_entity.entity_uuid);
         if already_exists {
-            return;
+            return false;
         }
 
         // The entity stays live-only: it is written to its chunk's saved data on
@@ -1646,6 +1696,7 @@ impl World {
             new_entities.push(entity.clone());
             new_entities
         });
+        true
     }
 
     pub fn remove_entity(&self, entity: &dyn EntityBase) {
@@ -2657,20 +2708,54 @@ impl World {
         source: Option<crate::world::SculkEventSource>,
         affected_state: Option<pumpkin_data::BlockStateId>,
     ) {
-        let mut event = crate::plugin::api::events::world::generic_game::GenericGameEvent::new(
-            event_key.into(),
+        self.emit_game_event_internal(event_key.into(), position, source, affected_state, None);
+    }
+
+    pub(crate) fn emit_entity_die(
+        &self,
+        position: Vector3<f64>,
+        source: crate::world::SculkEventSource,
+        experience_eligible: bool,
+        experience_reward: i32,
+    ) -> bool {
+        self.emit_game_event_internal(
+            "entity_die".to_owned(),
             position,
+            Some(source),
+            None,
+            Some((experience_eligible, experience_reward)),
+        )
+        .1
+    }
+
+    fn emit_game_event_internal(
+        &self,
+        event_key: String,
+        position: Vector3<f64>,
+        source: Option<crate::world::SculkEventSource>,
+        affected_state: Option<pumpkin_data::BlockStateId>,
+        catalyst_experience: Option<(bool, i32)>,
+    ) -> (bool, bool) {
+        let mut event = crate::plugin::api::events::world::generic_game::GenericGameEvent::new(
+            event_key, position,
         );
         if let Some(server) = self.server.upgrade() {
             server.plugin_manager.fire_blocking(&server, &mut event);
         }
-        if !event.cancelled {
-            if let Some(game_event) =
-                pumpkin_data::game_event::GameEvent::from_name(&event.event_key)
-            {
-                self.dispatch_sculk_vibration(game_event, event.position, source, affected_state);
-            }
+        if event.cancelled {
+            return (true, false);
         }
+        let catalyst_consumed = pumpkin_data::game_event::GameEvent::from_name(&event.event_key)
+            .is_some_and(|game_event| {
+                self.dispatch_sculk_vibration(
+                    game_event,
+                    event.position,
+                    source,
+                    affected_state,
+                    catalyst_experience,
+                )
+            });
+        (false, catalyst_consumed)
     }
 
     fn vibration_occluded(&self, event: Vector3<f64>, listener: Vector3<f64>) -> bool {
@@ -2707,23 +2792,50 @@ impl World {
         })
     }
 
+    pub(crate) fn sculk_source_for_vibration(
+        &self,
+        uuid: uuid::Uuid,
+        projectile_owner: Option<uuid::Uuid>,
+    ) -> Option<SculkEventSource> {
+        let entity = self.get_entity_by_uuid(uuid)?;
+        let player = entity.get_player();
+        Some(SculkEventSource {
+            uuid,
+            projectile_owner,
+            spectator: player.is_some_and(|player| player.is_spectator()),
+            sneaking: entity.get_entity().is_sneaking(),
+            dampens_vibrations: entity.dampens_vibrations(),
+        })
+    }
+
     fn dispatch_sculk_vibration(
         &self,
         event: pumpkin_data::game_event::GameEvent,
         position: Vector3<f64>,
         source: Option<SculkEventSource>,
         affected_state: Option<pumpkin_data::BlockStateId>,
-    ) {
+        catalyst_experience: Option<(bool, i32)>,
+    ) -> bool {
         use crate::block::blocks::redstone::sculk_sensor::{
             VibrationCandidate, select_vibration, vibration_frequency,
         };
         use crate::block::entities::{
             calibrated_sculk_sensor::CalibratedSculkSensorBlockEntity,
             sculk_sensor::{PendingVibration, SculkSensorBlockEntity},
+            sculk_shrieker::SculkShriekerBlockEntity,
         };
+        let catalyst_consumed = catalyst_experience.is_some_and(|(eligible, reward)| {
+            event == pumpkin_data::game_event::GameEvent::EntityDie
+                && source.is_some()
+                && self.dispatch_catalyst_death(event, true, position, eligible, reward)
+        });
+        let (sensor_listens, shrieker_listens) = sculk_event_listeners(event);
+        if !sensor_listens && !shrieker_listens {
+            return catalyst_consumed;
+        }
         let frequency = vibration_frequency(event);
-        if frequency == 0 {
-            return;
+        if sensor_listens && frequency == 0 && !shrieker_listens {
+            return catalyst_consumed;
         }
         let ignore_sneaking = pumpkin_data::tag::get_tag_values(
             pumpkin_data::tag::RegistryKey::GameEvent,
@@ -2733,15 +2845,14 @@ impl World {
         if source
             .is_some_and(|s| s.spectator || (s.sneaking && ignore_sneaking) || s.dampens_vibrations)
         {
-            return;
+            return catalyst_consumed;
         }
-        use pumpkin_data::tag::Taggable;
         if affected_state.is_some_and(|state| {
             Block::from_state_id(state)
                 .is_tagged_with("minecraft:dampens_vibrations")
                 .unwrap_or(false)
         }) {
-            return;
+            return catalyst_consumed;
         }
         let event_block =
             pumpkin_util::math::position::BlockPos::floored(position.x, position.y, position.z);
@@ -2758,22 +2869,65 @@ impl World {
                     continue;
                 };
                 for (pos, be) in entities.iter() {
-                    let Some((selector, current, sensor_radius)) = be
+                    let Some((selector, current, sensor_radius, is_shrieker)) = be
                         .as_any()
                         .downcast_ref::<SculkSensorBlockEntity>()
-                        .map(|e| (&e.selector_vibration, &e.pending_vibration, 8.0))
+                        .map(|e| (&e.selector_vibration, &e.pending_vibration, 8.0, false))
                         .or_else(|| {
                             be.as_any()
                                 .downcast_ref::<CalibratedSculkSensorBlockEntity>()
-                                .map(|e| (&e.selector_vibration, &e.pending_vibration, 16.0))
+                                .map(|e| (&e.selector_vibration, &e.pending_vibration, 16.0, false))
+                        })
+                        .or_else(|| {
+                            be.as_any()
+                                .downcast_ref::<SculkShriekerBlockEntity>()
+                                .map(|e| (&e.selector_vibration, &e.pending_vibration, 8.0, true))
                         })
                     else {
                         continue;
                     };
-                    let dx = pos.0.x - event_block.0.x;
-                    let dy = pos.0.y - event_block.0.y;
-                    let dz = pos.0.z - event_block.0.z;
-                    if dx * dx + dy * dy + dz * dz > (sensor_radius * sensor_radius) as i32 {
+                    if is_shrieker != shrieker_listens || (!is_shrieker && !sensor_listens) {
+                        continue;
+                    }
+                    if is_shrieker
+                        && !source.is_some_and(|source| {
+                            let projectile_owner = source
+                                .projectile_owner
+                                .and_then(|owner| self.get_player_by_uuid(owner))
+                                .is_some();
+                            let direct_player = self.get_player_by_uuid(source.uuid).is_some();
+                            let source_entity = self.get_entity_by_uuid(source.uuid);
+                            let item_owner = source_entity.as_ref().is_some_and(|entity| {
+                                entity
+                                    .get_item_entity()
+                                    .and_then(ItemEntity::get_owner)
+                                    .and_then(|owner| self.get_player_by_uuid(owner))
+                                    .is_some()
+                            });
+                            let passenger = source_entity.is_some_and(|entity| {
+                                entity
+                                    .get_entity()
+                                    .passengers
+                                    .lock()
+                                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                                    .first()
+                                    .and_then(|passenger| passenger.get_player())
+                                    .and_then(|passenger| {
+                                        self.get_player_by_uuid(passenger.gameprofile.id)
+                                    })
+                                    .is_some()
+                            });
+                            shrieker_source_eligible(
+                                projectile_owner,
+                                direct_player,
+                                item_owner,
+                                passenger,
+                            )
+                        })
+                    {
+                        continue;
+                    }
+                    if !within_sculk_listener_radius(event_block, *pos, sensor_radius as i32) {
                         continue;
                     }
                     if current
@@ -2832,6 +2986,13 @@ impl World {
                         {
                             continue;
                         }
+                    } else if is_shrieker
+                        && pumpkin_data::block_properties::SculkShriekerLikeProperties::from_state_id(
+                            state.id,
+                        )
+                        .shrieking
+                    {
+                        continue;
                     }
                     let center = Vector3::new(
                         f64::from(pos.0.x) + 0.5,
@@ -2841,7 +3002,7 @@ impl World {
                     let distance = (center.x - position.x)
                         .hypot(center.y - position.y)
                         .hypot(center.z - position.z);
-                    if !self.vibration_occluded(position, center) {
+                    if self.vibration_occluded(position, center) {
                         continue;
                     }
                     let mut pending = selector
@@ -2873,6 +3034,73 @@ impl World {
                 }
             }
         }
+        catalyst_consumed
+    }
+
+    fn dispatch_catalyst_death(
+        &self,
+        event: pumpkin_data::game_event::GameEvent,
+        has_entity_source: bool,
+        event_position: Vector3<f64>,
+        experience_eligible: bool,
+        experience_reward: i32,
+    ) -> bool {
+        use crate::block::blocks::sculk::sculk_catalyst::{bloom, hears_entity_death};
+        use crate::block::entities::sculk_catalyst::SculkCatalystBlockEntity;
+        let event_block = BlockPos::floored(event_position.x, event_position.y, event_position.z);
+        let effect_position =
+            BlockPos::floored(event_position.x, event_position.y + 0.5, event_position.z);
+        let mut nearest: Option<(f64, BlockPos)> = None;
+        for cx in ((event_block.0.x - 8) >> 4)..=((event_block.0.x + 8) >> 4) {
+            for cz in ((event_block.0.z - 8) >> 4)..=((event_block.0.z + 8) >> 4) {
+                let Some(entities) = self.block_entities.get(&Vector2::new(cx, cz)) else {
+                    continue;
+                };
+                for (position, entity) in entities.iter() {
+                    if entity
+                        .as_any()
+                        .downcast_ref::<SculkCatalystBlockEntity>()
+                        .is_none()
+                    {
+                        continue;
+                    }
+                    let center = position.to_centered_f64();
+                    let distance = (center.x - event_position.x)
+                        .hypot(center.y - event_position.y)
+                        .hypot(center.z - event_position.z);
+                    if hears_entity_death(event, has_entity_source, distance)
+                        && self
+                            .get_block_state_if_loaded(position)
+                            .is_some_and(|state| {
+                                Block::from_state_id(state.id).id
+                                    == pumpkin_data::BlockId::SCULK_CATALYST
+                            })
+                    {
+                        let candidate = (distance, *position);
+                        if prefer_catalyst(nearest, candidate) {
+                            nearest = Some(candidate);
+                        }
+                    }
+                }
+            }
+        }
+        let Some((_, catalyst_pos)) = nearest else {
+            return false;
+        };
+        if let Some(charge) = catalyst_experience_charge(experience_eligible, experience_reward) {
+            if let Some(entities) = self.block_entities.get(&catalyst_pos.chunk_position())
+                && let Some(entity) = entities.get(&catalyst_pos)
+                && let Some(catalyst) = entity.as_any().downcast_ref::<SculkCatalystBlockEntity>()
+            {
+                catalyst
+                    .spreader
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .add_cursors(effect_position, charge);
+            }
+        }
+        bloom(self, &catalyst_pos, &effect_position);
+        true
     }
 
     pub async fn unload(self: &Arc<Self>) {
@@ -3327,10 +3555,68 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        World, bedrock_block_breaking_rate, bedrock_chest_block_actor, traverse_vibration_blocks,
+        World, bedrock_block_breaking_rate, bedrock_chest_block_actor, catalyst_experience_charge,
+        prefer_catalyst, sculk_event_listeners, shrieker_source_eligible,
+        traverse_vibration_blocks, within_sculk_listener_radius,
     };
     use crate::item::items::debug_stick::DEBUG_STICK_BLOCK_UPDATE_FLAGS;
     use pumpkin_world::world::BlockFlags;
+
+    #[test]
+    fn catalyst_selects_one_nearest_candidate_with_stable_ties() {
+        let near = (2.0, BlockPos::new(1, 2, 3));
+        let far = (4.0, BlockPos::new(0, 0, 0));
+        assert!(prefer_catalyst(None, far));
+        assert!(prefer_catalyst(Some(far), near));
+        assert!(!prefer_catalyst(Some(near), far));
+        assert!(prefer_catalyst(Some((2.0, BlockPos::new(2, 2, 3))), near));
+    }
+
+    #[test]
+    fn catalyst_charges_only_positive_eligible_experience() {
+        assert_eq!(catalyst_experience_charge(true, 7), Some(7));
+        assert_eq!(catalyst_experience_charge(true, 0), None);
+        assert_eq!(catalyst_experience_charge(false, 7), None);
+    }
+
+    #[test]
+    fn shrieker_keeps_block_radius_eligibility_when_exact_distance_exceeds_eight() {
+        let event_position = Vector3::new(8.99, 0.5, 0.5);
+        let event_block = BlockPos::floored(event_position.x, event_position.y, event_position.z);
+        let listener_block = BlockPos::new(0, 0, 0);
+        let listener_center = listener_block.to_centered_f64();
+        let exact_distance = (listener_center.x - event_position.x)
+            .hypot(listener_center.y - event_position.y)
+            .hypot(listener_center.z - event_position.z);
+
+        assert!(within_sculk_listener_radius(event_block, listener_block, 8));
+        assert!(exact_distance > 8.0);
+    }
+
+    #[test]
+    fn shrieker_accepts_player_owned_item_entity() {
+        assert!(shrieker_source_eligible(false, false, true, false));
+    }
+
+    #[test]
+    fn shrieker_rejects_ownerless_item_entity() {
+        assert!(!shrieker_source_eligible(false, false, false, false));
+    }
+
+    #[test]
+    fn sculk_vibration_and_shrieker_routes_use_their_generated_tags() {
+        use pumpkin_data::game_event::GameEvent;
+
+        assert_eq!(sculk_event_listeners(GameEvent::Step), (true, false));
+        assert_eq!(
+            sculk_event_listeners(GameEvent::SculkSensorTendrilsClicking),
+            (true, true)
+        );
+        assert_eq!(
+            sculk_event_listeners(GameEvent::JukeboxPlay),
+            (false, false)
+        );
+    }
 
     fn test_world(root: &Path) -> Arc<World> {
         let config = LevelConfig {

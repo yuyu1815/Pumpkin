@@ -1,6 +1,7 @@
 use crate::entity::player::statistics::StatisticCategory;
 use crate::server::Server;
 use core::f32;
+use crossbeam::atomic::AtomicCell;
 use pumpkin_data::damage::DamageType;
 use pumpkin_data::data_component_impl::DamageResistantImpl;
 use pumpkin_data::data_component_impl::DamageResistantType;
@@ -16,6 +17,7 @@ use pumpkin_util::math::atomic_f32::AtomicF32;
 use pumpkin_util::math::vector3::Vector3;
 use pumpkin_util::version::JavaMinecraftVersion;
 use std::sync::atomic::Ordering::{AcqRel, Relaxed};
+use uuid::Uuid;
 
 use std::sync::{
     Arc, Mutex,
@@ -38,6 +40,7 @@ pub struct ItemEntity {
     never_despawn: AtomicBool,
     never_pickup: AtomicBool,
     merge_reserved: AtomicBool,
+    owner: AtomicCell<Option<Uuid>>,
 }
 
 struct ItemMergeReservation<'a> {
@@ -108,6 +111,7 @@ impl ItemEntity {
             never_despawn: AtomicBool::new(false),
             never_pickup: AtomicBool::new(false),
             merge_reserved: AtomicBool::new(false),
+            owner: AtomicCell::new(None),
         }
     }
 
@@ -136,6 +140,7 @@ impl ItemEntity {
             never_despawn: AtomicBool::new(false),
             never_pickup: AtomicBool::new(false),
             merge_reserved: AtomicBool::new(false),
+            owner: AtomicCell::new(None),
         }
     }
 
@@ -151,6 +156,7 @@ impl ItemEntity {
             never_despawn: AtomicBool::new(false),
             never_pickup: AtomicBool::new(false),
             merge_reserved: AtomicBool::new(false),
+            owner: AtomicCell::new(None),
         }
     }
 
@@ -168,6 +174,14 @@ impl ItemEntity {
 
     pub const fn get_entity(&self) -> &Entity {
         &self.entity
+    }
+
+    pub fn set_owner(&self, owner: Option<Uuid>) {
+        self.owner.store(owner);
+    }
+
+    pub fn get_owner(&self) -> Option<Uuid> {
+        self.owner.load()
     }
 
     pub fn can_merge(&self) -> bool {
@@ -711,9 +725,14 @@ impl EntityBase for ItemEntity {
             self.pickup_delay.load(Ordering::Relaxed) as i16,
         );
         nbt.put_short("Health", self.health.load(Relaxed) as i16);
+        if let Some(owner) = self.get_owner() {
+            nbt.put_uuid("Owner", owner);
+        }
     }
 
     fn read_custom_nbt(&self, nbt: &NbtCompound) {
+        self.set_owner(nbt.get_uuid("Owner"));
+
         // Restore the item stack from the "Item" compound
         if let Some(item_compound) = nbt.get_compound("Item")
             && let Some(stack) = ItemStack::read_item_stack(item_compound)

@@ -861,6 +861,10 @@ pub struct Entity {
     pub last_pos: AtomicCell<Vector3<f64>>,
     /// The last movement vector
     pub movement: AtomicCell<Vector3<f64>>,
+    /// Accumulated movement distance used to emit STEP/SWIM game events.
+    pub movement_distance: AtomicCell<f64>,
+    /// Distance at which the next STEP/SWIM game event is attempted.
+    pub next_step_distance: AtomicCell<f64>,
     /// The entity's position rounded to the nearest block coordinates
     pub block_pos: AtomicCell<BlockPos>,
     /// The block supporting the entity
@@ -1040,6 +1044,8 @@ impl Entity {
             pos: AtomicCell::new(position),
             last_pos: AtomicCell::new(position),
             movement: AtomicCell::new(Vector3::default()),
+            movement_distance: AtomicCell::new(0.0),
+            next_step_distance: AtomicCell::new(1.0),
             block_pos: AtomicCell::new(BlockPos(Vector3::new(floor_x, floor_y, floor_z))),
             supporting_block_pos: AtomicCell::new(None),
             chunk_pos: AtomicCell::new(Vector2::new(

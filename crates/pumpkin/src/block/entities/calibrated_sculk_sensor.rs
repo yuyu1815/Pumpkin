@@ -86,7 +86,7 @@ impl BlockEntity for CalibratedSculkSensorBlockEntity {
         if let Some(v) = *pending {
             if v.delay == 0 {
                 let block = world.get_block(&self.position);
-                SculkSensorBlock::trigger(
+                let activated = SculkSensorBlock::trigger(
                     world,
                     &self.position,
                     block,
@@ -94,6 +94,18 @@ impl BlockEntity for CalibratedSculkSensorBlockEntity {
                     v.frequency,
                 );
                 *pending = None;
+                drop(selector);
+                drop(pending);
+                if activated {
+                    world.emit_game_event_with_source(
+                        pumpkin_data::game_event::GameEvent::SculkSensorTendrilsClicking.name(),
+                        self.position.to_centered_f64(),
+                        v.source.and_then(|uuid| {
+                            world.sculk_source_for_vibration(uuid, v.projectile_owner)
+                        }),
+                        None,
+                    );
+                }
             } else {
                 *pending = Some(PendingVibration {
                     delay: v.delay - 1,

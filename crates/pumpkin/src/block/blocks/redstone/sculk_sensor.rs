@@ -180,7 +180,14 @@ fn sculk_sensor_phase(block: &Block, state_id: BlockStateId) -> SculkSensorPhase
 }
 
 impl SculkSensorBlock {
-    pub fn trigger(world: &Arc<World>, pos: &BlockPos, block: &Block, power: u8, frequency: i32) {
+    pub fn trigger(
+        world: &Arc<World>,
+        pos: &BlockPos,
+        block: &Block,
+        power: u8,
+        frequency: i32,
+    ) -> bool {
+        let mut activated = false;
         if block.id == BlockId::SCULK_SENSOR {
             let state = world.get_block_state(pos);
             let mut props = SculkSensorLikeProperties::from_state_id(state.id);
@@ -199,6 +206,7 @@ impl SculkSensorBlock {
                 world.set_block_state(pos, props.to_state_id(block), BlockFlags::NOTIFY_ALL);
                 world.update_neighbors(pos, None);
                 world.schedule_block_tick(block, *pos, 30, TickPriority::Normal);
+                activated = true;
             }
         } else if block.id == BlockId::CALIBRATED_SCULK_SENSOR {
             let state = world.get_block_state(pos);
@@ -220,8 +228,10 @@ impl SculkSensorBlock {
                 world.set_block_state(pos, props.to_state_id(block), BlockFlags::NOTIFY_ALL);
                 world.update_neighbors(pos, None);
                 world.schedule_block_tick(block, *pos, 10, TickPriority::Normal);
+                activated = true;
             }
         }
+        activated
     }
 }
 

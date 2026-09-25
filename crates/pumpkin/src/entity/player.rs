@@ -2704,6 +2704,7 @@ impl Player {
     #[expect(clippy::too_many_lines)]
     pub fn tick<'a>(&'a self, server: &'a Server) {
         self.process_inbound_packets();
+        crate::block::blocks::sculk::sculk_shrieker::tick_warden_spawn_tracker(self);
 
         if self.is_spectator() {
             self.living_entity
@@ -5150,6 +5151,7 @@ impl Player {
         let item_entity = Arc::new(ItemEntity::new_with_velocity(
             entity, item_stack, velocity, 40,
         ));
+        item_entity.set_owner(Some(self.gameprofile.id));
         self.world().spawn_entity(item_entity);
     }
 

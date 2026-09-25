@@ -210,6 +210,34 @@ fn is_allowed_by_team_rules(
         || same_team
 }
 
+fn advance_step_distance(distance: &mut f64, next_step: &mut f64, movement: f64) -> bool {
+    *distance += movement * 0.6;
+    if *distance > *next_step {
+        *next_step = distance.floor() + 1.0;
+        true
+    } else {
+        false
+    }
+}
+
+fn movement_emission_suppressed(
+    is_player: bool,
+    flying: bool,
+    on_ground: bool,
+    sneaking: bool,
+    passenger: bool,
+) -> bool {
+    passenger || (is_player && (flying || (on_ground && sneaking)))
+}
+
+fn should_emit_swim(outer_gate_non_air: bool, step_emitted: bool, in_water: bool) -> bool {
+    outer_gate_non_air && !step_emitted && in_water
+}
+
+fn should_drop_experience(reward: i32, catalyst_consumed: bool) -> bool {
+    reward > 0 && !catalyst_consumed
+}
+
 impl LivingEntity {
     const USING_ITEM_FLAG: u8 = 1;
     const OFF_HAND_ACTIVE_FLAG: u8 = 2;
@@ -2135,17 +2163,33 @@ impl LivingEntity {
                 ..Default::default()
             };
 
+            let experience_eligible = params.killed_by_player.unwrap_or(false)
+                && world.level_info.load().game_rules.mob_drops;
+            let experience_reward = if experience_eligible {
+                dyn_self.get_experience_reward(killer)
+            } else {
+                0
+            };
+            // Fire entity_die once, before deciding whether normal XP is dropped.
+            let catalyst_consumed = world.emit_entity_die(
+                self.entity.pos.load(),
+                crate::world::SculkEventSource {
+                    uuid: self.entity.entity_uuid,
+                    projectile_owner: None,
+                    spectator: false,
+                    sneaking: false,
+                    dampens_vibrations: false,
+                },
+                experience_eligible,
+                experience_reward,
+            );
+
             // Drop loot
             self.drop_loot(&params);
 
-            // Award experience
-            if params.killed_by_player.unwrap_or(false)
-                && world.level_info.load().game_rules.mob_drops
-            {
-                let amount = dyn_self.get_experience_reward(killer);
-                if amount > 0 {
-                    ExperienceOrbEntity::spawn(&world, self.entity.pos.load(), amount);
-                }
+            // Award experience unless a Catalyst consumed the death event.
+            if should_drop_experience(experience_reward, catalyst_consumed) {
+                ExperienceOrbEntity::spawn(&world, self.entity.pos.load(), experience_reward);
             }
             self.entity.pose.store(EntityPose::Dying);
 
@@ -3396,6 +3440,94 @@ impl LivingEntity {
         true
     }
 
+    fn emit_movement_game_event(&self, caller: &dyn EntityBase, supporting_pos: Option<BlockPos>) {
+        let entity = caller.get_entity();
+        let world = entity.world.load();
+        let position = entity.pos.load();
+        let current_pos = entity.block_pos.load();
+        let on_pos = BlockPos(Vector3::new(
+            current_pos.0.x,
+            (position.y - 0.2).floor() as i32,
+            current_pos.0.z,
+        ));
+        let outer_state = world.get_block_state(&on_pos);
+        if outer_state.is_air() {
+            return;
+        }
+        let current_state = world.get_block_state(&current_pos);
+        let current_block = pumpkin_data::Block::from_state_id(current_state.id);
+        let climbable = current_block.has_tag(&tag::Block::MINECRAFT_CLIMBABLE);
+        let movement = entity.movement.load();
+        let movement_distance = if climbable {
+            movement.horizontal_length()
+        } else {
+            movement.length()
+        };
+        let mut distance = entity.movement_distance.load();
+        let mut next_step = entity.next_step_distance.load();
+        if !advance_step_distance(&mut distance, &mut next_step, movement_distance) {
+            entity.movement_distance.store(distance);
+            return;
+        }
+        entity.movement_distance.store(distance);
+        entity.next_step_distance.store(next_step);
+
+        let is_sneaking = entity.is_sneaking();
+        let is_player = caller.get_player();
+        let flying = is_player.is_some_and(super::player::Player::is_flying);
+        if movement_emission_suppressed(
+            is_player.is_some(),
+            flying,
+            entity.on_ground.load(Relaxed),
+            is_sneaking,
+            entity.has_vehicle(),
+        ) {
+            return;
+        }
+
+        let supporting_state = supporting_pos.map(|pos| (pos, world.get_block_state(&pos)));
+        let state = if current_state.is_air() {
+            supporting_state
+                .as_ref()
+                .map_or(current_state, |(_, state)| *state)
+        } else {
+            current_state
+        };
+        let block = pumpkin_data::Block::from_state_id(state.id);
+        let on_rails = block.has_tag(&tag::Block::MINECRAFT_RAILS)
+            || supporting_state.as_ref().is_some_and(|(_, state)| {
+                pumpkin_data::Block::from_state_id(state.id).has_tag(&tag::Block::MINECRAFT_RAILS)
+            });
+        let allowed_block_step = entity.on_ground.load(Relaxed)
+            || climbable
+            || (is_sneaking && movement.y != 0.0)
+            || on_rails;
+        let source = Some(crate::world::SculkEventSource {
+            uuid: entity.entity_uuid,
+            projectile_owner: None,
+            spectator: caller.is_spectator(),
+            sneaking: is_sneaking,
+            dampens_vibrations: caller.dampens_vibrations(),
+        });
+
+        let step_emitted = !entity.is_swimming() && allowed_block_step && !state.is_air();
+        if step_emitted {
+            world.emit_game_event_with_source(
+                pumpkin_data::game_event::GameEvent::Step.name(),
+                position,
+                source,
+                Some(state.id),
+            );
+        } else if should_emit_swim(!outer_state.is_air(), step_emitted, entity.is_in_water()) {
+            world.emit_game_event_with_source(
+                pumpkin_data::game_event::GameEvent::Swim.name(),
+                position,
+                source,
+                None,
+            );
+        }
+    }
+
     pub fn damage(&self, caller: &dyn EntityBase, amount: f32, damage_type: DamageType) -> bool {
         self.damage_with_context(caller, amount, damage_type, None, None, None)
     }
@@ -3474,6 +3606,8 @@ impl EntityBase for LivingEntity {
             || self.entity.get_supporting_block_pos(),
             super::player::Player::get_supporting_block_pos,
         );
+
+        self.emit_movement_game_event(caller, supporting_pos);
 
         // Notify the block under the entity each tick if a supporting block position is found
         if self.entity.is_affected_by_blocks()
@@ -3999,6 +4133,55 @@ pub(crate) const fn bypasses_armor_durability(damage_type: &DamageType) -> bool 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn death_experience_is_kept_without_catalyst_and_suppressed_when_consumed() {
+        assert!(should_drop_experience(7, false)); // no Catalyst or cancelled event
+        assert!(!should_drop_experience(7, true)); // positive reward consumed
+        assert!(!should_drop_experience(0, true)); // zero reward still consumed
+    }
+
+    #[test]
+    fn movement_distance_uses_strict_threshold_and_resets_next_integer() {
+        let mut distance = 0.0;
+        let mut next_step = 1.0;
+        assert!(!advance_step_distance(&mut distance, &mut next_step, 1.0));
+        assert_eq!(distance, 0.6);
+        assert_eq!(next_step, 1.0);
+        assert!(advance_step_distance(&mut distance, &mut next_step, 1.0));
+        assert_eq!(distance, 1.2);
+        assert_eq!(next_step, 2.0);
+    }
+
+    #[test]
+    fn swim_emits_with_non_air_support_when_step_does_not() {
+        let support_state = pumpkin_data::Block::WATER.default_state;
+        assert!(!support_state.is_air());
+        assert!(should_emit_swim(true, false, true));
+    }
+
+    #[test]
+    fn swim_requires_non_air_outer_gate_and_yields_to_step() {
+        assert!(!should_emit_swim(false, false, true));
+        assert!(!should_emit_swim(true, true, true));
+    }
+
+    #[test]
+    fn movement_emission_suppresses_passengers_and_player_emission_none() {
+        assert!(movement_emission_suppressed(
+            false, false, false, false, true
+        ));
+        assert!(movement_emission_suppressed(
+            true, true, false, false, false
+        ));
+        assert!(movement_emission_suppressed(true, false, true, true, false));
+        assert!(!movement_emission_suppressed(
+            true, false, false, true, false
+        ));
+        assert!(!movement_emission_suppressed(
+            false, false, true, true, false
+        ));
+    }
 
     // ── bypasses_armor_durability ─────────────────────────────────────
 
