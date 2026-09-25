@@ -558,7 +558,7 @@ impl<S: CommandSource> CommandDispatcher<S> {
             let child_node = &self.tree[child];
             context.with_command(child_node.command().clone());
             let redirect = self.tree[child].redirect();
-            if reader.can_read_chars(if redirect.is_some() { 2 } else { 1 }) {
+            if reader.can_read_chars(1) {
                 reader.skip();
                 if let Some(redirect) = redirect {
                     let Some(redirect) = self.tree.resolve(redirect) else {
@@ -1124,6 +1124,51 @@ mod test {
         let source = DummySource::dummy();
         let result = dispatcher.execute_input("simple", &source);
         assert_eq!(result, Ok(1));
+    }
+
+    #[test]
+    fn redirect_alias_suggestions_start_after_a_single_separator() {
+        let mut dispatcher = CommandDispatcher::new();
+        dispatcher.register_with_aliases(
+            CommandArgumentBuilder::new("teleport", "A command with an alias")
+                .then(LiteralArgumentBuilder::new("target")),
+            &["tp"],
+        );
+        let source = DummySource::dummy();
+
+        assert_eq!(
+            dispatcher
+                .suggest("tp ", &source)
+                .iter()
+                .map(|suggestion| suggestion.suggestion.as_str())
+                .collect::<Vec<_>>(),
+            ["target"]
+        );
+        assert_eq!(
+            dispatcher
+                .suggest("teleport ", &source)
+                .iter()
+                .map(|suggestion| suggestion.suggestion.as_str())
+                .collect::<Vec<_>>(),
+            ["target"]
+        );
+        assert!(dispatcher.suggest("tp", &source).is_empty());
+        assert_eq!(
+            dispatcher
+                .suggest("", &source)
+                .iter()
+                .map(|suggestion| suggestion.suggestion.as_str())
+                .collect::<Vec<_>>(),
+            ["teleport", "tp"]
+        );
+        assert_eq!(
+            dispatcher
+                .suggest("t", &source)
+                .iter()
+                .map(|suggestion| suggestion.suggestion.as_str())
+                .collect::<Vec<_>>(),
+            ["teleport", "tp"]
+        );
     }
 
     #[test]
