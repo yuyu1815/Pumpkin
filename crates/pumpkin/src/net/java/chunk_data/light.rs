@@ -111,7 +111,7 @@ pub fn light_data_for_sections(
 
 #[cfg(test)]
 mod incremental_tests {
-    use super::{light_data_for_sections, section_payload};
+    use super::{light_data_for_sections, light_data_from_chunk, section_payload};
     use pumpkin_util::version::JavaMinecraftVersion;
     use pumpkin_world::chunk::format::LightContainer;
     use pumpkin_world::chunk::{ChunkData, ChunkLight};
@@ -127,6 +127,40 @@ mod incremental_tests {
         let data = data.unwrap();
         assert_eq!(data.len(), 2048);
         assert!(data.iter().all(|byte| *byte == 0x77));
+    }
+
+    #[test]
+    fn initial_light_packet_encodes_nonzero_empty_as_filled_section() {
+        let chunk = ChunkData::empty(0, 0);
+        *chunk.light_engine.lock().unwrap() = ChunkLight {
+            sky_light: vec![LightContainer::Empty(0), LightContainer::Empty(7)]
+                .into_boxed_slice(),
+            block_light: vec![LightContainer::Empty(0), LightContainer::Empty(7)]
+                .into_boxed_slice(),
+        };
+        let version = JavaMinecraftVersion::V_1_18;
+        let light = light_data_from_chunk(&chunk, version).unwrap();
+
+        let mut bytes = Vec::new();
+        light.write(&mut bytes, &version).unwrap();
+        let decoded = pumpkin_protocol::java::client::play::LightData::read(
+            &mut bytes.as_slice(),
+            &version,
+        )
+        .unwrap();
+
+        assert_eq!(decoded.sky_light_mask.as_u64(), 1 << 2);
+        assert_eq!(decoded.block_light_mask.as_u64(), 1 << 2);
+        assert_eq!(
+            decoded.empty_sky_light_mask.as_u64(),
+            (1 << 0) | (1 << 1) | (1 << 3)
+        );
+        assert_eq!(
+            decoded.empty_block_light_mask.as_u64(),
+            (1 << 0) | (1 << 1) | (1 << 3)
+        );
+        assert_eq!(decoded.sky_light_arrays, vec![vec![0x77; 2048]]);
+        assert_eq!(decoded.block_light_arrays, vec![vec![0x77; 2048]]);
     }
 
     #[test]
@@ -327,18 +361,22 @@ pub fn light_data_from_chunk(
         for section_index in 0..num_sections {
             let bit_index = section_index + 1;
 
-            if let LightContainer::Full(data) = &light_engine.sky_light[section_index] {
-                sky_light_mask |= 1 << bit_index;
-                sky_light_arrays.push(data.to_vec());
-            } else {
+            let (empty, data) = section_payload(&light_engine.sky_light[section_index]);
+            if empty {
                 sky_light_empty_mask |= 1 << bit_index;
             }
+            if let Some(data) = data {
+                sky_light_mask |= 1 << bit_index;
+                sky_light_arrays.push(data);
+            }
 
-            if let LightContainer::Full(data) = &light_engine.block_light[section_index] {
-                block_light_mask |= 1 << bit_index;
-                block_light_arrays.push(data.to_vec());
-            } else {
+            let (empty, data) = section_payload(&light_engine.block_light[section_index]);
+            if empty {
                 block_light_empty_mask |= 1 << bit_index;
+            }
+            if let Some(data) = data {
+                block_light_mask |= 1 << bit_index;
+                block_light_arrays.push(data);
             }
         }
 
