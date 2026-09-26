@@ -5,7 +5,9 @@ use crossbeam::queue::SegQueue;
 use pumpkin_config::lighting::LightingEngineConfig;
 use pumpkin_data::BlockDirection;
 use pumpkin_util::math::position::BlockPos;
-use std::sync::Arc;
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
+use pumpkin_util::math::vector2::Vector2;
 
 pub struct DynamicLightEngine {
     min_y: i32,
@@ -14,11 +16,12 @@ pub struct DynamicLightEngine {
     block_increase: SegQueue<(BlockPos, u8)>,
     sky_decrease: SegQueue<(BlockPos, u8)>,
     sky_increase: SegQueue<(BlockPos, u8)>,
+    dirty_sections: Mutex<HashSet<(Vector2<i32>, usize, bool)>>,
 }
 
 impl DynamicLightEngine {
     #[must_use]
-    pub const fn new(min_y: i32, max_y: i32) -> Self {
+    pub fn new(min_y: i32, max_y: i32) -> Self {
         Self {
             min_y,
             max_y,
@@ -26,6 +29,7 @@ impl DynamicLightEngine {
             block_increase: SegQueue::new(),
             sky_decrease: SegQueue::new(),
             sky_increase: SegQueue::new(),
+            dirty_sections: Mutex::new(HashSet::new()),
         }
     }
 }
@@ -59,6 +63,12 @@ impl DynamicLightEngine {
         // Sky Light
         self.check_sky_light_updates(level, pos);
         self.perform_sky_light_updates(level);
+    }
+
+    /// Takes changed (chunk, section index, is sky light) entries since the previous drain.
+    pub fn take_dirty_sections(&self) -> Vec<(Vector2<i32>, usize, bool)> {
+        let mut dirty = self.dirty_sections.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        dirty.drain().collect()
     }
 
     pub fn queue_block_light_decrease(&self, pos: BlockPos, level: u8) {
@@ -560,12 +570,13 @@ impl DynamicLightEngine {
                     return Err("Invalid section index".to_string());
                 }
                 let relative_y = (relative.y - chunk.section.min_y) as usize % BlockPalette::SIZE;
-                light_engine.block_light[section_index].set(
-                    relative.x as usize,
-                    relative_y,
-                    relative.z as usize,
-                    light_level,
-                );
+                let container = &mut light_engine.block_light[section_index];
+                let changed = container.get(relative.x as usize, relative_y, relative.z as usize) != light_level;
+                container.set(relative.x as usize, relative_y, relative.z as usize, light_level);
+                if changed {
+                    self.dirty_sections.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .insert((chunk_coordinate, section_index, false));
+                }
             };
             // Mark chunk as dirty so lighting changes are saved to disk
             if !chunk.is_dirty() {
@@ -619,12 +630,13 @@ impl DynamicLightEngine {
                     return Err("Invalid section index".to_string());
                 }
                 let relative_y = (relative.y - chunk.section.min_y) as usize % BlockPalette::SIZE;
-                light_engine.sky_light[section_index].set(
-                    relative.x as usize,
-                    relative_y,
-                    relative.z as usize,
-                    light_level,
-                );
+                let container = &mut light_engine.sky_light[section_index];
+                let changed = container.get(relative.x as usize, relative_y, relative.z as usize) != light_level;
+                container.set(relative.x as usize, relative_y, relative.z as usize, light_level);
+                if changed {
+                    self.dirty_sections.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .insert((chunk_coordinate, section_index, true));
+                }
             };
             // Mark chunk as dirty so lighting changes are saved to disk
             if !chunk.is_dirty() {

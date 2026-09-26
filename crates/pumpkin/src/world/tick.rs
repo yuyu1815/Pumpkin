@@ -7,6 +7,9 @@ use crate::block::{OnScheduledTickArgs, RandomTickArgs};
 use crate::entity::{Entity, EntityBase};
 use crate::server::Server;
 use pumpkin_data::Block;
+use pumpkin_protocol::codec::var_int::VarInt;
+use pumpkin_protocol::java::client::play::CLightUpdate;
+use pumpkin_util::version::JavaMinecraftVersion;
 use pumpkin_data::dimension::Dimension;
 use pumpkin_data::entity::{EntityType, MobCategory};
 use pumpkin_util::Difficulty;
@@ -38,12 +41,46 @@ where
 }
 
 impl World {
+    fn flush_light_updates(&self) {
+        let mut dirty = std::collections::HashMap::<Vector2<i32>, Vec<(usize, bool)>>::new();
+        for (chunk, section, is_sky) in self.level.light_engine.take_dirty_sections() {
+            let sections = dirty.entry(chunk).or_default();
+            if !sections.contains(&(section, is_sky)) {
+                sections.push((section, is_sky));
+            }
+        }
+        for (chunk_pos, sections) in dirty {
+            let Some(chunk) = self.level.read_chunk_sync(&chunk_pos, Arc::clone) else { continue };
+            for player in self.players.load().iter() {
+                let crate::net::ClientPlatform::Java(client) = player.client.as_ref() else { continue };
+                if !player
+                    .watched_section
+                    .load()
+                    .is_within_distance(chunk_pos.x, chunk_pos.y)
+                {
+                    continue;
+                }
+                let ready = player.chunk_sender.lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .is_chunk_ready(&chunk_pos);
+                if !ready { continue; }
+                let version = client.version.load();
+                if let Ok(light_data) = crate::net::java::chunk_data::light::light_data_for_sections(&chunk, version, &sections) {
+                    player.as_java().expect("Java client checked above").try_enqueue_packet(&CLightUpdate::new(
+                        VarInt(chunk_pos.x), VarInt(chunk_pos.y), light_data,
+                    ));
+                }
+            }
+        }
+    }
+
     #[expect(clippy::too_many_lines)]
     pub fn tick(self: &Arc<Self>, server: &Arc<Server>) {
         const ENTITY_TICK_BATCH_SIZE: usize = 16;
 
         let start = std::time::Instant::now();
 
+        self.flush_light_updates();
         self.flush_block_updates();
         self.flush_synced_block_events();
         self.update_active_chunks();
