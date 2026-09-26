@@ -220,8 +220,7 @@ mod tests {
             [
                 0x02, 0x00, 0x04, b'h', b'o', b'm', b'e', // Update, String identifier
                 0x11, b'm', b'i', b'n', b'e', b'c', b'r', b'a', b'f', b't', b':', b'd', b'e', b'f',
-                b'a', b'u', b'l', b't', 0x01, 0x00, 0x12, 0x34,
-                0x56, // required Icon, present RGB
+                b'a', b'u', b'l', b't', 0x01, 0x12, 0x34, 0x56, // required Icon, present RGB
                 0x00, // Empty target
             ]
         );
