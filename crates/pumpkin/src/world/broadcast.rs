@@ -772,11 +772,54 @@ impl World {
     }
 
     pub fn sync_world_event(&self, world_event: WorldEvent, position: BlockPos, data: i32) {
-        let chunk_pos = position.chunk_position();
-        self.broadcast_to_chunk(
-            chunk_pos,
+        self.broadcast_world_event(
+            position,
             &CWorldEvent::new(world_event as i32, position, data, false),
         );
+    }
+
+    pub fn broadcast_world_event<P: ClientPacket>(&self, position: BlockPos, packet: &P) {
+        self.broadcast_world_event_except(position, &[], packet);
+    }
+
+    pub fn broadcast_world_event_except<P: ClientPacket>(
+        &self,
+        position: BlockPos,
+        except: &[Uuid],
+        packet: &P,
+    ) {
+        let players = self.players.load();
+        let recipients = players.iter().filter(|player| {
+            !except.contains(&player.get_entity().entity_uuid)
+                && within_world_event_radius(player.get_entity().pos.load(), position)
+        });
+        let recipients_by_version = Self::collect_java_recipients_by_version(recipients);
+        Self::broadcast_java_grouped(packet, recipients_by_version);
+    }
+
+    pub fn broadcast_world_event_editioned<J: ClientPacket, B: BClientPacket>(
+        &self,
+        position: BlockPos,
+        except: &[Uuid],
+        je_packet: &J,
+        be_packet: &B,
+    ) {
+        let players = self.players.load();
+        let mut java_recipients = Vec::new();
+        let mut bedrock_recipients = Vec::new();
+        for player in players.iter().filter(|player| {
+            !except.contains(&player.get_entity().entity_uuid)
+                && within_world_event_radius(player.get_entity().pos.load(), position)
+        }) {
+            match player.client.as_ref() {
+                ClientPlatform::Java(_) => java_recipients.push(player),
+                ClientPlatform::Bedrock(client) => bedrock_recipients.push(client),
+            }
+        }
+        let recipients_by_version =
+            Self::collect_java_recipients_by_version(java_recipients.into_iter());
+        Self::broadcast_java_grouped(je_packet, recipients_by_version);
+        Self::broadcast_bedrock_grouped(be_packet, bedrock_recipients.into_iter());
     }
 
     pub fn sync_global_world_event(&self, world_event: WorldEvent, position: BlockPos, data: i32) {
@@ -903,5 +946,39 @@ impl World {
             Self::collect_java_recipients_by_version(java_recipients.into_iter());
         Self::broadcast_java_grouped(je_packet, je_recipients_by_version);
         Self::broadcast_bedrock_grouped(be_packet, bedrock_recipients.into_iter());
+    }
+}
+
+fn within_world_event_radius(player: Vector3<f64>, event: BlockPos) -> bool {
+    let dx = player.x - f64::from(event.0.x);
+    let dy = player.y - f64::from(event.0.y);
+    let dz = player.z - f64::from(event.0.z);
+    dx * dx + dy * dy + dz * dz < 64.0 * 64.0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::within_world_event_radius;
+    use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
+
+    #[test]
+    fn world_event_radius_is_64_blocks_not_chunk_watchers() {
+        let event = BlockPos::new(0, 0, 0);
+        assert!(within_world_event_radius(
+            Vector3::new(15.0, 0.0, 0.0),
+            event
+        ));
+        assert!(within_world_event_radius(
+            Vector3::new(63.999, 0.0, 0.0),
+            event
+        ));
+        assert!(!within_world_event_radius(
+            Vector3::new(64.0, 0.0, 0.0),
+            event
+        ));
+        assert!(!within_world_event_radius(
+            Vector3::new(80.0, 0.0, 0.0),
+            event
+        ));
     }
 }

@@ -2082,20 +2082,19 @@ impl World {
                 position: position.to_centered_f64().to_f32_lossy(),
                 data: VarInt(BlockState::to_be_network_id(broken_state_id) as i32),
             };
-            let chunk_pos = position.chunk_position();
             if let Some(player) = cause {
                 // Java predicts its own break effect; Bedrock needs the server event.
                 if let ClientPlatform::Bedrock(client) = player.client.as_ref() {
                     client.try_enqueue_client_packet(&be_packet);
                 }
-                self.broadcast_to_chunk_except_editioned(
-                    chunk_pos,
+                self.broadcast_world_event_editioned(
+                    *position,
                     &[player.get_entity().entity_uuid],
                     &je_packet,
                     &be_packet,
                 );
             } else {
-                self.broadcast_to_chunk_editioned(chunk_pos, &je_packet, &be_packet);
+                self.broadcast_world_event_editioned(*position, &[], &je_packet, &be_packet);
             }
         }
 

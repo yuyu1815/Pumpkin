@@ -9,8 +9,7 @@ use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::{Block, BlockId};
 use pumpkin_protocol::java::client::play::CWorldEvent;
 use pumpkin_util::math::vector3::Vector3;
-use pumpkin_util::math::{boundingbox::BoundingBox, vector2::Vector2};
-use pumpkin_util::math::{position::BlockPos, vector2::to_chunk_pos};
+use pumpkin_util::math::{boundingbox::BoundingBox, position::BlockPos};
 use pumpkin_world::world::BlockFlags;
 
 const GRAVITY: f64 = 0.05;
@@ -207,8 +206,8 @@ impl EntityBase for SplashPotionEntity {
             hit_pos.y.floor() as i32,
             hit_pos.z.floor() as i32,
         ));
-        world.broadcast_to_chunk(
-            to_chunk_pos(&Vector2::new(block_pos.0.x, block_pos.0.z)),
+        world.broadcast_world_event(
+            block_pos,
             &CWorldEvent::new(event_id, block_pos, color, false),
         );
 

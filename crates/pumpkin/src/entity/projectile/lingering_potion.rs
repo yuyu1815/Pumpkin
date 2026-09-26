@@ -11,7 +11,6 @@ use pumpkin_data::item_stack::ItemStack;
 use pumpkin_protocol::bedrock::server::actor_event::ActorEventID;
 use pumpkin_protocol::java::client::play::CWorldEvent;
 use pumpkin_util::math::position::BlockPos;
-use pumpkin_util::math::vector2::{Vector2, to_chunk_pos};
 use pumpkin_util::math::vector3::Vector3;
 use uuid::Uuid;
 
@@ -173,9 +172,8 @@ impl EntityBase for LingeringPotionEntity {
             hit_pos.y.floor() as i32,
             hit_pos.z.floor() as i32,
         ));
-        let chunk_pos = to_chunk_pos(&Vector2::new(block_pos.0.x, block_pos.0.z));
-        world.broadcast_to_chunk(
-            chunk_pos,
+        world.broadcast_world_event(
+            block_pos,
             &CWorldEvent::new(event_id, block_pos, color, false),
         );
 
