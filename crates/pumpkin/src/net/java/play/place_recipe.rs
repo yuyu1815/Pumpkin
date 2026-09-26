@@ -14,12 +14,27 @@ impl JavaClient {
         };
         use crate::server::recipe::DynamicRecipe;
         use pumpkin_data::recipes::{CraftingRecipeTypes, RECIPES_COOKING, RECIPES_CRAFTING};
-        use pumpkin_protocol::java::client::play::dynamic_recipe_for_display_id;
         use pumpkin_data::screen::WindowType;
         use pumpkin_inventory::crafting::recipe_provider::RecipeProvider;
+        use pumpkin_protocol::java::client::play::{
+            CPlaceGhostRecipe, RecipeDisplay, crafting_recipe_display,
+            dynamic_recipe_for_display_id,
+        };
 
         let target_id = packet.recipe_display_id.0 as usize;
         let use_max = packet.use_max_items;
+        let current_handler = player
+            .current_screen_handler
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        let current_window_id = current_handler
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .sync_id();
+        if !placement_container_matches(packet.container_id, current_window_id) {
+            return;
+        }
 
         let mut click_event = crate::plugin::api::events::player::player_recipe_book_click::PlayerRecipeBookClickEvent::new(
             player.clone(),
@@ -48,12 +63,7 @@ impl JavaClient {
         let dynamic_recipes = server.recipe_manager.get_dynamic_recipes();
 
         let (grid_width, crafting_inv) = {
-            let screen_handler_arc = player
-                .current_screen_handler
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .clone();
-            let handler = screen_handler_arc
+            let handler = current_handler
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             let grid_width: usize = match handler.window_type() {
@@ -66,6 +76,7 @@ impl JavaClient {
 
         let grid_size = grid_width * grid_width;
         let mut ingredient_slots: Vec<Option<GenericIngredient<'_>>> = vec![None; grid_size];
+        let mut ghost_display: Option<RecipeDisplay<'static>> = None;
 
         if target_id < crafting_display_count {
             // Crafting recipe
@@ -83,14 +94,21 @@ impl JavaClient {
                 found
             });
             let Some(recipe) = recipe else { return };
+            if self.version.load() >= pumpkin_util::version::JavaMinecraftVersion::V_26_2 {
+                ghost_display = crafting_recipe_display(recipe, self.version.load());
+            }
 
             match recipe {
                 CraftingRecipeTypes::CraftingShaped { pattern, key, .. } => {
+                    if !shaped_pattern_fits(pattern, grid_width) {
+                        return;
+                    }
                     for (row, row_str) in pattern.iter().enumerate() {
                         for (col, ch) in row_str.chars().enumerate() {
                             if ch != ' '
                                 && let Some(ing) =
                                     key.iter().find_map(|(k, v)| (*k == ch).then_some(v))
+                                && col < grid_width
                                 && row * grid_width + col < grid_size
                             {
                                 ingredient_slots[row * grid_width + col] =
@@ -131,10 +149,14 @@ impl JavaClient {
                     key,
                     ..
                 } => {
+                    if !shaped_pattern_fits(pattern, grid_width) {
+                        return;
+                    }
                     for (row, row_str) in pattern.iter().enumerate() {
                         for (col, ch) in row_str.chars().enumerate() {
                             if ch != ' '
                                 && let Some((_, ing)) = key.iter().find(|(k, _)| *k == ch)
+                                && col < grid_width
                                 && row * grid_width + col < grid_size
                             {
                                 ingredient_slots[row * grid_width + col] =
@@ -233,12 +255,12 @@ impl JavaClient {
         };
 
         if amount_to_craft == 0 {
-            let screen_handler_arc = player
-                .current_screen_handler
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .clone();
-            screen_handler_arc
+            if should_send_ghost(self.version.load(), packet.container_id, current_window_id)
+                && let Some(display) = ghost_display.as_ref()
+            {
+                self.try_send_packet(&CPlaceGhostRecipe::with_display(current_window_id, display));
+            }
+            current_handler
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .send_content_updates();
@@ -249,6 +271,11 @@ impl JavaClient {
         // consuming anything; otherwise a tag/one-of choice can consume the
         // donor needed by a later ingredient.
         if compute_biggest_craftable(&active_ingredients, &player.inventory) < amount_to_craft {
+            if should_send_ghost(self.version.load(), packet.container_id, current_window_id)
+                && let Some(display) = ghost_display.as_ref()
+            {
+                self.try_send_packet(&CPlaceGhostRecipe::with_display(current_window_id, display));
+            }
             let screen_handler_arc = player
                 .current_screen_handler
                 .lock()
@@ -279,5 +306,51 @@ impl JavaClient {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .send_content_updates();
+    }
+}
+
+fn placement_container_matches(packet_id: i8, current_id: u8) -> bool {
+    packet_id >= 0 && i32::from(packet_id) == i32::from(current_id)
+}
+
+fn shaped_pattern_fits<S: AsRef<str>>(pattern: &[S], grid_width: usize) -> bool {
+    pattern.len() <= grid_width
+        && pattern
+            .iter()
+            .all(|row| row.as_ref().chars().count() <= grid_width)
+}
+
+fn should_send_ghost(
+    version: pumpkin_util::version::JavaMinecraftVersion,
+    packet_id: i8,
+    current_id: u8,
+) -> bool {
+    version >= pumpkin_util::version::JavaMinecraftVersion::V_26_2
+        && placement_container_matches(packet_id, current_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{placement_container_matches, shaped_pattern_fits, should_send_ghost};
+    use pumpkin_util::version::JavaMinecraftVersion;
+
+    #[test]
+    fn ghost_requires_matching_container_and_26_2() {
+        assert!(should_send_ghost(JavaMinecraftVersion::V_26_2, 7, 7));
+    }
+
+    #[test]
+    fn mismatched_container_never_gets_a_ghost() {
+        assert!(!placement_container_matches(6, 7));
+        assert!(!placement_container_matches(-1, 7));
+        assert!(!should_send_ghost(JavaMinecraftVersion::V_26_2, 6, 7));
+        assert!(!should_send_ghost(JavaMinecraftVersion::V_26_1, 7, 7));
+    }
+
+    #[test]
+    fn shaped_patterns_must_fit_each_grid_dimension() {
+        assert!(shaped_pattern_fits(&["###", " # "], 3));
+        assert!(!shaped_pattern_fits(&["###"], 2));
+        assert!(!shaped_pattern_fits(&["#", "#", "#"], 2));
     }
 }

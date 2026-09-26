@@ -159,6 +159,20 @@ mod tests {
     }
 
     #[test]
+    fn empty_or_partial_ingredients_cannot_place_a_complete_craft() {
+        let birch = RecipeIngredientTypes::Simple("minecraft:birch_planks");
+        let oak = RecipeIngredientTypes::Simple("minecraft:oak_planks");
+        let ingredients = [GenericIngredient::Vanilla(&birch), GenericIngredient::Vanilla(&oak)];
+
+        let empty = make_inventory();
+        assert_eq!(compute_biggest_craftable(&ingredients, &empty), 0);
+
+        let partial = make_inventory();
+        partial.main_inventory.write().unwrap()[0] = ItemStack::new(1, &Item::BIRCH_PLANKS);
+        assert_eq!(compute_biggest_craftable(&ingredients, &partial), 0);
+    }
+
+    #[test]
     fn use_max_respects_effective_stack_size() {
         let bow_ingredient = RecipeIngredientTypes::Simple("minecraft:bow");
         let ingredient = GenericIngredient::Vanilla(&bow_ingredient);

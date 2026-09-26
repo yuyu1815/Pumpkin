@@ -101,6 +101,89 @@ pub fn dynamic_recipe_for_display_id(
         .nth(display_index)
 }
 
+/// Build the typed 26.2 display used by PlaceGhostRecipe for a vanilla crafting recipe.
+pub fn crafting_recipe_display(
+    recipe: &CraftingRecipeTypes,
+    version: JavaMinecraftVersion,
+) -> Option<RecipeDisplay<'static>> {
+    let station = Item::from_registry_key("crafting_table")?;
+    let display_ingredient = |ingredient: &RecipeIngredientTypes| -> Option<SlotDisplay<'static>> {
+        let items = match ingredient {
+            RecipeIngredientTypes::Simple(id) => vec![
+                Item::from_registry_key(id.strip_prefix("minecraft:").unwrap_or(id))?,
+            ],
+            RecipeIngredientTypes::Tagged(tag) => resolve_item_tag(tag, version)?,
+            RecipeIngredientTypes::OneOf(ids) => ids
+                .iter()
+                .map(|id| Item::from_registry_key(id.strip_prefix("minecraft:").unwrap_or(id)))
+                .collect::<Option<Vec<_>>>()?,
+        };
+        match items.len() {
+            0 => None,
+            1 => Some(SlotDisplay::Item(items[0])),
+            _ => Some(SlotDisplay::Composite(items.into_iter().map(SlotDisplay::Item).collect())),
+        }
+    };
+    let result_display = |result: &RecipeResultStruct| {
+        Item::from_registry_key(result.id.strip_prefix("minecraft:").unwrap_or(result.id)).map(
+            |item| SlotDisplay::ItemStack {
+                item,
+                count: result.count,
+            },
+        )
+    };
+
+    match recipe {
+        CraftingRecipeTypes::CraftingShaped {
+            pattern,
+            key,
+            result,
+            ..
+        } => Some(RecipeDisplay::Shaped {
+            width: pattern.first()?.len() as i32,
+            height: pattern.len() as i32,
+            ingredients: pattern
+                .iter()
+                .flat_map(|row| row.chars())
+                .map(|ch| {
+                    if ch == ' ' {
+                        Some(SlotDisplay::Empty)
+                    } else {
+                        display_ingredient(&key.iter().find(|(key, _)| *key == ch)?.1)
+                    }
+                })
+                .collect::<Option<Vec<_>>>()?,
+            result: result_display(result)?,
+            crafting_station: SlotDisplay::Item(station),
+        }),
+        CraftingRecipeTypes::CraftingShapeless {
+            ingredients,
+            result,
+            ..
+        } => Some(RecipeDisplay::Shapeless {
+            ingredients: ingredients
+                .iter()
+                .map(display_ingredient)
+                .collect::<Option<Vec<_>>>()?,
+            result: result_display(result)?,
+            crafting_station: SlotDisplay::Item(station),
+        }),
+        CraftingRecipeTypes::CraftingTransmute {
+            input,
+            material,
+            result,
+            ..
+        } => Some(RecipeDisplay::Shapeless {
+            ingredients: vec![display_ingredient(input)?, display_ingredient(material)?],
+            result: result_display(result)?,
+            crafting_station: SlotDisplay::Item(station),
+        }),
+        CraftingRecipeTypes::CraftingDecoratedPot { .. } | CraftingRecipeTypes::CraftingSpecial => {
+            None
+        }
+    }
+}
+
 /// Clientbound packet that adds recipes to the client's recipe book.
 /// `replace = true` means the client replaces its current recipe list.
 #[java_packet(RECIPE_BOOK_ADD)]
@@ -1126,6 +1209,59 @@ mod tests {
                 count: 1,
             },
         }))
+    }
+
+    #[test]
+    fn crafting_display_rejects_unknown_required_items_but_keeps_air_slots() {
+        const KEY: &[(char, RecipeIngredientTypes)] = &[(
+            'x',
+            RecipeIngredientTypes::Simple("minecraft:not_a_real_item"),
+        )];
+        const PATTERN: &[&str] = &["x "];
+        let unknown_ingredient = CraftingRecipeTypes::CraftingShaped {
+            category: RecipeCategoryTypes::Misc,
+            group: None,
+            show_notification: false,
+            key: KEY,
+            pattern: PATTERN,
+            result: RecipeResultStruct {
+                id: "minecraft:stone",
+                count: 1,
+            },
+        };
+        assert!(crafting_recipe_display(&unknown_ingredient, JavaMinecraftVersion::V_26_2).is_none());
+
+        const AIR_KEY: &[(char, RecipeIngredientTypes)] = &[(
+            'x',
+            RecipeIngredientTypes::Simple("minecraft:stone"),
+        )];
+        let valid = CraftingRecipeTypes::CraftingShaped {
+            category: RecipeCategoryTypes::Misc,
+            group: None,
+            show_notification: false,
+            key: AIR_KEY,
+            pattern: PATTERN,
+            result: RecipeResultStruct {
+                id: "minecraft:stone",
+                count: 1,
+            },
+        };
+        assert!(matches!(
+            crafting_recipe_display(&valid, JavaMinecraftVersion::V_26_2),
+            Some(RecipeDisplay::Shaped { ingredients, .. })
+                if matches!(ingredients.as_slice(), [SlotDisplay::Item(_), SlotDisplay::Empty])
+        ));
+
+        let unknown_result = CraftingRecipeTypes::CraftingShapeless {
+            category: RecipeCategoryTypes::Misc,
+            group: None,
+            ingredients: &[RecipeIngredientTypes::Simple("minecraft:stone")],
+            result: RecipeResultStruct {
+                id: "minecraft:not_a_real_item",
+                count: 1,
+            },
+        };
+        assert!(crafting_recipe_display(&unknown_result, JavaMinecraftVersion::V_26_2).is_none());
     }
 
     #[test]
