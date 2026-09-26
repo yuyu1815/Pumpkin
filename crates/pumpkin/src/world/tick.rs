@@ -26,7 +26,7 @@ fn is_raining_for_sleep_reset(dimension: &Dimension, rain_level: f32) -> bool {
     dimension.has_skylight
         && !dimension.has_ceiling
         && dimension.minecraft_name != Dimension::THE_END.minecraft_name
-        && rain_level > 0.2
+        && (rain_level as f64) > 0.2
 }
 
 fn dispatch_scheduled_ticks<T, F>(ticks: &[T], callback: F)
@@ -538,8 +538,8 @@ mod tests {
 
     #[test]
     fn sleep_weather_reset_uses_vanilla_rain_threshold_and_capability() {
-        assert!(!is_raining_for_sleep_reset(&Dimension::OVERWORLD, 0.2));
-        assert!(is_raining_for_sleep_reset(&Dimension::OVERWORLD, 0.2001));
+        assert!(is_raining_for_sleep_reset(&Dimension::OVERWORLD, 0.2));
+        assert!(!is_raining_for_sleep_reset(&Dimension::OVERWORLD, 0.1999));
         assert!(!is_raining_for_sleep_reset(&Dimension::OVERWORLD_CAVES, 1.0));
         assert!(!is_raining_for_sleep_reset(&Dimension::THE_END, 1.0));
         assert!(!is_raining_for_sleep_reset(&Dimension::THE_NETHER, 1.0));
