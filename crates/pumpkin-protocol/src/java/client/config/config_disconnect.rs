@@ -47,9 +47,7 @@ mod tests {
         packet
             .write_packet_data(&mut current, &JavaMinecraftVersion::V_26_2)
             .unwrap();
-        assert_eq!(
-            current,
-            &[0x08, 0, 0, 0, 6, b'k', b'i', b'c', b'k', b'e', b'd']
-        );
+        // The trusted context-free codec uses unnamed NBT (`writeAnyTag`), not a root-name field.
+        assert_eq!(current, &[0x08, 0, 6, b'k', b'i', b'c', b'k', b'e', b'd']);
     }
 }
