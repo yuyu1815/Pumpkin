@@ -139,6 +139,18 @@ impl PlayerAdmission {
     }
 }
 
+struct PlayerCapacityReservation<'a>(&'a std::sync::Mutex<usize>);
+
+impl Drop for PlayerCapacityReservation<'_> {
+    fn drop(&mut self) {
+        let mut reservations = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *reservations -= 1;
+    }
+}
+
 /// Represents a Minecraft server instance.
 pub struct Server {
     pub basic_config: BasicConfiguration,
@@ -164,6 +176,8 @@ pub struct Server {
     player_admissions: std::sync::Mutex<HashMap<Uuid, Weak<PlayerAdmission>>>,
     /// Case-insensitive name gates serialize admission through player publication.
     player_name_admissions: std::sync::Mutex<HashMap<String, Weak<AsyncMutex<()>>>>,
+    /// Counts admissions not yet reflected in a world's active player list.
+    player_capacity_reservations: std::sync::Mutex<usize>,
     /// Saves server branding information.
     branding: CachedBranding,
     /// Saves and dispatches commands to appropriate handlers.
@@ -375,6 +389,7 @@ impl Server {
             listing,
             player_admissions: std::sync::Mutex::new(HashMap::new()),
             player_name_admissions: std::sync::Mutex::new(HashMap::new()),
+            player_capacity_reservations: std::sync::Mutex::new(0),
             branding: CachedBranding::new(),
             bossbars: std::sync::Mutex::new(CustomBossbars::new()),
             map_manager: MapManager::new(),
@@ -831,6 +846,59 @@ impl Server {
             }
         }
 
+        let bypasses_player_limit = matches!(client.as_ref(), ClientPlatform::Java(_))
+            && self
+                .data
+                .operator_config
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .get_entry(&profile.id)
+                .is_some_and(|operator| operator.bypasses_player_limit);
+        let max_players = [
+            (
+                self.advanced_config.networking.java.enabled,
+                self.advanced_config.networking.java.max_players,
+            ),
+            (
+                self.advanced_config.networking.bedrock.enabled,
+                self.advanced_config.networking.bedrock.max_players,
+            ),
+        ]
+        .into_iter()
+        .filter_map(|(enabled, max)| (enabled && max > 0).then_some(max))
+        .min();
+        let capacity_reservation = {
+            let mut reservations = self
+                .player_capacity_reservations
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let full = max_players.is_some_and(|max| {
+                !bypasses_player_limit
+                    && self.get_player_count() + *reservations >= max as usize
+            });
+            if !full {
+                *reservations += 1;
+                Some(PlayerCapacityReservation(&self.player_capacity_reservations))
+            } else {
+                None
+            }
+        };
+        let Some(_capacity_reservation) = capacity_reservation else {
+            client
+                .kick(
+                    DisconnectReason::ServerFull,
+                    TextComponent::translate_cross(
+                        translation::java::MULTIPLAYER_DISCONNECT_SERVER_FULL,
+                        translation::bedrock::DISCONNECTIONSCREEN_SERVERFULL,
+                        [],
+                    ),
+                )
+                .await;
+            return None;
+        };
+
+        // The reservation remains counted until add_player has either published
+        // the player or returned; no capacity mutex is held during plugin callbacks.
         self.add_player(client, profile, config)
     }
 

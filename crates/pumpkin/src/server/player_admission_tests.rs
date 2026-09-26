@@ -33,6 +33,16 @@ fn test_vanilla_data() -> crate::data::VanillaData {
 }
 
 async fn test_server(temp_world: &TempDir) -> Arc<Server> {
+    test_server_with_limits(temp_world, true, 1, false, 0).await
+}
+
+async fn test_server_with_limits(
+    temp_world: &TempDir,
+    java_enabled: bool,
+    java_max_players: u32,
+    bedrock_enabled: bool,
+    bedrock_max_players: u32,
+) -> Arc<Server> {
     let mut basic = BasicConfiguration::default();
     basic.default_level_name = temp_world.path().to_string_lossy().into_owned();
     basic.allow_nether = true;
@@ -45,8 +55,10 @@ async fn test_server(temp_world: &TempDir) -> Arc<Server> {
     advanced.plugins.enabled = false;
     advanced.commands.use_console = false;
     advanced.commands.use_tty = false;
-    advanced.networking.java.enabled = false;
-    advanced.networking.bedrock.enabled = false;
+    advanced.networking.java.enabled = java_enabled;
+    advanced.networking.java.max_players = java_max_players;
+    advanced.networking.bedrock.enabled = bedrock_enabled;
+    advanced.networking.bedrock.max_players = bedrock_max_players;
     advanced.networking.query.enabled = false;
     advanced.networking.lan_broadcast.enabled = false;
     advanced.networking.rcon.enabled = false;
@@ -262,6 +274,169 @@ async fn simultaneous_different_uuids_with_same_name_only_admit_one() {
     })
     .await
     .expect("disconnect cleanup timed out");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn operator_bypass_admits_at_capacity_but_normal_player_is_rejected() {
+    let temp_world = TempDir::new().expect("temporary runtime world");
+    let server = test_server(&temp_world).await;
+    let mut first_profile = profile(Uuid::from_u128(0x21_0010));
+    first_profile.name = "first".to_string();
+    let (first_client, _first_peer) = java_client(&first_profile, 30).await;
+    let (first, _world) = server
+        .admit_player(
+            first_client,
+            first_profile,
+            Some(PlayerConfig::default()),
+        )
+        .await
+        .expect("first normal player admitted");
+
+    let mut rejected_profile = profile(Uuid::from_u128(0x21_0011));
+    rejected_profile.name = "second".to_string();
+    let (rejected_client, _rejected_peer) = java_client(&rejected_profile, 31).await;
+    assert!(server
+        .admit_player(
+            rejected_client.clone(),
+            rejected_profile,
+            Some(PlayerConfig::default()),
+        )
+        .await
+        .is_none());
+    assert!(rejected_client.closed());
+
+    let mut operator_profile = profile(Uuid::from_u128(0x21_0012));
+    operator_profile.name = "operator".to_string();
+    server
+        .data
+        .operator_config
+        .write()
+        .unwrap()
+        .ops
+        .push(pumpkin_config::op::Op::new(
+            operator_profile.id,
+            operator_profile.name.clone(),
+            pumpkin_util::permission::PermissionLvl::Four,
+            true,
+        ));
+    let (operator_client, _operator_peer) = java_client(&operator_profile, 32).await;
+    let (operator, _world) = server
+        .admit_player(
+            operator_client,
+            operator_profile,
+            Some(PlayerConfig::default()),
+        )
+        .await
+        .expect("configured operator bypasses full capacity");
+    assert_eq!(server.get_player_count(), 2);
+
+    for player in [first, operator] {
+        player.client.try_kick(
+            crate::net::DisconnectReason::Kicked,
+            &TextComponent::text("test cleanup"),
+        );
+        let world = player.world();
+        world.remove_player(&player, PlayerRemovalReason::Disconnect).await;
+        server.remove_player(&player);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn simultaneous_distinct_uuids_respect_max_players_capacity() {
+    let temp_world = TempDir::new().expect("temporary runtime world");
+    let server = test_server(&temp_world).await;
+    let mut first_profile = profile(Uuid::from_u128(0x21_0020));
+    first_profile.name = "first_capacity".to_string();
+    let mut second_profile = profile(Uuid::from_u128(0x21_0021));
+    second_profile.name = "second_capacity".to_string();
+    let barrier = Arc::new(Barrier::new(2));
+
+    let first = tokio::spawn(admit_concurrently(
+        server.clone(),
+        first_profile,
+        40,
+        barrier.clone(),
+    ));
+    let second = tokio::spawn(admit_concurrently(
+        server.clone(),
+        second_profile,
+        41,
+        barrier,
+    ));
+    let (first, second) = tokio::join!(first, second);
+    let (first, first_cleanup, _first_peer) = first.expect("first admission task failed");
+    let (second, second_cleanup, _second_peer) = second.expect("second admission task failed");
+
+    assert_ne!(first.is_some(), second.is_some(), "capacity one admits exactly one distinct UUID");
+    assert_eq!(server.get_player_count(), 1);
+    if let Some(player) = first.or(second) {
+        player.client.try_kick(
+            crate::net::DisconnectReason::Kicked,
+            &TextComponent::text("test cleanup"),
+        );
+    }
+    timeout(Duration::from_secs(3), async {
+        first_cleanup.await.expect("first cleanup task failed");
+        second_cleanup.await.expect("second cleanup task failed");
+    })
+    .await
+    .expect("disconnect cleanup timed out");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn mixed_protocol_limits_use_strictest_enabled_server_wide_cap() {
+    for (java_enabled, java_max, bedrock_enabled, bedrock_max, reject_second) in [
+        (true, 1, true, 10, true),
+        (true, 10, true, 1, true),
+        (false, 1, true, 10, false),
+        (true, 0, true, 0, false),
+    ] {
+        let temp_world = TempDir::new().expect("temporary runtime world");
+        let server = test_server_with_limits(
+            &temp_world,
+            java_enabled,
+            java_max,
+            bedrock_enabled,
+            bedrock_max,
+        )
+        .await;
+        let mut first_profile = profile(Uuid::new_v4());
+        first_profile.name = "mixed_first".to_string();
+        let (first_client, _first_peer) = java_client(&first_profile, 50).await;
+        let (first, _) = server
+            .admit_player(first_client, first_profile, Some(PlayerConfig::default()))
+            .await
+            .expect("first player admitted");
+
+        let mut second_profile = profile(Uuid::new_v4());
+        second_profile.name = "mixed_second".to_string();
+        let (second_client, _second_peer) = java_client(&second_profile, 51).await;
+        let second = server
+            .admit_player(second_client, second_profile, Some(PlayerConfig::default()))
+            .await;
+        assert_eq!(
+            second.is_none(),
+            reject_second,
+            "limits Java={java_max} (enabled={java_enabled}), Bedrock={bedrock_max} (enabled={bedrock_enabled})"
+        );
+        assert_eq!(server.get_player_count(), if reject_second { 1 } else { 2 });
+
+        let mut players = vec![first];
+        if let Some((player, _)) = second {
+            players.push(player);
+        }
+        for player in players {
+            player.client.try_kick(
+                crate::net::DisconnectReason::Kicked,
+                &TextComponent::text("test cleanup"),
+            );
+            player
+                .world()
+                .remove_player(&player, PlayerRemovalReason::Disconnect)
+                .await;
+            server.remove_player(&player);
+        }
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

@@ -9,17 +9,6 @@ impl PendingConnection {
     ) -> Option<PacketHandlerResult> {
         debug!("login start");
 
-        let max_players = server.advanced_config.networking.java.max_players;
-        if max_players > 0 && server.get_player_count() >= max_players as usize {
-            self.kick(TextComponent::translate_cross(
-                translation::java::MULTIPLAYER_DISCONNECT_SERVER_FULL,
-                translation::bedrock::DISCONNECTIONSCREEN_SERVERFULL,
-                [],
-            ))
-            .await;
-            return Some(PacketHandlerResult::Stop);
-        }
-
         if !is_valid_player_name(&login_start.name) {
             self.kick(TextComponent::text("Invalid characters in username"))
                 .await;
