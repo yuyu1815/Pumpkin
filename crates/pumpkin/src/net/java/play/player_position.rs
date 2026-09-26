@@ -353,12 +353,21 @@ impl JavaClient {
     }
 
     pub fn force_tp(&self, player: &Arc<Player>, position: Vector3<f64>) {
-        let teleport_id = player.teleport_id_count.fetch_add(1, Ordering::Relaxed) + 1;
-        *player
-            .awaiting_teleport
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) =
-            Some((teleport_id.into(), position));
+        let teleport_id = {
+            let mut awaiting_teleport = player
+                .awaiting_teleport
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let id = player
+                .teleport_id_count
+                .fetch_add(1, Ordering::Relaxed)
+                .wrapping_add(1);
+            player
+                .last_teleport_id_issued
+                .store(true, Ordering::Relaxed);
+            *awaiting_teleport = Some((id.into(), position));
+            id
+        };
         player.try_send_client_packet(&CPlayerPosition::new(
             teleport_id.into(),
             player.get_entity().pos.load(),

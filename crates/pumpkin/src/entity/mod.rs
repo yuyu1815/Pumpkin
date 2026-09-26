@@ -3869,18 +3869,21 @@ impl Entity {
             // the dismount packet, sends stale position packets from the old riding
             // position, and the server processes them before the teleport arrives.
             let teleport_id = if reposition && let Some(player) = passenger.get_player() {
-                let id = player
-                    .teleport_id_count
-                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-                    + 1;
                 // Use fallback position as placeholder — updated below with real position
                 let placeholder =
                     Vector3::new(self.pos.load().x, vehicle_box.max.y, self.pos.load().z);
-                *player
+                let mut awaiting_teleport = player
                     .awaiting_teleport
                     .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner) =
-                    Some((id.into(), placeholder));
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let id = player
+                    .teleport_id_count
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                    .wrapping_add(1);
+                player
+                    .last_teleport_id_issued
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
+                *awaiting_teleport = Some((id.into(), placeholder));
                 Some(id)
             } else {
                 None

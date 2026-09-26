@@ -557,6 +557,8 @@ pub struct Player {
     pub last_input: AtomicI8,
     /// A counter for teleport IDs used to track pending teleports.
     pub teleport_id_count: AtomicI32,
+    /// Whether any teleport ID has been issued (ID zero is valid after wrapping).
+    pub last_teleport_id_issued: AtomicBool,
     /// The pending teleport information, including the teleport ID and target location.
     pub awaiting_teleport: Mutex<Option<(VarInt, Vector3<f64>)>>,
     /// The coordinates of the chunk section the player is currently watching.
@@ -862,6 +864,7 @@ impl Player {
             gameprofile,
             client,
             awaiting_teleport: Mutex::new(None),
+            last_teleport_id_issued: AtomicBool::new(false),
             breath_manager: BreathManager::default(),
             // TODO: Load this from previous instance
             hunger_manager: HungerManager::default(),
@@ -4230,19 +4233,25 @@ impl Player {
             }
         }
 
-        let i = self.teleport_id_count.fetch_add(1, Ordering::Relaxed);
         self.chunk_send_epoch.fetch_add(1, Ordering::Relaxed);
-        let teleport_id = i + 1;
         self.living_entity.entity.set_pos(position);
         let entity = &self.living_entity.entity;
         entity.set_rotation(yaw, pitch);
         match self.client.as_ref() {
             ClientPlatform::Java(client) => {
-                *self
-                    .awaiting_teleport
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner) =
-                    Some((teleport_id.into(), position));
+                let teleport_id = {
+                    let mut awaiting_teleport = self
+                        .awaiting_teleport
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    let id = self
+                        .teleport_id_count
+                        .fetch_add(1, Ordering::Relaxed)
+                        .wrapping_add(1);
+                    self.last_teleport_id_issued.store(true, Ordering::Relaxed);
+                    *awaiting_teleport = Some((id.into(), position));
+                    id
+                };
                 let packet = CPlayerPosition::new(
                     teleport_id.into(),
                     position,
@@ -4257,6 +4266,7 @@ impl Player {
                 }
             }
             ClientPlatform::Bedrock(client) => {
+                self.teleport_id_count.fetch_add(1, Ordering::Relaxed);
                 let packet = CBedrockMovePlayer::new(
                     VarULong(self.entity_id() as u64),
                     Vector3::new(
