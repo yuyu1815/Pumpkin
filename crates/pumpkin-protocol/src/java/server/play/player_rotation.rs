@@ -18,7 +18,7 @@ impl<'a> ServerPacket<'a> for SPlayerRotation {
         Ok(Self {
             yaw: bytebuf.get_f32_be()?,
             pitch: bytebuf.get_f32_be()?,
-            ground: bytebuf.get_bool()?,
+            ground: bytebuf.get_u8()? & 0x01 != 0,
         })
     }
 }
