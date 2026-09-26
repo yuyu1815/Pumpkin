@@ -95,7 +95,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.acacia_boat"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.acacia_boat"),
                 },
             ),
             (
@@ -144,7 +144,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.acacia_button"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.acacia_button"),
                 },
             ),
             (
@@ -193,7 +193,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.acacia_chest_boat"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.acacia_chest_boat"),
                 },
             ),
             (
@@ -242,7 +242,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.acacia_door"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.acacia_door"),
                 },
             ),
             (
@@ -291,7 +291,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.acacia_fence"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.acacia_fence"),
                 },
             ),
             (
@@ -340,7 +340,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.acacia_fence_gate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.acacia_fence_gate"),
                 },
             ),
             (
@@ -389,7 +389,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.acacia_hanging_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.acacia_hanging_sign"),
                 },
             ),
             (
@@ -438,7 +438,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.acacia_leaves"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.acacia_leaves"),
                 },
             ),
             (
@@ -487,7 +487,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.acacia_log"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.acacia_log"),
                 },
             ),
             (
@@ -536,7 +536,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.acacia_planks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.acacia_planks"),
                 },
             ),
             (
@@ -585,7 +585,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.acacia_pressure_plate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.acacia_pressure_plate"),
                 },
             ),
             (
@@ -634,7 +634,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.acacia_sapling"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.acacia_sapling"),
                 },
             ),
             (
@@ -683,7 +683,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.acacia_shelf"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.acacia_shelf"),
                 },
             ),
             (
@@ -733,7 +733,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.acacia_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.acacia_sign"),
                 },
             ),
             (
@@ -782,7 +782,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.acacia_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.acacia_slab"),
                 },
             ),
             (
@@ -831,7 +831,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.acacia_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.acacia_stairs"),
                 },
             ),
             (
@@ -880,7 +880,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.acacia_trapdoor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.acacia_trapdoor"),
                 },
             ),
             (
@@ -929,7 +929,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.acacia_wood"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.acacia_wood"),
                 },
             ),
             (
@@ -978,7 +978,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.activator_rail"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.activator_rail"),
                 },
             ),
             (
@@ -1027,7 +1027,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.air"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.air"),
                 },
             ),
             (
@@ -1076,7 +1076,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.allay_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.allay_spawn_egg"),
                 },
             ),
             (
@@ -1126,7 +1126,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.allium"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.allium"),
                 },
             ),
             (
@@ -1175,7 +1175,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.amethyst_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.amethyst_block"),
                 },
             ),
             (
@@ -1224,7 +1224,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.amethyst_cluster"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.amethyst_cluster"),
                 },
             ),
             (
@@ -1273,7 +1273,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.amethyst_shard"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.amethyst_shard"),
                 },
             ),
             (
@@ -1323,7 +1323,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.ancient_debris"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.ancient_debris"),
                 },
             ),
             (
@@ -1378,7 +1378,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.andesite"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.andesite"),
                 },
             ),
             (
@@ -1427,7 +1427,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.andesite_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.andesite_slab"),
                 },
             ),
             (
@@ -1476,7 +1476,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.andesite_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.andesite_stairs"),
                 },
             ),
             (
@@ -1525,7 +1525,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.andesite_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.andesite_wall"),
                 },
             ),
             (
@@ -1574,7 +1574,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.angler_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.angler_pottery_sherd"),
                 },
             ),
             (
@@ -1623,7 +1623,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.anvil"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.anvil"),
                 },
             ),
             (
@@ -1672,7 +1672,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.apple"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.apple"),
                 },
             ),
             (
@@ -1739,7 +1739,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.archer_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.archer_pottery_sherd"),
                 },
             ),
             (
@@ -1788,7 +1788,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.armadillo_scute"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.armadillo_scute"),
                 },
             ),
             (
@@ -1837,7 +1837,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.armadillo_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.armadillo_spawn_egg"),
                 },
             ),
             (
@@ -1887,7 +1887,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.armor_stand"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.armor_stand"),
                 },
             ),
             (
@@ -1936,7 +1936,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.arms_up_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.arms_up_pottery_sherd"),
                 },
             ),
             (
@@ -1985,7 +1985,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.arrow"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.arrow"),
                 },
             ),
             (
@@ -2034,7 +2034,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.axolotl_bucket"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.axolotl_bucket"),
                 },
             ),
             (
@@ -2084,7 +2084,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.axolotl_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.axolotl_spawn_egg"),
                 },
             ),
             (
@@ -2134,7 +2134,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.azalea"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.azalea"),
                 },
             ),
             (
@@ -2183,7 +2183,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.azalea_leaves"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.azalea_leaves"),
                 },
             ),
             (
@@ -2232,7 +2232,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.azure_bluet"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.azure_bluet"),
                 },
             ),
             (
@@ -2281,7 +2281,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.baked_potato"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.baked_potato"),
                 },
             ),
             (
@@ -2348,7 +2348,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bamboo"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bamboo"),
                 },
             ),
             (
@@ -2397,7 +2397,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bamboo_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bamboo_block"),
                 },
             ),
             (
@@ -2446,7 +2446,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bamboo_button"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bamboo_button"),
                 },
             ),
             (
@@ -2495,7 +2495,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.bamboo_chest_raft"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.bamboo_chest_raft"),
                 },
             ),
             (
@@ -2544,7 +2544,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bamboo_door"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bamboo_door"),
                 },
             ),
             (
@@ -2593,7 +2593,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bamboo_fence"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bamboo_fence"),
                 },
             ),
             (
@@ -2642,7 +2642,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bamboo_fence_gate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bamboo_fence_gate"),
                 },
             ),
             (
@@ -2691,7 +2691,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bamboo_hanging_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bamboo_hanging_sign"),
                 },
             ),
             (
@@ -2740,7 +2740,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bamboo_mosaic"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bamboo_mosaic"),
                 },
             ),
             (
@@ -2789,7 +2789,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bamboo_mosaic_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bamboo_mosaic_slab"),
                 },
             ),
             (
@@ -2838,7 +2838,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bamboo_mosaic_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bamboo_mosaic_stairs"),
                 },
             ),
             (
@@ -2887,7 +2887,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bamboo_planks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bamboo_planks"),
                 },
             ),
             (
@@ -2936,7 +2936,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bamboo_pressure_plate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bamboo_pressure_plate"),
                 },
             ),
             (
@@ -2985,7 +2985,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.bamboo_raft"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.bamboo_raft"),
                 },
             ),
             (
@@ -3034,7 +3034,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bamboo_shelf"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bamboo_shelf"),
                 },
             ),
             (
@@ -3084,7 +3084,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bamboo_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bamboo_sign"),
                 },
             ),
             (
@@ -3133,7 +3133,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bamboo_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bamboo_slab"),
                 },
             ),
             (
@@ -3182,7 +3182,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bamboo_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bamboo_stairs"),
                 },
             ),
             (
@@ -3231,7 +3231,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bamboo_trapdoor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bamboo_trapdoor"),
                 },
             ),
             (
@@ -3280,7 +3280,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.barrel"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.barrel"),
                 },
             ),
             (
@@ -3330,7 +3330,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.barrier"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.barrier"),
                 },
             ),
             (
@@ -3379,7 +3379,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.basalt"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.basalt"),
                 },
             ),
             (
@@ -3428,7 +3428,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.bat_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.bat_spawn_egg"),
                 },
             ),
             (
@@ -3478,7 +3478,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.beacon"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.beacon"),
                 },
             ),
             (
@@ -3527,7 +3527,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bedrock"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bedrock"),
                 },
             ),
             (
@@ -3576,7 +3576,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bee_nest"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bee_nest"),
                 },
             ),
             (
@@ -3635,7 +3635,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.bee_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.bee_spawn_egg"),
                 },
             ),
             (
@@ -3685,7 +3685,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.beef"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.beef"),
                 },
             ),
             (
@@ -3752,7 +3752,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.beehive"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.beehive"),
                 },
             ),
             (
@@ -3811,7 +3811,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.beetroot"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.beetroot"),
                 },
             ),
             (
@@ -3878,7 +3878,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.beetroot_seeds"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.beetroot_seeds"),
                 },
             ),
             (
@@ -3927,7 +3927,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.beetroot_soup"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.beetroot_soup"),
                 },
             ),
             (
@@ -4000,7 +4000,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bell"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bell"),
                 },
             ),
             (
@@ -4049,7 +4049,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.big_dripleaf"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.big_dripleaf"),
                 },
             ),
             (
@@ -4098,7 +4098,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.birch_boat"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.birch_boat"),
                 },
             ),
             (
@@ -4147,7 +4147,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.birch_button"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.birch_button"),
                 },
             ),
             (
@@ -4196,7 +4196,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.birch_chest_boat"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.birch_chest_boat"),
                 },
             ),
             (
@@ -4245,7 +4245,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.birch_door"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.birch_door"),
                 },
             ),
             (
@@ -4294,7 +4294,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.birch_fence"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.birch_fence"),
                 },
             ),
             (
@@ -4343,7 +4343,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.birch_fence_gate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.birch_fence_gate"),
                 },
             ),
             (
@@ -4392,7 +4392,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.birch_hanging_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.birch_hanging_sign"),
                 },
             ),
             (
@@ -4441,7 +4441,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.birch_leaves"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.birch_leaves"),
                 },
             ),
             (
@@ -4490,7 +4490,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.birch_log"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.birch_log"),
                 },
             ),
             (
@@ -4539,7 +4539,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.birch_planks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.birch_planks"),
                 },
             ),
             (
@@ -4588,7 +4588,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.birch_pressure_plate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.birch_pressure_plate"),
                 },
             ),
             (
@@ -4637,7 +4637,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.birch_sapling"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.birch_sapling"),
                 },
             ),
             (
@@ -4686,7 +4686,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.birch_shelf"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.birch_shelf"),
                 },
             ),
             (
@@ -4736,7 +4736,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.birch_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.birch_sign"),
                 },
             ),
             (
@@ -4785,7 +4785,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.birch_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.birch_slab"),
                 },
             ),
             (
@@ -4834,7 +4834,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.birch_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.birch_stairs"),
                 },
             ),
             (
@@ -4883,7 +4883,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.birch_trapdoor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.birch_trapdoor"),
                 },
             ),
             (
@@ -4932,7 +4932,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.birch_wood"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.birch_wood"),
                 },
             ),
             (
@@ -4981,7 +4981,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.black_banner"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.black_banner"),
                 },
             ),
             (
@@ -5031,7 +5031,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.black_bed"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.black_bed"),
                 },
             ),
             (
@@ -5080,7 +5080,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.black_bundle"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.black_bundle"),
                 },
             ),
             (
@@ -5130,7 +5130,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.black_candle"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.black_candle"),
                 },
             ),
             (
@@ -5179,7 +5179,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.black_carpet"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.black_carpet"),
                 },
             ),
             (
@@ -5247,7 +5247,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.black_concrete"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.black_concrete"),
                 },
             ),
             (
@@ -5296,7 +5296,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.black_concrete_powder"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.black_concrete_powder"),
                 },
             ),
             (
@@ -5345,7 +5345,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.black_dye"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.black_dye"),
                 },
             ),
             (
@@ -5395,7 +5395,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.black_glazed_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.black_glazed_terracotta"),
                 },
             ),
             (
@@ -5444,7 +5444,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.black_harness"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.black_harness"),
                 },
             ),
             (
@@ -5509,7 +5509,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.black_shulker_box"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.black_shulker_box"),
                 },
             ),
             (
@@ -5559,7 +5559,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.black_stained_glass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.black_stained_glass"),
                 },
             ),
             (
@@ -5608,7 +5608,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.black_stained_glass_pane"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.black_stained_glass_pane"),
                 },
             ),
             (
@@ -5657,7 +5657,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.black_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.black_terracotta"),
                 },
             ),
             (
@@ -5706,7 +5706,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.black_wool"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.black_wool"),
                 },
             ),
             (
@@ -5755,7 +5755,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.blackstone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.blackstone"),
                 },
             ),
             (
@@ -5804,7 +5804,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.blackstone_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.blackstone_slab"),
                 },
             ),
             (
@@ -5853,7 +5853,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.blackstone_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.blackstone_stairs"),
                 },
             ),
             (
@@ -5902,7 +5902,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.blackstone_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.blackstone_wall"),
                 },
             ),
             (
@@ -5951,7 +5951,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.blade_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.blade_pottery_sherd"),
                 },
             ),
             (
@@ -6000,7 +6000,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.blast_furnace"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.blast_furnace"),
                 },
             ),
             (
@@ -6050,7 +6050,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.blaze_powder"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.blaze_powder"),
                 },
             ),
             (
@@ -6099,7 +6099,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.blaze_rod"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.blaze_rod"),
                 },
             ),
             (
@@ -6148,7 +6148,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.blaze_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.blaze_spawn_egg"),
                 },
             ),
             (
@@ -6198,7 +6198,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.blue_banner"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.blue_banner"),
                 },
             ),
             (
@@ -6248,7 +6248,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.blue_bed"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.blue_bed"),
                 },
             ),
             (
@@ -6297,7 +6297,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.blue_bundle"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.blue_bundle"),
                 },
             ),
             (
@@ -6347,7 +6347,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.blue_candle"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.blue_candle"),
                 },
             ),
             (
@@ -6396,7 +6396,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.blue_carpet"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.blue_carpet"),
                 },
             ),
             (
@@ -6464,7 +6464,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.blue_concrete"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.blue_concrete"),
                 },
             ),
             (
@@ -6513,7 +6513,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.blue_concrete_powder"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.blue_concrete_powder"),
                 },
             ),
             (
@@ -6562,7 +6562,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.blue_dye"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.blue_dye"),
                 },
             ),
             (
@@ -6612,7 +6612,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.blue_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.blue_egg"),
                 },
             ),
             (
@@ -6667,7 +6667,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.blue_glazed_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.blue_glazed_terracotta"),
                 },
             ),
             (
@@ -6716,7 +6716,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.blue_harness"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.blue_harness"),
                 },
             ),
             (
@@ -6781,7 +6781,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.blue_ice"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.blue_ice"),
                 },
             ),
             (
@@ -6830,7 +6830,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.blue_orchid"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.blue_orchid"),
                 },
             ),
             (
@@ -6879,7 +6879,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.blue_shulker_box"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.blue_shulker_box"),
                 },
             ),
             (
@@ -6929,7 +6929,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.blue_stained_glass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.blue_stained_glass"),
                 },
             ),
             (
@@ -6978,7 +6978,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.blue_stained_glass_pane"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.blue_stained_glass_pane"),
                 },
             ),
             (
@@ -7027,7 +7027,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.blue_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.blue_terracotta"),
                 },
             ),
             (
@@ -7076,7 +7076,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.blue_wool"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.blue_wool"),
                 },
             ),
             (
@@ -7125,7 +7125,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.bogged_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.bogged_spawn_egg"),
                 },
             ),
             (
@@ -7175,7 +7175,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.bolt_armor_trim_smithing_template"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.bolt_armor_trim_smithing_template"),
                 },
             ),
             (
@@ -7224,7 +7224,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.bone"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.bone"),
                 },
             ),
             (
@@ -7273,7 +7273,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bone_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bone_block"),
                 },
             ),
             (
@@ -7322,7 +7322,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.bone_meal"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.bone_meal"),
                 },
             ),
             (
@@ -7371,7 +7371,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.book"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.book"),
                 },
             ),
             (
@@ -7421,7 +7421,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bookshelf"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bookshelf"),
                 },
             ),
             (
@@ -7470,7 +7470,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.bordure_indented_banner_pattern"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.bordure_indented_banner_pattern"),
                 },
             ),
             (
@@ -7520,7 +7520,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.bow"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.bow"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -7572,7 +7572,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.bowl"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.bowl"),
                 },
             ),
             (
@@ -7621,7 +7621,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.brain_coral"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.brain_coral"),
                 },
             ),
             (
@@ -7670,7 +7670,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.brain_coral_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.brain_coral_block"),
                 },
             ),
             (
@@ -7719,7 +7719,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.brain_coral_fan"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.brain_coral_fan"),
                 },
             ),
             (
@@ -7768,7 +7768,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.bread"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.bread"),
                 },
             ),
             (
@@ -7835,7 +7835,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.breeze_rod"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.breeze_rod"),
                 },
             ),
             (
@@ -7884,7 +7884,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.breeze_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.breeze_spawn_egg"),
                 },
             ),
             (
@@ -7934,7 +7934,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.brewer_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.brewer_pottery_sherd"),
                 },
             ),
             (
@@ -7983,7 +7983,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.brewing_stand"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.brewing_stand"),
                 },
             ),
             (
@@ -8033,7 +8033,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.brick"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.brick"),
                 },
             ),
             (
@@ -8082,7 +8082,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.brick_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.brick_slab"),
                 },
             ),
             (
@@ -8131,7 +8131,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.brick_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.brick_stairs"),
                 },
             ),
             (
@@ -8180,7 +8180,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.brick_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.brick_wall"),
                 },
             ),
             (
@@ -8229,7 +8229,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bricks"),
                 },
             ),
             (
@@ -8278,7 +8278,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.brown_banner"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.brown_banner"),
                 },
             ),
             (
@@ -8328,7 +8328,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.brown_bed"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.brown_bed"),
                 },
             ),
             (
@@ -8377,7 +8377,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.brown_bundle"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.brown_bundle"),
                 },
             ),
             (
@@ -8427,7 +8427,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.brown_candle"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.brown_candle"),
                 },
             ),
             (
@@ -8476,7 +8476,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.brown_carpet"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.brown_carpet"),
                 },
             ),
             (
@@ -8544,7 +8544,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.brown_concrete"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.brown_concrete"),
                 },
             ),
             (
@@ -8593,7 +8593,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.brown_concrete_powder"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.brown_concrete_powder"),
                 },
             ),
             (
@@ -8642,7 +8642,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.brown_dye"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.brown_dye"),
                 },
             ),
             (
@@ -8692,7 +8692,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.brown_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.brown_egg"),
                 },
             ),
             (
@@ -8747,7 +8747,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.brown_glazed_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.brown_glazed_terracotta"),
                 },
             ),
             (
@@ -8796,7 +8796,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.brown_harness"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.brown_harness"),
                 },
             ),
             (
@@ -8861,7 +8861,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.brown_mushroom"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.brown_mushroom"),
                 },
             ),
             (
@@ -8910,7 +8910,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.brown_mushroom_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.brown_mushroom_block"),
                 },
             ),
             (
@@ -8959,7 +8959,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.brown_shulker_box"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.brown_shulker_box"),
                 },
             ),
             (
@@ -9009,7 +9009,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.brown_stained_glass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.brown_stained_glass"),
                 },
             ),
             (
@@ -9058,7 +9058,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.brown_stained_glass_pane"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.brown_stained_glass_pane"),
                 },
             ),
             (
@@ -9107,7 +9107,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.brown_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.brown_terracotta"),
                 },
             ),
             (
@@ -9156,7 +9156,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.brown_wool"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.brown_wool"),
                 },
             ),
             (
@@ -9205,7 +9205,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.brush"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.brush"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -9256,7 +9256,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bubble_coral"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bubble_coral"),
                 },
             ),
             (
@@ -9305,7 +9305,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bubble_coral_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bubble_coral_block"),
                 },
             ),
             (
@@ -9354,7 +9354,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bubble_coral_fan"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bubble_coral_fan"),
                 },
             ),
             (
@@ -9403,7 +9403,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.bucket"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.bucket"),
                 },
             ),
             (
@@ -9452,7 +9452,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.budding_amethyst"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.budding_amethyst"),
                 },
             ),
             (
@@ -9501,7 +9501,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.bundle"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.bundle"),
                 },
             ),
             (
@@ -9551,7 +9551,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.burn_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.burn_pottery_sherd"),
                 },
             ),
             (
@@ -9600,7 +9600,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.bush"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.bush"),
                 },
             ),
             (
@@ -9649,7 +9649,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cactus"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cactus"),
                 },
             ),
             (
@@ -9698,7 +9698,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cactus_flower"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cactus_flower"),
                 },
             ),
             (
@@ -9747,7 +9747,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cake"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cake"),
                 },
             ),
             (
@@ -9796,7 +9796,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.calcite"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.calcite"),
                 },
             ),
             (
@@ -9845,7 +9845,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.calibrated_sculk_sensor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.calibrated_sculk_sensor"),
                 },
             ),
             (
@@ -9894,7 +9894,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.camel_husk_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.camel_husk_spawn_egg"),
                 },
             ),
             (
@@ -9944,7 +9944,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.camel_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.camel_spawn_egg"),
                 },
             ),
             (
@@ -9994,7 +9994,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.campfire"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.campfire"),
                 },
             ),
             (
@@ -10044,7 +10044,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.candle"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.candle"),
                 },
             ),
             (
@@ -10093,7 +10093,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.carrot"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.carrot"),
                 },
             ),
             (
@@ -10160,7 +10160,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.carrot_on_a_stick"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.carrot_on_a_stick"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -10211,7 +10211,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cartography_table"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cartography_table"),
                 },
             ),
             (
@@ -10260,7 +10260,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.carved_pumpkin"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.carved_pumpkin"),
                 },
             ),
             (
@@ -10332,7 +10332,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.cat_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.cat_spawn_egg"),
                 },
             ),
             (
@@ -10382,7 +10382,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cauldron"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cauldron"),
                 },
             ),
             (
@@ -10431,7 +10431,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.cave_spider_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.cave_spider_spawn_egg"),
                 },
             ),
             (
@@ -10481,7 +10481,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.chain_command_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.chain_command_block"),
                 },
             ),
             (
@@ -10530,7 +10530,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.chainmail_boots"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.chainmail_boots"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -10621,7 +10621,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.chainmail_chestplate"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.chainmail_chestplate"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -10712,7 +10712,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.chainmail_helmet"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.chainmail_helmet"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -10803,7 +10803,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.chainmail_leggings"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.chainmail_leggings"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -10894,7 +10894,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.charcoal"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.charcoal"),
                 },
             ),
             (
@@ -10943,7 +10943,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.cherry_boat"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.cherry_boat"),
                 },
             ),
             (
@@ -10992,7 +10992,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cherry_button"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cherry_button"),
                 },
             ),
             (
@@ -11041,7 +11041,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.cherry_chest_boat"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.cherry_chest_boat"),
                 },
             ),
             (
@@ -11090,7 +11090,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cherry_door"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cherry_door"),
                 },
             ),
             (
@@ -11139,7 +11139,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cherry_fence"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cherry_fence"),
                 },
             ),
             (
@@ -11188,7 +11188,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cherry_fence_gate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cherry_fence_gate"),
                 },
             ),
             (
@@ -11237,7 +11237,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cherry_hanging_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cherry_hanging_sign"),
                 },
             ),
             (
@@ -11286,7 +11286,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cherry_leaves"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cherry_leaves"),
                 },
             ),
             (
@@ -11335,7 +11335,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cherry_log"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cherry_log"),
                 },
             ),
             (
@@ -11384,7 +11384,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cherry_planks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cherry_planks"),
                 },
             ),
             (
@@ -11433,7 +11433,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cherry_pressure_plate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cherry_pressure_plate"),
                 },
             ),
             (
@@ -11482,7 +11482,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cherry_sapling"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cherry_sapling"),
                 },
             ),
             (
@@ -11531,7 +11531,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cherry_shelf"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cherry_shelf"),
                 },
             ),
             (
@@ -11581,7 +11581,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cherry_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cherry_sign"),
                 },
             ),
             (
@@ -11630,7 +11630,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cherry_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cherry_slab"),
                 },
             ),
             (
@@ -11679,7 +11679,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cherry_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cherry_stairs"),
                 },
             ),
             (
@@ -11728,7 +11728,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cherry_trapdoor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cherry_trapdoor"),
                 },
             ),
             (
@@ -11777,7 +11777,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cherry_wood"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cherry_wood"),
                 },
             ),
             (
@@ -11826,7 +11826,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.chest"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.chest"),
                 },
             ),
             (
@@ -11876,7 +11876,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.chest_minecart"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.chest_minecart"),
                 },
             ),
             (
@@ -11925,7 +11925,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.chicken"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.chicken"),
                 },
             ),
             (
@@ -12003,7 +12003,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.chicken_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.chicken_spawn_egg"),
                 },
             ),
             (
@@ -12053,7 +12053,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.chipped_anvil"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.chipped_anvil"),
                 },
             ),
             (
@@ -12102,7 +12102,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.chiseled_bookshelf"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.chiseled_bookshelf"),
                 },
             ),
             (
@@ -12152,7 +12152,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.chiseled_cinnabar"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.chiseled_cinnabar"),
                 },
             ),
             (
@@ -12201,7 +12201,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.chiseled_copper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.chiseled_copper"),
                 },
             ),
             (
@@ -12250,7 +12250,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.chiseled_deepslate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.chiseled_deepslate"),
                 },
             ),
             (
@@ -12299,7 +12299,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.chiseled_nether_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.chiseled_nether_bricks"),
                 },
             ),
             (
@@ -12348,7 +12348,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.chiseled_polished_blackstone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.chiseled_polished_blackstone"),
                 },
             ),
             (
@@ -12397,7 +12397,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.chiseled_quartz_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.chiseled_quartz_block"),
                 },
             ),
             (
@@ -12446,7 +12446,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.chiseled_red_sandstone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.chiseled_red_sandstone"),
                 },
             ),
             (
@@ -12495,7 +12495,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.chiseled_resin_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.chiseled_resin_bricks"),
                 },
             ),
             (
@@ -12544,7 +12544,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.chiseled_sandstone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.chiseled_sandstone"),
                 },
             ),
             (
@@ -12593,7 +12593,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.chiseled_stone_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.chiseled_stone_bricks"),
                 },
             ),
             (
@@ -12642,7 +12642,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.chiseled_sulfur"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.chiseled_sulfur"),
                 },
             ),
             (
@@ -12691,7 +12691,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.chiseled_tuff"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.chiseled_tuff"),
                 },
             ),
             (
@@ -12740,7 +12740,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.chiseled_tuff_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.chiseled_tuff_bricks"),
                 },
             ),
             (
@@ -12789,7 +12789,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.chorus_flower"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.chorus_flower"),
                 },
             ),
             (
@@ -12845,7 +12845,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.chorus_fruit"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.chorus_fruit"),
                 },
             ),
             (
@@ -12912,7 +12912,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.chorus_plant"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.chorus_plant"),
                 },
             ),
             (
@@ -12961,7 +12961,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cinnabar"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cinnabar"),
                 },
             ),
             (
@@ -13010,7 +13010,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cinnabar_brick_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cinnabar_brick_slab"),
                 },
             ),
             (
@@ -13059,7 +13059,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cinnabar_brick_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cinnabar_brick_stairs"),
                 },
             ),
             (
@@ -13108,7 +13108,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cinnabar_brick_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cinnabar_brick_wall"),
                 },
             ),
             (
@@ -13157,7 +13157,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cinnabar_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cinnabar_bricks"),
                 },
             ),
             (
@@ -13206,7 +13206,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cinnabar_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cinnabar_slab"),
                 },
             ),
             (
@@ -13255,7 +13255,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cinnabar_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cinnabar_stairs"),
                 },
             ),
             (
@@ -13304,7 +13304,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cinnabar_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cinnabar_wall"),
                 },
             ),
             (
@@ -13353,7 +13353,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.clay"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.clay"),
                 },
             ),
             (
@@ -13402,7 +13402,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.clay_ball"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.clay_ball"),
                 },
             ),
             (
@@ -13451,7 +13451,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.clock"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.clock"),
                 },
             ),
             (
@@ -13500,7 +13500,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.closed_eyeblossom"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.closed_eyeblossom"),
                 },
             ),
             (
@@ -13549,7 +13549,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.coal"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.coal"),
                 },
             ),
             (
@@ -13598,7 +13598,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.coal_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.coal_block"),
                 },
             ),
             (
@@ -13647,7 +13647,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.coal_ore"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.coal_ore"),
                 },
             ),
             (
@@ -13696,7 +13696,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.coarse_dirt"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.coarse_dirt"),
                 },
             ),
             (
@@ -13745,7 +13745,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.coast_armor_trim_smithing_template"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.coast_armor_trim_smithing_template"),
                 },
             ),
             (
@@ -13794,7 +13794,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cobbled_deepslate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cobbled_deepslate"),
                 },
             ),
             (
@@ -13843,7 +13843,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cobbled_deepslate_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cobbled_deepslate_slab"),
                 },
             ),
             (
@@ -13892,7 +13892,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cobbled_deepslate_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cobbled_deepslate_stairs"),
                 },
             ),
             (
@@ -13941,7 +13941,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cobbled_deepslate_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cobbled_deepslate_wall"),
                 },
             ),
             (
@@ -13990,7 +13990,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cobblestone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cobblestone"),
                 },
             ),
             (
@@ -14039,7 +14039,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cobblestone_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cobblestone_slab"),
                 },
             ),
             (
@@ -14088,7 +14088,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cobblestone_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cobblestone_stairs"),
                 },
             ),
             (
@@ -14137,7 +14137,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cobblestone_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cobblestone_wall"),
                 },
             ),
             (
@@ -14186,7 +14186,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cobweb"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cobweb"),
                 },
             ),
             (
@@ -14235,7 +14235,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.cocoa_beans"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.cocoa_beans"),
                 },
             ),
             (
@@ -14284,7 +14284,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.cod"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.cod"),
                 },
             ),
             (
@@ -14351,7 +14351,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.cod_bucket"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.cod_bucket"),
                 },
             ),
             (
@@ -14409,7 +14409,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.cod_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.cod_spawn_egg"),
                 },
             ),
             (
@@ -14459,7 +14459,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.command_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.command_block"),
                 },
             ),
             (
@@ -14508,7 +14508,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.command_block_minecart"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.command_block_minecart"),
                 },
             ),
             (
@@ -14557,7 +14557,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.comparator"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.comparator"),
                 },
             ),
             (
@@ -14606,7 +14606,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.compass"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.compass"),
                 },
             ),
             (
@@ -14655,7 +14655,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.composter"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.composter"),
                 },
             ),
             (
@@ -14704,7 +14704,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.conduit"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.conduit"),
                 },
             ),
             (
@@ -14753,7 +14753,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.cooked_beef"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.cooked_beef"),
                 },
             ),
             (
@@ -14820,7 +14820,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.cooked_chicken"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.cooked_chicken"),
                 },
             ),
             (
@@ -14887,7 +14887,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.cooked_cod"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.cooked_cod"),
                 },
             ),
             (
@@ -14954,7 +14954,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.cooked_mutton"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.cooked_mutton"),
                 },
             ),
             (
@@ -15021,7 +15021,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.cooked_porkchop"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.cooked_porkchop"),
                 },
             ),
             (
@@ -15088,7 +15088,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.cooked_rabbit"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.cooked_rabbit"),
                 },
             ),
             (
@@ -15155,7 +15155,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.cooked_salmon"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.cooked_salmon"),
                 },
             ),
             (
@@ -15222,7 +15222,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.cookie"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.cookie"),
                 },
             ),
             (
@@ -15289,7 +15289,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.copper_axe"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.copper_axe"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -15390,7 +15390,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.copper_bars"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.copper_bars"),
                 },
             ),
             (
@@ -15439,7 +15439,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.copper_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.copper_block"),
                 },
             ),
             (
@@ -15488,7 +15488,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.copper_boots"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.copper_boots"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -15579,7 +15579,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.copper_bulb"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.copper_bulb"),
                 },
             ),
             (
@@ -15628,7 +15628,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.copper_chain"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.copper_chain"),
                 },
             ),
             (
@@ -15677,7 +15677,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.copper_chest"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.copper_chest"),
                 },
             ),
             (
@@ -15726,7 +15726,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.copper_chestplate"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.copper_chestplate"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -15817,7 +15817,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.copper_door"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.copper_door"),
                 },
             ),
             (
@@ -15866,7 +15866,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.copper_golem_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.copper_golem_spawn_egg"),
                 },
             ),
             (
@@ -15916,7 +15916,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.copper_golem_statue"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.copper_golem_statue"),
                 },
             ),
             (
@@ -15974,7 +15974,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.copper_grate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.copper_grate"),
                 },
             ),
             (
@@ -16023,7 +16023,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.copper_helmet"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.copper_helmet"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -16114,7 +16114,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.copper_hoe"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.copper_hoe"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -16215,7 +16215,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.copper_horse_armor"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.copper_horse_armor"),
                 },
             ),
             (
@@ -16297,7 +16297,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.copper_ingot"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.copper_ingot"),
                 },
             ),
             (
@@ -16347,7 +16347,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.copper_lantern"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.copper_lantern"),
                 },
             ),
             (
@@ -16396,7 +16396,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.copper_leggings"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.copper_leggings"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -16487,7 +16487,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.copper_nautilus_armor"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.copper_nautilus_armor"),
                 },
             ),
             (
@@ -16569,7 +16569,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.copper_nugget"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.copper_nugget"),
                 },
             ),
             (
@@ -16618,7 +16618,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.copper_ore"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.copper_ore"),
                 },
             ),
             (
@@ -16667,7 +16667,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.copper_pickaxe"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.copper_pickaxe"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -16768,7 +16768,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.copper_shovel"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.copper_shovel"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -16869,7 +16869,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.copper_spear"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.copper_spear"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -17006,7 +17006,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.copper_sword"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.copper_sword"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -17112,7 +17112,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.copper_torch"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.copper_torch"),
                 },
             ),
             (
@@ -17161,7 +17161,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.copper_trapdoor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.copper_trapdoor"),
                 },
             ),
             (
@@ -17210,7 +17210,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cornflower"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cornflower"),
                 },
             ),
             (
@@ -17259,7 +17259,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.cow_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.cow_spawn_egg"),
                 },
             ),
             (
@@ -17309,7 +17309,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cracked_deepslate_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cracked_deepslate_bricks"),
                 },
             ),
             (
@@ -17358,7 +17358,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cracked_deepslate_tiles"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cracked_deepslate_tiles"),
                 },
             ),
             (
@@ -17407,7 +17407,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cracked_nether_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cracked_nether_bricks"),
                 },
             ),
             (
@@ -17456,7 +17456,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cracked_polished_blackstone_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cracked_polished_blackstone_bricks"),
                 },
             ),
             (
@@ -17505,7 +17505,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cracked_stone_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cracked_stone_bricks"),
                 },
             ),
             (
@@ -17554,7 +17554,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.crafter"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.crafter"),
                 },
             ),
             (
@@ -17604,7 +17604,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.crafting_table"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.crafting_table"),
                 },
             ),
             (
@@ -17653,7 +17653,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.creaking_heart"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.creaking_heart"),
                 },
             ),
             (
@@ -17702,7 +17702,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.creaking_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.creaking_spawn_egg"),
                 },
             ),
             (
@@ -17752,7 +17752,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.creeper_banner_pattern"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.creeper_banner_pattern"),
                 },
             ),
             (
@@ -17802,7 +17802,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.creeper_head"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.creeper_head"),
                 },
             ),
             (
@@ -17874,7 +17874,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.creeper_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.creeper_spawn_egg"),
                 },
             ),
             (
@@ -17924,7 +17924,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.crimson_button"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.crimson_button"),
                 },
             ),
             (
@@ -17973,7 +17973,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.crimson_door"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.crimson_door"),
                 },
             ),
             (
@@ -18022,7 +18022,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.crimson_fence"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.crimson_fence"),
                 },
             ),
             (
@@ -18071,7 +18071,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.crimson_fence_gate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.crimson_fence_gate"),
                 },
             ),
             (
@@ -18120,7 +18120,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.crimson_fungus"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.crimson_fungus"),
                 },
             ),
             (
@@ -18169,7 +18169,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.crimson_hanging_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.crimson_hanging_sign"),
                 },
             ),
             (
@@ -18218,7 +18218,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.crimson_hyphae"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.crimson_hyphae"),
                 },
             ),
             (
@@ -18267,7 +18267,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.crimson_nylium"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.crimson_nylium"),
                 },
             ),
             (
@@ -18316,7 +18316,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.crimson_planks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.crimson_planks"),
                 },
             ),
             (
@@ -18365,7 +18365,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.crimson_pressure_plate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.crimson_pressure_plate"),
                 },
             ),
             (
@@ -18414,7 +18414,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.crimson_roots"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.crimson_roots"),
                 },
             ),
             (
@@ -18463,7 +18463,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.crimson_shelf"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.crimson_shelf"),
                 },
             ),
             (
@@ -18513,7 +18513,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.crimson_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.crimson_sign"),
                 },
             ),
             (
@@ -18562,7 +18562,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.crimson_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.crimson_slab"),
                 },
             ),
             (
@@ -18611,7 +18611,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.crimson_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.crimson_stairs"),
                 },
             ),
             (
@@ -18660,7 +18660,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.crimson_stem"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.crimson_stem"),
                 },
             ),
             (
@@ -18709,7 +18709,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.crimson_trapdoor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.crimson_trapdoor"),
                 },
             ),
             (
@@ -18758,7 +18758,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.crossbow"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.crossbow"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -18816,7 +18816,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.crying_obsidian"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.crying_obsidian"),
                 },
             ),
             (
@@ -18865,7 +18865,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cut_copper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cut_copper"),
                 },
             ),
             (
@@ -18914,7 +18914,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cut_copper_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cut_copper_slab"),
                 },
             ),
             (
@@ -18963,7 +18963,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cut_copper_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cut_copper_stairs"),
                 },
             ),
             (
@@ -19012,7 +19012,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cut_red_sandstone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cut_red_sandstone"),
                 },
             ),
             (
@@ -19061,7 +19061,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cut_red_sandstone_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cut_red_sandstone_slab"),
                 },
             ),
             (
@@ -19110,7 +19110,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cut_sandstone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cut_sandstone"),
                 },
             ),
             (
@@ -19159,7 +19159,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cut_sandstone_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cut_sandstone_slab"),
                 },
             ),
             (
@@ -19208,7 +19208,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cyan_banner"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cyan_banner"),
                 },
             ),
             (
@@ -19258,7 +19258,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cyan_bed"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cyan_bed"),
                 },
             ),
             (
@@ -19307,7 +19307,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.cyan_bundle"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.cyan_bundle"),
                 },
             ),
             (
@@ -19357,7 +19357,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cyan_candle"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cyan_candle"),
                 },
             ),
             (
@@ -19406,7 +19406,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cyan_carpet"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cyan_carpet"),
                 },
             ),
             (
@@ -19474,7 +19474,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cyan_concrete"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cyan_concrete"),
                 },
             ),
             (
@@ -19523,7 +19523,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cyan_concrete_powder"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cyan_concrete_powder"),
                 },
             ),
             (
@@ -19572,7 +19572,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.cyan_dye"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.cyan_dye"),
                 },
             ),
             (
@@ -19622,7 +19622,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cyan_glazed_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cyan_glazed_terracotta"),
                 },
             ),
             (
@@ -19671,7 +19671,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.cyan_harness"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.cyan_harness"),
                 },
             ),
             (
@@ -19736,7 +19736,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cyan_shulker_box"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cyan_shulker_box"),
                 },
             ),
             (
@@ -19786,7 +19786,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cyan_stained_glass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cyan_stained_glass"),
                 },
             ),
             (
@@ -19835,7 +19835,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cyan_stained_glass_pane"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cyan_stained_glass_pane"),
                 },
             ),
             (
@@ -19884,7 +19884,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cyan_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cyan_terracotta"),
                 },
             ),
             (
@@ -19933,7 +19933,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.cyan_wool"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.cyan_wool"),
                 },
             ),
             (
@@ -19982,7 +19982,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.damaged_anvil"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.damaged_anvil"),
                 },
             ),
             (
@@ -20031,7 +20031,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dandelion"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dandelion"),
                 },
             ),
             (
@@ -20080,7 +20080,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.danger_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.danger_pottery_sherd"),
                 },
             ),
             (
@@ -20129,7 +20129,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.dark_oak_boat"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.dark_oak_boat"),
                 },
             ),
             (
@@ -20178,7 +20178,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dark_oak_button"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dark_oak_button"),
                 },
             ),
             (
@@ -20227,7 +20227,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.dark_oak_chest_boat"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.dark_oak_chest_boat"),
                 },
             ),
             (
@@ -20276,7 +20276,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dark_oak_door"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dark_oak_door"),
                 },
             ),
             (
@@ -20325,7 +20325,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dark_oak_fence"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dark_oak_fence"),
                 },
             ),
             (
@@ -20374,7 +20374,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dark_oak_fence_gate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dark_oak_fence_gate"),
                 },
             ),
             (
@@ -20423,7 +20423,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dark_oak_hanging_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dark_oak_hanging_sign"),
                 },
             ),
             (
@@ -20472,7 +20472,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dark_oak_leaves"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dark_oak_leaves"),
                 },
             ),
             (
@@ -20521,7 +20521,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dark_oak_log"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dark_oak_log"),
                 },
             ),
             (
@@ -20570,7 +20570,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dark_oak_planks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dark_oak_planks"),
                 },
             ),
             (
@@ -20619,7 +20619,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dark_oak_pressure_plate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dark_oak_pressure_plate"),
                 },
             ),
             (
@@ -20668,7 +20668,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dark_oak_sapling"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dark_oak_sapling"),
                 },
             ),
             (
@@ -20717,7 +20717,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dark_oak_shelf"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dark_oak_shelf"),
                 },
             ),
             (
@@ -20767,7 +20767,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dark_oak_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dark_oak_sign"),
                 },
             ),
             (
@@ -20816,7 +20816,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dark_oak_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dark_oak_slab"),
                 },
             ),
             (
@@ -20865,7 +20865,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dark_oak_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dark_oak_stairs"),
                 },
             ),
             (
@@ -20914,7 +20914,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dark_oak_trapdoor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dark_oak_trapdoor"),
                 },
             ),
             (
@@ -20963,7 +20963,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dark_oak_wood"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dark_oak_wood"),
                 },
             ),
             (
@@ -21012,7 +21012,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dark_prismarine"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dark_prismarine"),
                 },
             ),
             (
@@ -21061,7 +21061,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dark_prismarine_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dark_prismarine_slab"),
                 },
             ),
             (
@@ -21110,7 +21110,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dark_prismarine_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dark_prismarine_stairs"),
                 },
             ),
             (
@@ -21159,7 +21159,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.daylight_detector"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.daylight_detector"),
                 },
             ),
             (
@@ -21208,7 +21208,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dead_brain_coral"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dead_brain_coral"),
                 },
             ),
             (
@@ -21257,7 +21257,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dead_brain_coral_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dead_brain_coral_block"),
                 },
             ),
             (
@@ -21306,7 +21306,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dead_brain_coral_fan"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dead_brain_coral_fan"),
                 },
             ),
             (
@@ -21355,7 +21355,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dead_bubble_coral"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dead_bubble_coral"),
                 },
             ),
             (
@@ -21404,7 +21404,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dead_bubble_coral_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dead_bubble_coral_block"),
                 },
             ),
             (
@@ -21453,7 +21453,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dead_bubble_coral_fan"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dead_bubble_coral_fan"),
                 },
             ),
             (
@@ -21502,7 +21502,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dead_bush"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dead_bush"),
                 },
             ),
             (
@@ -21551,7 +21551,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dead_fire_coral"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dead_fire_coral"),
                 },
             ),
             (
@@ -21600,7 +21600,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dead_fire_coral_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dead_fire_coral_block"),
                 },
             ),
             (
@@ -21649,7 +21649,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dead_fire_coral_fan"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dead_fire_coral_fan"),
                 },
             ),
             (
@@ -21698,7 +21698,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dead_horn_coral"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dead_horn_coral"),
                 },
             ),
             (
@@ -21747,7 +21747,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dead_horn_coral_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dead_horn_coral_block"),
                 },
             ),
             (
@@ -21796,7 +21796,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dead_horn_coral_fan"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dead_horn_coral_fan"),
                 },
             ),
             (
@@ -21845,7 +21845,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dead_tube_coral"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dead_tube_coral"),
                 },
             ),
             (
@@ -21894,7 +21894,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dead_tube_coral_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dead_tube_coral_block"),
                 },
             ),
             (
@@ -21943,7 +21943,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dead_tube_coral_fan"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dead_tube_coral_fan"),
                 },
             ),
             (
@@ -21992,7 +21992,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.debug_stick"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.debug_stick"),
                 },
             ),
             (
@@ -22048,7 +22048,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.decorated_pot"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.decorated_pot"),
                 },
             ),
             (
@@ -22099,7 +22099,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.deepslate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.deepslate"),
                 },
             ),
             (
@@ -22148,7 +22148,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.deepslate_brick_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.deepslate_brick_slab"),
                 },
             ),
             (
@@ -22197,7 +22197,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.deepslate_brick_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.deepslate_brick_stairs"),
                 },
             ),
             (
@@ -22246,7 +22246,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.deepslate_brick_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.deepslate_brick_wall"),
                 },
             ),
             (
@@ -22295,7 +22295,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.deepslate_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.deepslate_bricks"),
                 },
             ),
             (
@@ -22344,7 +22344,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.deepslate_coal_ore"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.deepslate_coal_ore"),
                 },
             ),
             (
@@ -22393,7 +22393,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.deepslate_copper_ore"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.deepslate_copper_ore"),
                 },
             ),
             (
@@ -22442,7 +22442,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.deepslate_diamond_ore"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.deepslate_diamond_ore"),
                 },
             ),
             (
@@ -22491,7 +22491,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.deepslate_emerald_ore"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.deepslate_emerald_ore"),
                 },
             ),
             (
@@ -22540,7 +22540,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.deepslate_gold_ore"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.deepslate_gold_ore"),
                 },
             ),
             (
@@ -22589,7 +22589,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.deepslate_iron_ore"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.deepslate_iron_ore"),
                 },
             ),
             (
@@ -22638,7 +22638,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.deepslate_lapis_ore"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.deepslate_lapis_ore"),
                 },
             ),
             (
@@ -22687,7 +22687,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.deepslate_redstone_ore"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.deepslate_redstone_ore"),
                 },
             ),
             (
@@ -22736,7 +22736,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.deepslate_tile_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.deepslate_tile_slab"),
                 },
             ),
             (
@@ -22785,7 +22785,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.deepslate_tile_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.deepslate_tile_stairs"),
                 },
             ),
             (
@@ -22834,7 +22834,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.deepslate_tile_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.deepslate_tile_wall"),
                 },
             ),
             (
@@ -22883,7 +22883,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.deepslate_tiles"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.deepslate_tiles"),
                 },
             ),
             (
@@ -22932,7 +22932,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.detector_rail"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.detector_rail"),
                 },
             ),
             (
@@ -22981,7 +22981,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.diamond"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.diamond"),
                 },
             ),
             (
@@ -23031,7 +23031,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.diamond_axe"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.diamond_axe"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -23132,7 +23132,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.diamond_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.diamond_block"),
                 },
             ),
             (
@@ -23181,7 +23181,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.diamond_boots"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.diamond_boots"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -23272,7 +23272,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.diamond_chestplate"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.diamond_chestplate"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -23363,7 +23363,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.diamond_helmet"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.diamond_helmet"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -23454,7 +23454,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.diamond_hoe"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.diamond_hoe"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -23555,7 +23555,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.diamond_horse_armor"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.diamond_horse_armor"),
                 },
             ),
             (
@@ -23637,7 +23637,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.diamond_leggings"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.diamond_leggings"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -23728,7 +23728,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.diamond_nautilus_armor"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.diamond_nautilus_armor"),
                 },
             ),
             (
@@ -23810,7 +23810,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.diamond_ore"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.diamond_ore"),
                 },
             ),
             (
@@ -23859,7 +23859,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.diamond_pickaxe"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.diamond_pickaxe"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -23960,7 +23960,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.diamond_shovel"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.diamond_shovel"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -24061,7 +24061,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.diamond_spear"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.diamond_spear"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -24198,7 +24198,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.diamond_sword"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.diamond_sword"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -24304,7 +24304,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.diorite"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.diorite"),
                 },
             ),
             (
@@ -24353,7 +24353,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.diorite_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.diorite_slab"),
                 },
             ),
             (
@@ -24402,7 +24402,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.diorite_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.diorite_stairs"),
                 },
             ),
             (
@@ -24451,7 +24451,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.diorite_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.diorite_wall"),
                 },
             ),
             (
@@ -24500,7 +24500,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dirt"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dirt"),
                 },
             ),
             (
@@ -24549,7 +24549,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dirt_path"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dirt_path"),
                 },
             ),
             (
@@ -24598,7 +24598,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.disc_fragment_5"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.disc_fragment_5"),
                 },
             ),
             (
@@ -24647,7 +24647,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dispenser"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dispenser"),
                 },
             ),
             (
@@ -24697,7 +24697,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.dolphin_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.dolphin_spawn_egg"),
                 },
             ),
             (
@@ -24747,7 +24747,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.donkey_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.donkey_spawn_egg"),
                 },
             ),
             (
@@ -24797,7 +24797,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.dragon_breath"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.dragon_breath"),
                 },
             ),
             (
@@ -24846,7 +24846,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dragon_egg"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dragon_egg"),
                 },
             ),
             (
@@ -24895,7 +24895,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dragon_head"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dragon_head"),
                 },
             ),
             (
@@ -24967,7 +24967,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dried_ghast"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dried_ghast"),
                 },
             ),
             (
@@ -25016,7 +25016,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.dried_kelp"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.dried_kelp"),
                 },
             ),
             (
@@ -25083,7 +25083,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dried_kelp_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dried_kelp_block"),
                 },
             ),
             (
@@ -25132,7 +25132,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dripstone_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dripstone_block"),
                 },
             ),
             (
@@ -25181,7 +25181,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.dropper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.dropper"),
                 },
             ),
             (
@@ -25231,7 +25231,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.drowned_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.drowned_spawn_egg"),
                 },
             ),
             (
@@ -25281,7 +25281,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.dune_armor_trim_smithing_template"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.dune_armor_trim_smithing_template"),
                 },
             ),
             (
@@ -25330,7 +25330,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.echo_shard"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.echo_shard"),
                 },
             ),
             (
@@ -25379,7 +25379,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.egg"),
                 },
             ),
             (
@@ -25434,7 +25434,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.elder_guardian_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.elder_guardian_spawn_egg"),
                 },
             ),
             (
@@ -25484,7 +25484,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.elytra"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.elytra"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -25558,7 +25558,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.emerald"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.emerald"),
                 },
             ),
             (
@@ -25608,7 +25608,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.emerald_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.emerald_block"),
                 },
             ),
             (
@@ -25657,7 +25657,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.emerald_ore"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.emerald_ore"),
                 },
             ),
             (
@@ -25706,7 +25706,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.enchanted_book"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.enchanted_book"),
                 },
             ),
             (
@@ -25762,7 +25762,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.enchanted_golden_apple"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.enchanted_golden_apple"),
                 },
             ),
             (
@@ -25870,7 +25870,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.enchanting_table"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.enchanting_table"),
                 },
             ),
             (
@@ -25919,7 +25919,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.end_crystal"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.end_crystal"),
                 },
             ),
             (
@@ -25969,7 +25969,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.end_portal_frame"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.end_portal_frame"),
                 },
             ),
             (
@@ -26018,7 +26018,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.end_rod"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.end_rod"),
                 },
             ),
             (
@@ -26067,7 +26067,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.end_stone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.end_stone"),
                 },
             ),
             (
@@ -26116,7 +26116,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.end_stone_brick_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.end_stone_brick_slab"),
                 },
             ),
             (
@@ -26165,7 +26165,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.end_stone_brick_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.end_stone_brick_stairs"),
                 },
             ),
             (
@@ -26214,7 +26214,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.end_stone_brick_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.end_stone_brick_wall"),
                 },
             ),
             (
@@ -26263,7 +26263,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.end_stone_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.end_stone_bricks"),
                 },
             ),
             (
@@ -26312,7 +26312,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.ender_chest"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.ender_chest"),
                 },
             ),
             (
@@ -26361,7 +26361,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.ender_dragon_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.ender_dragon_spawn_egg"),
                 },
             ),
             (
@@ -26411,7 +26411,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.ender_eye"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.ender_eye"),
                 },
             ),
             (
@@ -26467,7 +26467,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.ender_pearl"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.ender_pearl"),
                 },
             ),
             (
@@ -26516,7 +26516,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.enderman_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.enderman_spawn_egg"),
                 },
             ),
             (
@@ -26566,7 +26566,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.endermite_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.endermite_spawn_egg"),
                 },
             ),
             (
@@ -26616,7 +26616,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.evoker_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.evoker_spawn_egg"),
                 },
             ),
             (
@@ -26666,7 +26666,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.experience_bottle"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.experience_bottle"),
                 },
             ),
             (
@@ -26716,7 +26716,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.explorer_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.explorer_pottery_sherd"),
                 },
             ),
             (
@@ -26765,7 +26765,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.exposed_chiseled_copper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.exposed_chiseled_copper"),
                 },
             ),
             (
@@ -26814,7 +26814,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.exposed_copper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.exposed_copper"),
                 },
             ),
             (
@@ -26863,7 +26863,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.exposed_copper_bars"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.exposed_copper_bars"),
                 },
             ),
             (
@@ -26912,7 +26912,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.exposed_copper_bulb"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.exposed_copper_bulb"),
                 },
             ),
             (
@@ -26961,7 +26961,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.exposed_copper_chain"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.exposed_copper_chain"),
                 },
             ),
             (
@@ -27010,7 +27010,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.exposed_copper_chest"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.exposed_copper_chest"),
                 },
             ),
             (
@@ -27059,7 +27059,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.exposed_copper_door"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.exposed_copper_door"),
                 },
             ),
             (
@@ -27108,7 +27108,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.exposed_copper_golem_statue"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.exposed_copper_golem_statue"),
                 },
             ),
             (
@@ -27166,7 +27166,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.exposed_copper_grate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.exposed_copper_grate"),
                 },
             ),
             (
@@ -27215,7 +27215,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.exposed_copper_lantern"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.exposed_copper_lantern"),
                 },
             ),
             (
@@ -27264,7 +27264,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.exposed_copper_trapdoor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.exposed_copper_trapdoor"),
                 },
             ),
             (
@@ -27313,7 +27313,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.exposed_cut_copper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.exposed_cut_copper"),
                 },
             ),
             (
@@ -27362,7 +27362,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.exposed_cut_copper_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.exposed_cut_copper_slab"),
                 },
             ),
             (
@@ -27411,7 +27411,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.exposed_cut_copper_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.exposed_cut_copper_stairs"),
                 },
             ),
             (
@@ -27460,7 +27460,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.exposed_lightning_rod"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.exposed_lightning_rod"),
                 },
             ),
             (
@@ -27509,7 +27509,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.eye_armor_trim_smithing_template"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.eye_armor_trim_smithing_template"),
                 },
             ),
             (
@@ -27558,7 +27558,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.farmland"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.farmland"),
                 },
             ),
             (
@@ -27607,7 +27607,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.feather"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.feather"),
                 },
             ),
             (
@@ -27656,7 +27656,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.fermented_spider_eye"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.fermented_spider_eye"),
                 },
             ),
             (
@@ -27705,7 +27705,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.fern"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.fern"),
                 },
             ),
             (
@@ -27754,7 +27754,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.field_masoned_banner_pattern"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.field_masoned_banner_pattern"),
                 },
             ),
             (
@@ -27804,7 +27804,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.filled_map"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.filled_map"),
                 },
             ),
             (
@@ -27855,7 +27855,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.fire_charge"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.fire_charge"),
                 },
             ),
             (
@@ -27904,7 +27904,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.fire_coral"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.fire_coral"),
                 },
             ),
             (
@@ -27953,7 +27953,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.fire_coral_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.fire_coral_block"),
                 },
             ),
             (
@@ -28002,7 +28002,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.fire_coral_fan"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.fire_coral_fan"),
                 },
             ),
             (
@@ -28051,7 +28051,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.firefly_bush"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.firefly_bush"),
                 },
             ),
             (
@@ -28100,7 +28100,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.firework_rocket"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.firework_rocket"),
                 },
             ),
             (
@@ -28156,7 +28156,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.firework_star"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.firework_star"),
                 },
             ),
             (
@@ -28205,7 +28205,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.fishing_rod"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.fishing_rod"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -28257,7 +28257,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.fletching_table"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.fletching_table"),
                 },
             ),
             (
@@ -28306,7 +28306,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.flint"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.flint"),
                 },
             ),
             (
@@ -28355,7 +28355,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.flint_and_steel"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.flint_and_steel"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -28406,7 +28406,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.flow_armor_trim_smithing_template"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.flow_armor_trim_smithing_template"),
                 },
             ),
             (
@@ -28455,7 +28455,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.flow_banner_pattern"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.flow_banner_pattern"),
                 },
             ),
             (
@@ -28505,7 +28505,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.flow_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.flow_pottery_sherd"),
                 },
             ),
             (
@@ -28554,7 +28554,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.flower_banner_pattern"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.flower_banner_pattern"),
                 },
             ),
             (
@@ -28604,7 +28604,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.flower_pot"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.flower_pot"),
                 },
             ),
             (
@@ -28653,7 +28653,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.flowering_azalea"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.flowering_azalea"),
                 },
             ),
             (
@@ -28702,7 +28702,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.flowering_azalea_leaves"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.flowering_azalea_leaves"),
                 },
             ),
             (
@@ -28751,7 +28751,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.fox_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.fox_spawn_egg"),
                 },
             ),
             (
@@ -28801,7 +28801,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.friend_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.friend_pottery_sherd"),
                 },
             ),
             (
@@ -28850,7 +28850,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.frog_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.frog_spawn_egg"),
                 },
             ),
             (
@@ -28900,7 +28900,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.frogspawn"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.frogspawn"),
                 },
             ),
             (
@@ -28949,7 +28949,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.furnace"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.furnace"),
                 },
             ),
             (
@@ -28999,7 +28999,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.furnace_minecart"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.furnace_minecart"),
                 },
             ),
             (
@@ -29048,7 +29048,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.ghast_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.ghast_spawn_egg"),
                 },
             ),
             (
@@ -29098,7 +29098,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.ghast_tear"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.ghast_tear"),
                 },
             ),
             (
@@ -29147,7 +29147,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.gilded_blackstone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.gilded_blackstone"),
                 },
             ),
             (
@@ -29196,7 +29196,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.glass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.glass"),
                 },
             ),
             (
@@ -29245,7 +29245,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.glass_bottle"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.glass_bottle"),
                 },
             ),
             (
@@ -29294,7 +29294,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.glass_pane"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.glass_pane"),
                 },
             ),
             (
@@ -29343,7 +29343,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.glistering_melon_slice"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.glistering_melon_slice"),
                 },
             ),
             (
@@ -29392,7 +29392,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.globe_banner_pattern"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.globe_banner_pattern"),
                 },
             ),
             (
@@ -29442,7 +29442,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.glow_berries"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.glow_berries"),
                 },
             ),
             (
@@ -29509,7 +29509,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.glow_ink_sac"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.glow_ink_sac"),
                 },
             ),
             (
@@ -29558,7 +29558,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.glow_item_frame"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.glow_item_frame"),
                 },
             ),
             (
@@ -29607,7 +29607,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.glow_lichen"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.glow_lichen"),
                 },
             ),
             (
@@ -29656,7 +29656,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.glow_squid_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.glow_squid_spawn_egg"),
                 },
             ),
             (
@@ -29706,7 +29706,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.glowstone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.glowstone"),
                 },
             ),
             (
@@ -29755,7 +29755,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.glowstone_dust"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.glowstone_dust"),
                 },
             ),
             (
@@ -29804,7 +29804,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.goat_horn"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.goat_horn"),
                 },
             ),
             (
@@ -29854,7 +29854,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.goat_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.goat_spawn_egg"),
                 },
             ),
             (
@@ -29904,7 +29904,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.gold_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.gold_block"),
                 },
             ),
             (
@@ -29953,7 +29953,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.gold_ingot"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.gold_ingot"),
                 },
             ),
             (
@@ -30003,7 +30003,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.gold_nugget"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.gold_nugget"),
                 },
             ),
             (
@@ -30052,7 +30052,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.gold_ore"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.gold_ore"),
                 },
             ),
             (
@@ -30101,7 +30101,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.golden_apple"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.golden_apple"),
                 },
             ),
             (
@@ -30190,7 +30190,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.golden_axe"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.golden_axe"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -30291,7 +30291,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.golden_boots"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.golden_boots"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -30382,7 +30382,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.golden_carrot"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.golden_carrot"),
                 },
             ),
             (
@@ -30449,7 +30449,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.golden_chestplate"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.golden_chestplate"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -30540,7 +30540,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.golden_dandelion"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.golden_dandelion"),
                 },
             ),
             (
@@ -30589,7 +30589,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.golden_helmet"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.golden_helmet"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -30680,7 +30680,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.golden_hoe"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.golden_hoe"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -30781,7 +30781,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.golden_horse_armor"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.golden_horse_armor"),
                 },
             ),
             (
@@ -30863,7 +30863,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.golden_leggings"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.golden_leggings"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -30954,7 +30954,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.golden_nautilus_armor"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.golden_nautilus_armor"),
                 },
             ),
             (
@@ -31036,7 +31036,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.golden_pickaxe"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.golden_pickaxe"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -31137,7 +31137,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.golden_shovel"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.golden_shovel"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -31238,7 +31238,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.golden_spear"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.golden_spear"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -31375,7 +31375,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.golden_sword"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.golden_sword"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -31481,7 +31481,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.granite"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.granite"),
                 },
             ),
             (
@@ -31530,7 +31530,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.granite_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.granite_slab"),
                 },
             ),
             (
@@ -31579,7 +31579,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.granite_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.granite_stairs"),
                 },
             ),
             (
@@ -31628,7 +31628,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.granite_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.granite_wall"),
                 },
             ),
             (
@@ -31677,7 +31677,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.grass_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.grass_block"),
                 },
             ),
             (
@@ -31726,7 +31726,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.gravel"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.gravel"),
                 },
             ),
             (
@@ -31775,7 +31775,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.gray_banner"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.gray_banner"),
                 },
             ),
             (
@@ -31825,7 +31825,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.gray_bed"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.gray_bed"),
                 },
             ),
             (
@@ -31874,7 +31874,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.gray_bundle"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.gray_bundle"),
                 },
             ),
             (
@@ -31924,7 +31924,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.gray_candle"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.gray_candle"),
                 },
             ),
             (
@@ -31973,7 +31973,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.gray_carpet"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.gray_carpet"),
                 },
             ),
             (
@@ -32041,7 +32041,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.gray_concrete"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.gray_concrete"),
                 },
             ),
             (
@@ -32090,7 +32090,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.gray_concrete_powder"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.gray_concrete_powder"),
                 },
             ),
             (
@@ -32139,7 +32139,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.gray_dye"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.gray_dye"),
                 },
             ),
             (
@@ -32189,7 +32189,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.gray_glazed_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.gray_glazed_terracotta"),
                 },
             ),
             (
@@ -32238,7 +32238,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.gray_harness"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.gray_harness"),
                 },
             ),
             (
@@ -32303,7 +32303,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.gray_shulker_box"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.gray_shulker_box"),
                 },
             ),
             (
@@ -32353,7 +32353,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.gray_stained_glass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.gray_stained_glass"),
                 },
             ),
             (
@@ -32402,7 +32402,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.gray_stained_glass_pane"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.gray_stained_glass_pane"),
                 },
             ),
             (
@@ -32451,7 +32451,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.gray_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.gray_terracotta"),
                 },
             ),
             (
@@ -32500,7 +32500,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.gray_wool"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.gray_wool"),
                 },
             ),
             (
@@ -32549,7 +32549,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.green_banner"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.green_banner"),
                 },
             ),
             (
@@ -32599,7 +32599,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.green_bed"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.green_bed"),
                 },
             ),
             (
@@ -32648,7 +32648,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.green_bundle"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.green_bundle"),
                 },
             ),
             (
@@ -32698,7 +32698,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.green_candle"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.green_candle"),
                 },
             ),
             (
@@ -32747,7 +32747,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.green_carpet"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.green_carpet"),
                 },
             ),
             (
@@ -32815,7 +32815,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.green_concrete"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.green_concrete"),
                 },
             ),
             (
@@ -32864,7 +32864,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.green_concrete_powder"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.green_concrete_powder"),
                 },
             ),
             (
@@ -32913,7 +32913,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.green_dye"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.green_dye"),
                 },
             ),
             (
@@ -32963,7 +32963,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.green_glazed_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.green_glazed_terracotta"),
                 },
             ),
             (
@@ -33012,7 +33012,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.green_harness"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.green_harness"),
                 },
             ),
             (
@@ -33077,7 +33077,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.green_shulker_box"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.green_shulker_box"),
                 },
             ),
             (
@@ -33127,7 +33127,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.green_stained_glass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.green_stained_glass"),
                 },
             ),
             (
@@ -33176,7 +33176,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.green_stained_glass_pane"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.green_stained_glass_pane"),
                 },
             ),
             (
@@ -33225,7 +33225,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.green_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.green_terracotta"),
                 },
             ),
             (
@@ -33274,7 +33274,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.green_wool"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.green_wool"),
                 },
             ),
             (
@@ -33323,7 +33323,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.grindstone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.grindstone"),
                 },
             ),
             (
@@ -33372,7 +33372,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.guardian_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.guardian_spawn_egg"),
                 },
             ),
             (
@@ -33422,7 +33422,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.gunpowder"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.gunpowder"),
                 },
             ),
             (
@@ -33471,7 +33471,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.guster_banner_pattern"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.guster_banner_pattern"),
                 },
             ),
             (
@@ -33521,7 +33521,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.guster_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.guster_pottery_sherd"),
                 },
             ),
             (
@@ -33570,7 +33570,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.hanging_roots"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.hanging_roots"),
                 },
             ),
             (
@@ -33619,7 +33619,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.happy_ghast_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.happy_ghast_spawn_egg"),
                 },
             ),
             (
@@ -33669,7 +33669,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.hay_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.hay_block"),
                 },
             ),
             (
@@ -33718,7 +33718,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.heart_of_the_sea"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.heart_of_the_sea"),
                 },
             ),
             (
@@ -33767,7 +33767,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.heart_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.heart_pottery_sherd"),
                 },
             ),
             (
@@ -33816,7 +33816,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.heartbreak_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.heartbreak_pottery_sherd"),
                 },
             ),
             (
@@ -33865,7 +33865,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.heavy_core"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.heavy_core"),
                 },
             ),
             (
@@ -33914,7 +33914,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.heavy_weighted_pressure_plate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.heavy_weighted_pressure_plate"),
                 },
             ),
             (
@@ -33963,7 +33963,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.hoglin_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.hoglin_spawn_egg"),
                 },
             ),
             (
@@ -34013,7 +34013,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.honey_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.honey_block"),
                 },
             ),
             (
@@ -34062,7 +34062,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.honey_bottle"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.honey_bottle"),
                 },
             ),
             (
@@ -34140,7 +34140,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.honeycomb"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.honeycomb"),
                 },
             ),
             (
@@ -34189,7 +34189,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.honeycomb_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.honeycomb_block"),
                 },
             ),
             (
@@ -34238,7 +34238,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.hopper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.hopper"),
                 },
             ),
             (
@@ -34288,7 +34288,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.hopper_minecart"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.hopper_minecart"),
                 },
             ),
             (
@@ -34337,7 +34337,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.horn_coral"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.horn_coral"),
                 },
             ),
             (
@@ -34386,7 +34386,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.horn_coral_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.horn_coral_block"),
                 },
             ),
             (
@@ -34435,7 +34435,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.horn_coral_fan"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.horn_coral_fan"),
                 },
             ),
             (
@@ -34484,7 +34484,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.horse_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.horse_spawn_egg"),
                 },
             ),
             (
@@ -34534,7 +34534,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.host_armor_trim_smithing_template"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.host_armor_trim_smithing_template"),
                 },
             ),
             (
@@ -34583,7 +34583,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.howl_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.howl_pottery_sherd"),
                 },
             ),
             (
@@ -34632,7 +34632,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.husk_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.husk_spawn_egg"),
                 },
             ),
             (
@@ -34682,7 +34682,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.ice"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.ice"),
                 },
             ),
             (
@@ -34731,7 +34731,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.infested_chiseled_stone_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.infested_chiseled_stone_bricks"),
                 },
             ),
             (
@@ -34780,7 +34780,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.infested_cobblestone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.infested_cobblestone"),
                 },
             ),
             (
@@ -34829,7 +34829,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.infested_cracked_stone_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.infested_cracked_stone_bricks"),
                 },
             ),
             (
@@ -34878,7 +34878,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.infested_deepslate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.infested_deepslate"),
                 },
             ),
             (
@@ -34927,7 +34927,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.infested_mossy_stone_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.infested_mossy_stone_bricks"),
                 },
             ),
             (
@@ -34976,7 +34976,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.infested_stone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.infested_stone"),
                 },
             ),
             (
@@ -35025,7 +35025,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.infested_stone_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.infested_stone_bricks"),
                 },
             ),
             (
@@ -35074,7 +35074,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.ink_sac"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.ink_sac"),
                 },
             ),
             (
@@ -35123,7 +35123,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.iron_axe"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.iron_axe"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -35224,7 +35224,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.iron_bars"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.iron_bars"),
                 },
             ),
             (
@@ -35273,7 +35273,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.iron_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.iron_block"),
                 },
             ),
             (
@@ -35322,7 +35322,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.iron_boots"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.iron_boots"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -35413,7 +35413,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.iron_chain"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.iron_chain"),
                 },
             ),
             (
@@ -35462,7 +35462,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.iron_chestplate"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.iron_chestplate"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -35553,7 +35553,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.iron_door"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.iron_door"),
                 },
             ),
             (
@@ -35602,7 +35602,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.iron_golem_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.iron_golem_spawn_egg"),
                 },
             ),
             (
@@ -35652,7 +35652,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.iron_helmet"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.iron_helmet"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -35743,7 +35743,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.iron_hoe"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.iron_hoe"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -35844,7 +35844,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.iron_horse_armor"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.iron_horse_armor"),
                 },
             ),
             (
@@ -35926,7 +35926,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.iron_ingot"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.iron_ingot"),
                 },
             ),
             (
@@ -35976,7 +35976,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.iron_leggings"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.iron_leggings"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -36067,7 +36067,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.iron_nautilus_armor"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.iron_nautilus_armor"),
                 },
             ),
             (
@@ -36149,7 +36149,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.iron_nugget"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.iron_nugget"),
                 },
             ),
             (
@@ -36198,7 +36198,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.iron_ore"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.iron_ore"),
                 },
             ),
             (
@@ -36247,7 +36247,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.iron_pickaxe"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.iron_pickaxe"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -36348,7 +36348,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.iron_shovel"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.iron_shovel"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -36449,7 +36449,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.iron_spear"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.iron_spear"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -36586,7 +36586,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.iron_sword"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.iron_sword"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -36692,7 +36692,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.iron_trapdoor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.iron_trapdoor"),
                 },
             ),
             (
@@ -36741,7 +36741,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.item_frame"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.item_frame"),
                 },
             ),
             (
@@ -36790,7 +36790,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.jack_o_lantern"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.jack_o_lantern"),
                 },
             ),
             (
@@ -36839,7 +36839,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.jigsaw"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.jigsaw"),
                 },
             ),
             (
@@ -36888,7 +36888,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.jukebox"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.jukebox"),
                 },
             ),
             (
@@ -36937,7 +36937,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.jungle_boat"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.jungle_boat"),
                 },
             ),
             (
@@ -36986,7 +36986,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.jungle_button"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.jungle_button"),
                 },
             ),
             (
@@ -37035,7 +37035,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.jungle_chest_boat"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.jungle_chest_boat"),
                 },
             ),
             (
@@ -37084,7 +37084,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.jungle_door"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.jungle_door"),
                 },
             ),
             (
@@ -37133,7 +37133,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.jungle_fence"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.jungle_fence"),
                 },
             ),
             (
@@ -37182,7 +37182,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.jungle_fence_gate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.jungle_fence_gate"),
                 },
             ),
             (
@@ -37231,7 +37231,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.jungle_hanging_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.jungle_hanging_sign"),
                 },
             ),
             (
@@ -37280,7 +37280,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.jungle_leaves"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.jungle_leaves"),
                 },
             ),
             (
@@ -37329,7 +37329,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.jungle_log"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.jungle_log"),
                 },
             ),
             (
@@ -37378,7 +37378,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.jungle_planks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.jungle_planks"),
                 },
             ),
             (
@@ -37427,7 +37427,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.jungle_pressure_plate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.jungle_pressure_plate"),
                 },
             ),
             (
@@ -37476,7 +37476,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.jungle_sapling"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.jungle_sapling"),
                 },
             ),
             (
@@ -37525,7 +37525,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.jungle_shelf"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.jungle_shelf"),
                 },
             ),
             (
@@ -37575,7 +37575,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.jungle_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.jungle_sign"),
                 },
             ),
             (
@@ -37624,7 +37624,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.jungle_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.jungle_slab"),
                 },
             ),
             (
@@ -37673,7 +37673,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.jungle_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.jungle_stairs"),
                 },
             ),
             (
@@ -37722,7 +37722,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.jungle_trapdoor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.jungle_trapdoor"),
                 },
             ),
             (
@@ -37771,7 +37771,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.jungle_wood"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.jungle_wood"),
                 },
             ),
             (
@@ -37820,7 +37820,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.kelp"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.kelp"),
                 },
             ),
             (
@@ -37869,7 +37869,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.knowledge_book"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.knowledge_book"),
                 },
             ),
             (
@@ -37924,7 +37924,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.ladder"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.ladder"),
                 },
             ),
             (
@@ -37973,7 +37973,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.lantern"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.lantern"),
                 },
             ),
             (
@@ -38022,7 +38022,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.lapis_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.lapis_block"),
                 },
             ),
             (
@@ -38071,7 +38071,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.lapis_lazuli"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.lapis_lazuli"),
                 },
             ),
             (
@@ -38121,7 +38121,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.lapis_ore"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.lapis_ore"),
                 },
             ),
             (
@@ -38170,7 +38170,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.large_amethyst_bud"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.large_amethyst_bud"),
                 },
             ),
             (
@@ -38219,7 +38219,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.large_fern"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.large_fern"),
                 },
             ),
             (
@@ -38268,7 +38268,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.lava_bucket"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.lava_bucket"),
                 },
             ),
             (
@@ -38317,7 +38317,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.lead"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.lead"),
                 },
             ),
             (
@@ -38366,7 +38366,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.leaf_litter"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.leaf_litter"),
                 },
             ),
             (
@@ -38415,7 +38415,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.leather"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.leather"),
                 },
             ),
             (
@@ -38464,7 +38464,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.leather_boots"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.leather_boots"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -38555,7 +38555,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.leather_chestplate"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.leather_chestplate"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -38646,7 +38646,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.leather_helmet"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.leather_helmet"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -38737,7 +38737,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.leather_horse_armor"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.leather_horse_armor"),
                 },
             ),
             (
@@ -38819,7 +38819,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.leather_leggings"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.leather_leggings"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -38910,7 +38910,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.lectern"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.lectern"),
                 },
             ),
             (
@@ -38959,7 +38959,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.lever"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.lever"),
                 },
             ),
             (
@@ -39008,7 +39008,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light"),
                 },
             ),
             (
@@ -39063,7 +39063,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_blue_banner"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_blue_banner"),
                 },
             ),
             (
@@ -39113,7 +39113,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_blue_bed"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_blue_bed"),
                 },
             ),
             (
@@ -39162,7 +39162,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.light_blue_bundle"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.light_blue_bundle"),
                 },
             ),
             (
@@ -39212,7 +39212,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_blue_candle"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_blue_candle"),
                 },
             ),
             (
@@ -39261,7 +39261,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_blue_carpet"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_blue_carpet"),
                 },
             ),
             (
@@ -39329,7 +39329,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_blue_concrete"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_blue_concrete"),
                 },
             ),
             (
@@ -39378,7 +39378,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_blue_concrete_powder"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_blue_concrete_powder"),
                 },
             ),
             (
@@ -39427,7 +39427,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.light_blue_dye"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.light_blue_dye"),
                 },
             ),
             (
@@ -39477,7 +39477,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_blue_glazed_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_blue_glazed_terracotta"),
                 },
             ),
             (
@@ -39526,7 +39526,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.light_blue_harness"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.light_blue_harness"),
                 },
             ),
             (
@@ -39591,7 +39591,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_blue_shulker_box"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_blue_shulker_box"),
                 },
             ),
             (
@@ -39641,7 +39641,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_blue_stained_glass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_blue_stained_glass"),
                 },
             ),
             (
@@ -39690,7 +39690,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_blue_stained_glass_pane"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_blue_stained_glass_pane"),
                 },
             ),
             (
@@ -39739,7 +39739,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_blue_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_blue_terracotta"),
                 },
             ),
             (
@@ -39788,7 +39788,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_blue_wool"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_blue_wool"),
                 },
             ),
             (
@@ -39837,7 +39837,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_gray_banner"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_gray_banner"),
                 },
             ),
             (
@@ -39887,7 +39887,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_gray_bed"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_gray_bed"),
                 },
             ),
             (
@@ -39936,7 +39936,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.light_gray_bundle"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.light_gray_bundle"),
                 },
             ),
             (
@@ -39986,7 +39986,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_gray_candle"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_gray_candle"),
                 },
             ),
             (
@@ -40035,7 +40035,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_gray_carpet"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_gray_carpet"),
                 },
             ),
             (
@@ -40103,7 +40103,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_gray_concrete"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_gray_concrete"),
                 },
             ),
             (
@@ -40152,7 +40152,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_gray_concrete_powder"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_gray_concrete_powder"),
                 },
             ),
             (
@@ -40201,7 +40201,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.light_gray_dye"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.light_gray_dye"),
                 },
             ),
             (
@@ -40251,7 +40251,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_gray_glazed_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_gray_glazed_terracotta"),
                 },
             ),
             (
@@ -40300,7 +40300,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.light_gray_harness"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.light_gray_harness"),
                 },
             ),
             (
@@ -40365,7 +40365,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_gray_shulker_box"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_gray_shulker_box"),
                 },
             ),
             (
@@ -40415,7 +40415,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_gray_stained_glass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_gray_stained_glass"),
                 },
             ),
             (
@@ -40464,7 +40464,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_gray_stained_glass_pane"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_gray_stained_glass_pane"),
                 },
             ),
             (
@@ -40513,7 +40513,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_gray_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_gray_terracotta"),
                 },
             ),
             (
@@ -40562,7 +40562,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_gray_wool"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_gray_wool"),
                 },
             ),
             (
@@ -40611,7 +40611,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.light_weighted_pressure_plate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.light_weighted_pressure_plate"),
                 },
             ),
             (
@@ -40660,7 +40660,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.lightning_rod"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.lightning_rod"),
                 },
             ),
             (
@@ -40709,7 +40709,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.lilac"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.lilac"),
                 },
             ),
             (
@@ -40758,7 +40758,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.lily_of_the_valley"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.lily_of_the_valley"),
                 },
             ),
             (
@@ -40807,7 +40807,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.lily_pad"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.lily_pad"),
                 },
             ),
             (
@@ -40856,7 +40856,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.lime_banner"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.lime_banner"),
                 },
             ),
             (
@@ -40906,7 +40906,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.lime_bed"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.lime_bed"),
                 },
             ),
             (
@@ -40955,7 +40955,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.lime_bundle"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.lime_bundle"),
                 },
             ),
             (
@@ -41005,7 +41005,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.lime_candle"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.lime_candle"),
                 },
             ),
             (
@@ -41054,7 +41054,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.lime_carpet"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.lime_carpet"),
                 },
             ),
             (
@@ -41122,7 +41122,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.lime_concrete"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.lime_concrete"),
                 },
             ),
             (
@@ -41171,7 +41171,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.lime_concrete_powder"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.lime_concrete_powder"),
                 },
             ),
             (
@@ -41220,7 +41220,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.lime_dye"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.lime_dye"),
                 },
             ),
             (
@@ -41270,7 +41270,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.lime_glazed_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.lime_glazed_terracotta"),
                 },
             ),
             (
@@ -41319,7 +41319,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.lime_harness"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.lime_harness"),
                 },
             ),
             (
@@ -41384,7 +41384,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.lime_shulker_box"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.lime_shulker_box"),
                 },
             ),
             (
@@ -41434,7 +41434,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.lime_stained_glass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.lime_stained_glass"),
                 },
             ),
             (
@@ -41483,7 +41483,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.lime_stained_glass_pane"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.lime_stained_glass_pane"),
                 },
             ),
             (
@@ -41532,7 +41532,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.lime_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.lime_terracotta"),
                 },
             ),
             (
@@ -41581,7 +41581,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.lime_wool"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.lime_wool"),
                 },
             ),
             (
@@ -41630,7 +41630,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.lingering_potion"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.lingering_potion"),
                 },
             ),
             (
@@ -41692,7 +41692,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.llama_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.llama_spawn_egg"),
                 },
             ),
             (
@@ -41742,7 +41742,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.lodestone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.lodestone"),
                 },
             ),
             (
@@ -41791,7 +41791,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.loom"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.loom"),
                 },
             ),
             (
@@ -41840,7 +41840,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.mace"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.mace"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -41930,7 +41930,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.magenta_banner"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.magenta_banner"),
                 },
             ),
             (
@@ -41980,7 +41980,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.magenta_bed"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.magenta_bed"),
                 },
             ),
             (
@@ -42029,7 +42029,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.magenta_bundle"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.magenta_bundle"),
                 },
             ),
             (
@@ -42079,7 +42079,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.magenta_candle"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.magenta_candle"),
                 },
             ),
             (
@@ -42128,7 +42128,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.magenta_carpet"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.magenta_carpet"),
                 },
             ),
             (
@@ -42196,7 +42196,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.magenta_concrete"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.magenta_concrete"),
                 },
             ),
             (
@@ -42245,7 +42245,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.magenta_concrete_powder"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.magenta_concrete_powder"),
                 },
             ),
             (
@@ -42294,7 +42294,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.magenta_dye"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.magenta_dye"),
                 },
             ),
             (
@@ -42344,7 +42344,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.magenta_glazed_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.magenta_glazed_terracotta"),
                 },
             ),
             (
@@ -42393,7 +42393,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.magenta_harness"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.magenta_harness"),
                 },
             ),
             (
@@ -42458,7 +42458,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.magenta_shulker_box"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.magenta_shulker_box"),
                 },
             ),
             (
@@ -42508,7 +42508,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.magenta_stained_glass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.magenta_stained_glass"),
                 },
             ),
             (
@@ -42557,7 +42557,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.magenta_stained_glass_pane"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.magenta_stained_glass_pane"),
                 },
             ),
             (
@@ -42606,7 +42606,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.magenta_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.magenta_terracotta"),
                 },
             ),
             (
@@ -42655,7 +42655,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.magenta_wool"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.magenta_wool"),
                 },
             ),
             (
@@ -42704,7 +42704,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.magma_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.magma_block"),
                 },
             ),
             (
@@ -42753,7 +42753,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.magma_cream"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.magma_cream"),
                 },
             ),
             (
@@ -42802,7 +42802,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.magma_cube_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.magma_cube_spawn_egg"),
                 },
             ),
             (
@@ -42852,7 +42852,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.mangrove_boat"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.mangrove_boat"),
                 },
             ),
             (
@@ -42901,7 +42901,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mangrove_button"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mangrove_button"),
                 },
             ),
             (
@@ -42950,7 +42950,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.mangrove_chest_boat"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.mangrove_chest_boat"),
                 },
             ),
             (
@@ -42999,7 +42999,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mangrove_door"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mangrove_door"),
                 },
             ),
             (
@@ -43048,7 +43048,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mangrove_fence"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mangrove_fence"),
                 },
             ),
             (
@@ -43097,7 +43097,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mangrove_fence_gate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mangrove_fence_gate"),
                 },
             ),
             (
@@ -43146,7 +43146,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mangrove_hanging_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mangrove_hanging_sign"),
                 },
             ),
             (
@@ -43195,7 +43195,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mangrove_leaves"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mangrove_leaves"),
                 },
             ),
             (
@@ -43244,7 +43244,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mangrove_log"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mangrove_log"),
                 },
             ),
             (
@@ -43293,7 +43293,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mangrove_planks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mangrove_planks"),
                 },
             ),
             (
@@ -43342,7 +43342,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mangrove_pressure_plate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mangrove_pressure_plate"),
                 },
             ),
             (
@@ -43391,7 +43391,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mangrove_propagule"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mangrove_propagule"),
                 },
             ),
             (
@@ -43440,7 +43440,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mangrove_roots"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mangrove_roots"),
                 },
             ),
             (
@@ -43489,7 +43489,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mangrove_shelf"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mangrove_shelf"),
                 },
             ),
             (
@@ -43539,7 +43539,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mangrove_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mangrove_sign"),
                 },
             ),
             (
@@ -43588,7 +43588,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mangrove_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mangrove_slab"),
                 },
             ),
             (
@@ -43637,7 +43637,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mangrove_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mangrove_stairs"),
                 },
             ),
             (
@@ -43686,7 +43686,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mangrove_trapdoor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mangrove_trapdoor"),
                 },
             ),
             (
@@ -43735,7 +43735,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mangrove_wood"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mangrove_wood"),
                 },
             ),
             (
@@ -43784,7 +43784,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.map"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.map"),
                 },
             ),
             (
@@ -43833,7 +43833,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.medium_amethyst_bud"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.medium_amethyst_bud"),
                 },
             ),
             (
@@ -43882,7 +43882,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.melon"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.melon"),
                 },
             ),
             (
@@ -43931,7 +43931,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.melon_seeds"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.melon_seeds"),
                 },
             ),
             (
@@ -43980,7 +43980,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.melon_slice"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.melon_slice"),
                 },
             ),
             (
@@ -44047,7 +44047,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.milk_bucket"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.milk_bucket"),
                 },
             ),
             (
@@ -44112,7 +44112,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.minecart"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.minecart"),
                 },
             ),
             (
@@ -44161,7 +44161,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.miner_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.miner_pottery_sherd"),
                 },
             ),
             (
@@ -44210,7 +44210,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.mojang_banner_pattern"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.mojang_banner_pattern"),
                 },
             ),
             (
@@ -44260,7 +44260,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.mooshroom_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.mooshroom_spawn_egg"),
                 },
             ),
             (
@@ -44310,7 +44310,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.moss_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.moss_block"),
                 },
             ),
             (
@@ -44359,7 +44359,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.moss_carpet"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.moss_carpet"),
                 },
             ),
             (
@@ -44408,7 +44408,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mossy_cobblestone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mossy_cobblestone"),
                 },
             ),
             (
@@ -44457,7 +44457,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mossy_cobblestone_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mossy_cobblestone_slab"),
                 },
             ),
             (
@@ -44506,7 +44506,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mossy_cobblestone_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mossy_cobblestone_stairs"),
                 },
             ),
             (
@@ -44555,7 +44555,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mossy_cobblestone_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mossy_cobblestone_wall"),
                 },
             ),
             (
@@ -44604,7 +44604,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mossy_stone_brick_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mossy_stone_brick_slab"),
                 },
             ),
             (
@@ -44653,7 +44653,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mossy_stone_brick_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mossy_stone_brick_stairs"),
                 },
             ),
             (
@@ -44702,7 +44702,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mossy_stone_brick_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mossy_stone_brick_wall"),
                 },
             ),
             (
@@ -44751,7 +44751,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mossy_stone_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mossy_stone_bricks"),
                 },
             ),
             (
@@ -44800,7 +44800,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.mourner_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.mourner_pottery_sherd"),
                 },
             ),
             (
@@ -44849,7 +44849,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mud"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mud"),
                 },
             ),
             (
@@ -44898,7 +44898,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mud_brick_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mud_brick_slab"),
                 },
             ),
             (
@@ -44947,7 +44947,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mud_brick_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mud_brick_stairs"),
                 },
             ),
             (
@@ -44996,7 +44996,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mud_brick_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mud_brick_wall"),
                 },
             ),
             (
@@ -45045,7 +45045,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mud_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mud_bricks"),
                 },
             ),
             (
@@ -45094,7 +45094,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.muddy_mangrove_roots"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.muddy_mangrove_roots"),
                 },
             ),
             (
@@ -45143,7 +45143,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.mule_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.mule_spawn_egg"),
                 },
             ),
             (
@@ -45193,7 +45193,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mushroom_stem"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mushroom_stem"),
                 },
             ),
             (
@@ -45242,7 +45242,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.mushroom_stew"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.mushroom_stew"),
                 },
             ),
             (
@@ -45321,7 +45321,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.music_disc_11"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.music_disc_11"),
                 },
             ),
             (
@@ -45376,7 +45376,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.music_disc_13"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.music_disc_13"),
                 },
             ),
             (
@@ -45431,7 +45431,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.music_disc_5"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.music_disc_5"),
                 },
             ),
             (
@@ -45486,7 +45486,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.music_disc_blocks"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.music_disc_blocks"),
                 },
             ),
             (
@@ -45541,7 +45541,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.music_disc_bounce"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.music_disc_bounce"),
                 },
             ),
             (
@@ -45596,7 +45596,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.music_disc_cat"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.music_disc_cat"),
                 },
             ),
             (
@@ -45651,7 +45651,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.music_disc_chirp"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.music_disc_chirp"),
                 },
             ),
             (
@@ -45706,7 +45706,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.music_disc_creator"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.music_disc_creator"),
                 },
             ),
             (
@@ -45761,7 +45761,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.music_disc_creator_music_box"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.music_disc_creator_music_box"),
                 },
             ),
             (
@@ -45816,7 +45816,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.music_disc_far"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.music_disc_far"),
                 },
             ),
             (
@@ -45871,7 +45871,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.music_disc_lava_chicken"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.music_disc_lava_chicken"),
                 },
             ),
             (
@@ -45926,7 +45926,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.music_disc_mall"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.music_disc_mall"),
                 },
             ),
             (
@@ -45981,7 +45981,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.music_disc_mellohi"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.music_disc_mellohi"),
                 },
             ),
             (
@@ -46036,7 +46036,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.music_disc_otherside"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.music_disc_otherside"),
                 },
             ),
             (
@@ -46091,7 +46091,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.music_disc_pigstep"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.music_disc_pigstep"),
                 },
             ),
             (
@@ -46146,7 +46146,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.music_disc_precipice"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.music_disc_precipice"),
                 },
             ),
             (
@@ -46201,7 +46201,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.music_disc_relic"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.music_disc_relic"),
                 },
             ),
             (
@@ -46256,7 +46256,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.music_disc_stal"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.music_disc_stal"),
                 },
             ),
             (
@@ -46311,7 +46311,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.music_disc_strad"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.music_disc_strad"),
                 },
             ),
             (
@@ -46366,7 +46366,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.music_disc_tears"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.music_disc_tears"),
                 },
             ),
             (
@@ -46421,7 +46421,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.music_disc_wait"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.music_disc_wait"),
                 },
             ),
             (
@@ -46476,7 +46476,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.music_disc_ward"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.music_disc_ward"),
                 },
             ),
             (
@@ -46525,7 +46525,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.mutton"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.mutton"),
                 },
             ),
             (
@@ -46592,7 +46592,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.mycelium"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.mycelium"),
                 },
             ),
             (
@@ -46641,7 +46641,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.name_tag"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.name_tag"),
                 },
             ),
             (
@@ -46690,7 +46690,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.nautilus_shell"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.nautilus_shell"),
                 },
             ),
             (
@@ -46739,7 +46739,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.nautilus_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.nautilus_spawn_egg"),
                 },
             ),
             (
@@ -46789,7 +46789,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.nether_brick"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.nether_brick"),
                 },
             ),
             (
@@ -46838,7 +46838,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.nether_brick_fence"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.nether_brick_fence"),
                 },
             ),
             (
@@ -46887,7 +46887,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.nether_brick_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.nether_brick_slab"),
                 },
             ),
             (
@@ -46936,7 +46936,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.nether_brick_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.nether_brick_stairs"),
                 },
             ),
             (
@@ -46985,7 +46985,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.nether_brick_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.nether_brick_wall"),
                 },
             ),
             (
@@ -47034,7 +47034,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.nether_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.nether_bricks"),
                 },
             ),
             (
@@ -47083,7 +47083,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.nether_gold_ore"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.nether_gold_ore"),
                 },
             ),
             (
@@ -47132,7 +47132,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.nether_quartz_ore"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.nether_quartz_ore"),
                 },
             ),
             (
@@ -47181,7 +47181,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.nether_sprouts"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.nether_sprouts"),
                 },
             ),
             (
@@ -47230,7 +47230,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.nether_star"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.nether_star"),
                 },
             ),
             (
@@ -47286,7 +47286,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.nether_wart"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.nether_wart"),
                 },
             ),
             (
@@ -47335,7 +47335,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.nether_wart_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.nether_wart_block"),
                 },
             ),
             (
@@ -47384,7 +47384,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.netherite_axe"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.netherite_axe"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -47491,7 +47491,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.netherite_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.netherite_block"),
                 },
             ),
             (
@@ -47546,7 +47546,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.netherite_boots"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.netherite_boots"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -47651,7 +47651,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.netherite_chestplate"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.netherite_chestplate"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -47756,7 +47756,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.netherite_helmet"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.netherite_helmet"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -47861,7 +47861,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.netherite_hoe"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.netherite_hoe"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -47968,7 +47968,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.netherite_horse_armor"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.netherite_horse_armor"),
                 },
             ),
             (
@@ -48064,7 +48064,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.netherite_ingot"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.netherite_ingot"),
                 },
             ),
             (
@@ -48120,7 +48120,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.netherite_leggings"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.netherite_leggings"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -48225,7 +48225,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.netherite_nautilus_armor"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.netherite_nautilus_armor"),
                 },
             ),
             (
@@ -48321,7 +48321,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.netherite_pickaxe"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.netherite_pickaxe"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -48428,7 +48428,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.netherite_scrap"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.netherite_scrap"),
                 },
             ),
             (
@@ -48483,7 +48483,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.netherite_shovel"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.netherite_shovel"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -48590,7 +48590,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.netherite_spear"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.netherite_spear"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -48733,7 +48733,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.netherite_sword"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.netherite_sword"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -48845,7 +48845,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.netherite_upgrade_smithing_template"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.netherite_upgrade_smithing_template"),
                 },
             ),
             (
@@ -48894,7 +48894,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.netherrack"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.netherrack"),
                 },
             ),
             (
@@ -48943,7 +48943,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.note_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.note_block"),
                 },
             ),
             (
@@ -48992,7 +48992,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.oak_boat"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.oak_boat"),
                 },
             ),
             (
@@ -49041,7 +49041,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oak_button"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oak_button"),
                 },
             ),
             (
@@ -49090,7 +49090,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.oak_chest_boat"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.oak_chest_boat"),
                 },
             ),
             (
@@ -49139,7 +49139,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oak_door"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oak_door"),
                 },
             ),
             (
@@ -49188,7 +49188,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oak_fence"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oak_fence"),
                 },
             ),
             (
@@ -49237,7 +49237,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oak_fence_gate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oak_fence_gate"),
                 },
             ),
             (
@@ -49286,7 +49286,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oak_hanging_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oak_hanging_sign"),
                 },
             ),
             (
@@ -49335,7 +49335,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oak_leaves"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oak_leaves"),
                 },
             ),
             (
@@ -49384,7 +49384,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oak_log"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oak_log"),
                 },
             ),
             (
@@ -49433,7 +49433,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oak_planks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oak_planks"),
                 },
             ),
             (
@@ -49482,7 +49482,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oak_pressure_plate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oak_pressure_plate"),
                 },
             ),
             (
@@ -49531,7 +49531,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oak_sapling"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oak_sapling"),
                 },
             ),
             (
@@ -49580,7 +49580,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oak_shelf"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oak_shelf"),
                 },
             ),
             (
@@ -49630,7 +49630,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oak_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oak_sign"),
                 },
             ),
             (
@@ -49679,7 +49679,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oak_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oak_slab"),
                 },
             ),
             (
@@ -49728,7 +49728,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oak_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oak_stairs"),
                 },
             ),
             (
@@ -49777,7 +49777,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oak_trapdoor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oak_trapdoor"),
                 },
             ),
             (
@@ -49826,7 +49826,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oak_wood"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oak_wood"),
                 },
             ),
             (
@@ -49875,7 +49875,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.observer"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.observer"),
                 },
             ),
             (
@@ -49924,7 +49924,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.obsidian"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.obsidian"),
                 },
             ),
             (
@@ -49973,7 +49973,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.ocelot_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.ocelot_spawn_egg"),
                 },
             ),
             (
@@ -50023,7 +50023,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.ochre_froglight"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.ochre_froglight"),
                 },
             ),
             (
@@ -50072,7 +50072,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.ominous_bottle"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.ominous_bottle"),
                 },
             ),
             (
@@ -50137,7 +50137,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.ominous_trial_key"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.ominous_trial_key"),
                 },
             ),
             (
@@ -50186,7 +50186,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.open_eyeblossom"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.open_eyeblossom"),
                 },
             ),
             (
@@ -50235,7 +50235,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.orange_banner"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.orange_banner"),
                 },
             ),
             (
@@ -50285,7 +50285,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.orange_bed"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.orange_bed"),
                 },
             ),
             (
@@ -50334,7 +50334,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.orange_bundle"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.orange_bundle"),
                 },
             ),
             (
@@ -50384,7 +50384,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.orange_candle"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.orange_candle"),
                 },
             ),
             (
@@ -50433,7 +50433,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.orange_carpet"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.orange_carpet"),
                 },
             ),
             (
@@ -50501,7 +50501,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.orange_concrete"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.orange_concrete"),
                 },
             ),
             (
@@ -50550,7 +50550,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.orange_concrete_powder"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.orange_concrete_powder"),
                 },
             ),
             (
@@ -50599,7 +50599,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.orange_dye"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.orange_dye"),
                 },
             ),
             (
@@ -50649,7 +50649,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.orange_glazed_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.orange_glazed_terracotta"),
                 },
             ),
             (
@@ -50698,7 +50698,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.orange_harness"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.orange_harness"),
                 },
             ),
             (
@@ -50763,7 +50763,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.orange_shulker_box"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.orange_shulker_box"),
                 },
             ),
             (
@@ -50813,7 +50813,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.orange_stained_glass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.orange_stained_glass"),
                 },
             ),
             (
@@ -50862,7 +50862,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.orange_stained_glass_pane"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.orange_stained_glass_pane"),
                 },
             ),
             (
@@ -50911,7 +50911,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.orange_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.orange_terracotta"),
                 },
             ),
             (
@@ -50960,7 +50960,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.orange_tulip"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.orange_tulip"),
                 },
             ),
             (
@@ -51009,7 +51009,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.orange_wool"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.orange_wool"),
                 },
             ),
             (
@@ -51058,7 +51058,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oxeye_daisy"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oxeye_daisy"),
                 },
             ),
             (
@@ -51107,7 +51107,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oxidized_chiseled_copper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oxidized_chiseled_copper"),
                 },
             ),
             (
@@ -51156,7 +51156,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oxidized_copper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oxidized_copper"),
                 },
             ),
             (
@@ -51205,7 +51205,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oxidized_copper_bars"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oxidized_copper_bars"),
                 },
             ),
             (
@@ -51254,7 +51254,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oxidized_copper_bulb"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oxidized_copper_bulb"),
                 },
             ),
             (
@@ -51303,7 +51303,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oxidized_copper_chain"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oxidized_copper_chain"),
                 },
             ),
             (
@@ -51352,7 +51352,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oxidized_copper_chest"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oxidized_copper_chest"),
                 },
             ),
             (
@@ -51401,7 +51401,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oxidized_copper_door"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oxidized_copper_door"),
                 },
             ),
             (
@@ -51450,7 +51450,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oxidized_copper_golem_statue"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oxidized_copper_golem_statue"),
                 },
             ),
             (
@@ -51508,7 +51508,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oxidized_copper_grate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oxidized_copper_grate"),
                 },
             ),
             (
@@ -51557,7 +51557,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oxidized_copper_lantern"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oxidized_copper_lantern"),
                 },
             ),
             (
@@ -51606,7 +51606,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oxidized_copper_trapdoor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oxidized_copper_trapdoor"),
                 },
             ),
             (
@@ -51655,7 +51655,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oxidized_cut_copper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oxidized_cut_copper"),
                 },
             ),
             (
@@ -51704,7 +51704,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oxidized_cut_copper_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oxidized_cut_copper_slab"),
                 },
             ),
             (
@@ -51753,7 +51753,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oxidized_cut_copper_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oxidized_cut_copper_stairs"),
                 },
             ),
             (
@@ -51802,7 +51802,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.oxidized_lightning_rod"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.oxidized_lightning_rod"),
                 },
             ),
             (
@@ -51851,7 +51851,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.packed_ice"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.packed_ice"),
                 },
             ),
             (
@@ -51900,7 +51900,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.packed_mud"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.packed_mud"),
                 },
             ),
             (
@@ -51949,7 +51949,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.painting"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.painting"),
                 },
             ),
             (
@@ -51998,7 +51998,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pale_hanging_moss"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pale_hanging_moss"),
                 },
             ),
             (
@@ -52047,7 +52047,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pale_moss_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pale_moss_block"),
                 },
             ),
             (
@@ -52096,7 +52096,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pale_moss_carpet"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pale_moss_carpet"),
                 },
             ),
             (
@@ -52145,7 +52145,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.pale_oak_boat"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.pale_oak_boat"),
                 },
             ),
             (
@@ -52194,7 +52194,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pale_oak_button"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pale_oak_button"),
                 },
             ),
             (
@@ -52243,7 +52243,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.pale_oak_chest_boat"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.pale_oak_chest_boat"),
                 },
             ),
             (
@@ -52292,7 +52292,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pale_oak_door"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pale_oak_door"),
                 },
             ),
             (
@@ -52341,7 +52341,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pale_oak_fence"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pale_oak_fence"),
                 },
             ),
             (
@@ -52390,7 +52390,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pale_oak_fence_gate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pale_oak_fence_gate"),
                 },
             ),
             (
@@ -52439,7 +52439,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pale_oak_hanging_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pale_oak_hanging_sign"),
                 },
             ),
             (
@@ -52488,7 +52488,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pale_oak_leaves"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pale_oak_leaves"),
                 },
             ),
             (
@@ -52537,7 +52537,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pale_oak_log"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pale_oak_log"),
                 },
             ),
             (
@@ -52586,7 +52586,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pale_oak_planks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pale_oak_planks"),
                 },
             ),
             (
@@ -52635,7 +52635,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pale_oak_pressure_plate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pale_oak_pressure_plate"),
                 },
             ),
             (
@@ -52684,7 +52684,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pale_oak_sapling"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pale_oak_sapling"),
                 },
             ),
             (
@@ -52733,7 +52733,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pale_oak_shelf"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pale_oak_shelf"),
                 },
             ),
             (
@@ -52783,7 +52783,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pale_oak_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pale_oak_sign"),
                 },
             ),
             (
@@ -52832,7 +52832,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pale_oak_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pale_oak_slab"),
                 },
             ),
             (
@@ -52881,7 +52881,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pale_oak_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pale_oak_stairs"),
                 },
             ),
             (
@@ -52930,7 +52930,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pale_oak_trapdoor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pale_oak_trapdoor"),
                 },
             ),
             (
@@ -52979,7 +52979,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pale_oak_wood"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pale_oak_wood"),
                 },
             ),
             (
@@ -53028,7 +53028,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.panda_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.panda_spawn_egg"),
                 },
             ),
             (
@@ -53078,7 +53078,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.paper"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.paper"),
                 },
             ),
             (
@@ -53127,7 +53127,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.parched_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.parched_spawn_egg"),
                 },
             ),
             (
@@ -53177,7 +53177,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.parrot_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.parrot_spawn_egg"),
                 },
             ),
             (
@@ -53227,7 +53227,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pearlescent_froglight"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pearlescent_froglight"),
                 },
             ),
             (
@@ -53276,7 +53276,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.peony"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.peony"),
                 },
             ),
             (
@@ -53325,7 +53325,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.petrified_oak_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.petrified_oak_slab"),
                 },
             ),
             (
@@ -53374,7 +53374,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.phantom_membrane"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.phantom_membrane"),
                 },
             ),
             (
@@ -53423,7 +53423,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.phantom_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.phantom_spawn_egg"),
                 },
             ),
             (
@@ -53473,7 +53473,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.pig_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.pig_spawn_egg"),
                 },
             ),
             (
@@ -53523,7 +53523,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.piglin_banner_pattern"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.piglin_banner_pattern"),
                 },
             ),
             (
@@ -53573,7 +53573,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.piglin_brute_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.piglin_brute_spawn_egg"),
                 },
             ),
             (
@@ -53623,7 +53623,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.piglin_head"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.piglin_head"),
                 },
             ),
             (
@@ -53695,7 +53695,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.piglin_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.piglin_spawn_egg"),
                 },
             ),
             (
@@ -53745,7 +53745,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.pillager_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.pillager_spawn_egg"),
                 },
             ),
             (
@@ -53795,7 +53795,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pink_banner"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pink_banner"),
                 },
             ),
             (
@@ -53845,7 +53845,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pink_bed"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pink_bed"),
                 },
             ),
             (
@@ -53894,7 +53894,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.pink_bundle"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.pink_bundle"),
                 },
             ),
             (
@@ -53944,7 +53944,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pink_candle"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pink_candle"),
                 },
             ),
             (
@@ -53993,7 +53993,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pink_carpet"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pink_carpet"),
                 },
             ),
             (
@@ -54061,7 +54061,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pink_concrete"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pink_concrete"),
                 },
             ),
             (
@@ -54110,7 +54110,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pink_concrete_powder"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pink_concrete_powder"),
                 },
             ),
             (
@@ -54159,7 +54159,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.pink_dye"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.pink_dye"),
                 },
             ),
             (
@@ -54209,7 +54209,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pink_glazed_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pink_glazed_terracotta"),
                 },
             ),
             (
@@ -54258,7 +54258,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.pink_harness"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.pink_harness"),
                 },
             ),
             (
@@ -54323,7 +54323,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pink_petals"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pink_petals"),
                 },
             ),
             (
@@ -54372,7 +54372,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pink_shulker_box"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pink_shulker_box"),
                 },
             ),
             (
@@ -54422,7 +54422,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pink_stained_glass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pink_stained_glass"),
                 },
             ),
             (
@@ -54471,7 +54471,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pink_stained_glass_pane"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pink_stained_glass_pane"),
                 },
             ),
             (
@@ -54520,7 +54520,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pink_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pink_terracotta"),
                 },
             ),
             (
@@ -54569,7 +54569,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pink_tulip"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pink_tulip"),
                 },
             ),
             (
@@ -54618,7 +54618,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pink_wool"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pink_wool"),
                 },
             ),
             (
@@ -54667,7 +54667,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.piston"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.piston"),
                 },
             ),
             (
@@ -54716,7 +54716,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pitcher_plant"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pitcher_plant"),
                 },
             ),
             (
@@ -54765,7 +54765,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.pitcher_pod"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.pitcher_pod"),
                 },
             ),
             (
@@ -54814,7 +54814,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.player_head"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.player_head"),
                 },
             ),
             (
@@ -54886,7 +54886,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.plenty_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.plenty_pottery_sherd"),
                 },
             ),
             (
@@ -54935,7 +54935,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.podzol"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.podzol"),
                 },
             ),
             (
@@ -54984,7 +54984,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pointed_dripstone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pointed_dripstone"),
                 },
             ),
             (
@@ -55033,7 +55033,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.poisonous_potato"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.poisonous_potato"),
                 },
             ),
             (
@@ -55111,7 +55111,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.polar_bear_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.polar_bear_spawn_egg"),
                 },
             ),
             (
@@ -55161,7 +55161,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_andesite"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_andesite"),
                 },
             ),
             (
@@ -55210,7 +55210,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_andesite_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_andesite_slab"),
                 },
             ),
             (
@@ -55259,7 +55259,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_andesite_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_andesite_stairs"),
                 },
             ),
             (
@@ -55308,7 +55308,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_basalt"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_basalt"),
                 },
             ),
             (
@@ -55357,7 +55357,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_blackstone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_blackstone"),
                 },
             ),
             (
@@ -55406,7 +55406,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_blackstone_brick_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_blackstone_brick_slab"),
                 },
             ),
             (
@@ -55455,7 +55455,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_blackstone_brick_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_blackstone_brick_stairs"),
                 },
             ),
             (
@@ -55504,7 +55504,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_blackstone_brick_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_blackstone_brick_wall"),
                 },
             ),
             (
@@ -55553,7 +55553,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_blackstone_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_blackstone_bricks"),
                 },
             ),
             (
@@ -55602,7 +55602,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_blackstone_button"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_blackstone_button"),
                 },
             ),
             (
@@ -55651,7 +55651,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_blackstone_pressure_plate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_blackstone_pressure_plate"),
                 },
             ),
             (
@@ -55700,7 +55700,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_blackstone_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_blackstone_slab"),
                 },
             ),
             (
@@ -55749,7 +55749,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_blackstone_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_blackstone_stairs"),
                 },
             ),
             (
@@ -55798,7 +55798,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_blackstone_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_blackstone_wall"),
                 },
             ),
             (
@@ -55847,7 +55847,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_cinnabar"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_cinnabar"),
                 },
             ),
             (
@@ -55896,7 +55896,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_cinnabar_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_cinnabar_slab"),
                 },
             ),
             (
@@ -55945,7 +55945,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_cinnabar_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_cinnabar_stairs"),
                 },
             ),
             (
@@ -55994,7 +55994,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_cinnabar_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_cinnabar_wall"),
                 },
             ),
             (
@@ -56043,7 +56043,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_deepslate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_deepslate"),
                 },
             ),
             (
@@ -56092,7 +56092,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_deepslate_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_deepslate_slab"),
                 },
             ),
             (
@@ -56141,7 +56141,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_deepslate_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_deepslate_stairs"),
                 },
             ),
             (
@@ -56190,7 +56190,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_deepslate_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_deepslate_wall"),
                 },
             ),
             (
@@ -56239,7 +56239,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_diorite"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_diorite"),
                 },
             ),
             (
@@ -56288,7 +56288,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_diorite_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_diorite_slab"),
                 },
             ),
             (
@@ -56337,7 +56337,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_diorite_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_diorite_stairs"),
                 },
             ),
             (
@@ -56386,7 +56386,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_granite"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_granite"),
                 },
             ),
             (
@@ -56435,7 +56435,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_granite_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_granite_slab"),
                 },
             ),
             (
@@ -56484,7 +56484,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_granite_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_granite_stairs"),
                 },
             ),
             (
@@ -56533,7 +56533,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_sulfur"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_sulfur"),
                 },
             ),
             (
@@ -56582,7 +56582,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_sulfur_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_sulfur_slab"),
                 },
             ),
             (
@@ -56631,7 +56631,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_sulfur_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_sulfur_stairs"),
                 },
             ),
             (
@@ -56680,7 +56680,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_sulfur_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_sulfur_wall"),
                 },
             ),
             (
@@ -56729,7 +56729,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_tuff"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_tuff"),
                 },
             ),
             (
@@ -56778,7 +56778,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_tuff_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_tuff_slab"),
                 },
             ),
             (
@@ -56827,7 +56827,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_tuff_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_tuff_stairs"),
                 },
             ),
             (
@@ -56876,7 +56876,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.polished_tuff_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.polished_tuff_wall"),
                 },
             ),
             (
@@ -56925,7 +56925,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.popped_chorus_fruit"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.popped_chorus_fruit"),
                 },
             ),
             (
@@ -56974,7 +56974,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.poppy"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.poppy"),
                 },
             ),
             (
@@ -57023,7 +57023,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.porkchop"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.porkchop"),
                 },
             ),
             (
@@ -57090,7 +57090,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.potato"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.potato"),
                 },
             ),
             (
@@ -57157,7 +57157,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.potent_sulfur"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.potent_sulfur"),
                 },
             ),
             (
@@ -57206,7 +57206,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.potion"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.potion"),
                 },
             ),
             (
@@ -57283,7 +57283,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.powder_snow_bucket"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.powder_snow_bucket"),
                 },
             ),
             (
@@ -57332,7 +57332,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.powered_rail"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.powered_rail"),
                 },
             ),
             (
@@ -57381,7 +57381,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.prismarine"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.prismarine"),
                 },
             ),
             (
@@ -57430,7 +57430,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.prismarine_brick_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.prismarine_brick_slab"),
                 },
             ),
             (
@@ -57479,7 +57479,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.prismarine_brick_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.prismarine_brick_stairs"),
                 },
             ),
             (
@@ -57528,7 +57528,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.prismarine_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.prismarine_bricks"),
                 },
             ),
             (
@@ -57577,7 +57577,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.prismarine_crystals"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.prismarine_crystals"),
                 },
             ),
             (
@@ -57626,7 +57626,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.prismarine_shard"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.prismarine_shard"),
                 },
             ),
             (
@@ -57675,7 +57675,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.prismarine_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.prismarine_slab"),
                 },
             ),
             (
@@ -57724,7 +57724,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.prismarine_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.prismarine_stairs"),
                 },
             ),
             (
@@ -57773,7 +57773,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.prismarine_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.prismarine_wall"),
                 },
             ),
             (
@@ -57822,7 +57822,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.prize_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.prize_pottery_sherd"),
                 },
             ),
             (
@@ -57871,7 +57871,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.pufferfish"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.pufferfish"),
                 },
             ),
             (
@@ -57969,7 +57969,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.pufferfish_bucket"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.pufferfish_bucket"),
                 },
             ),
             (
@@ -58027,7 +58027,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.pufferfish_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.pufferfish_spawn_egg"),
                 },
             ),
             (
@@ -58077,7 +58077,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.pumpkin"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.pumpkin"),
                 },
             ),
             (
@@ -58126,7 +58126,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.pumpkin_pie"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.pumpkin_pie"),
                 },
             ),
             (
@@ -58193,7 +58193,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.pumpkin_seeds"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.pumpkin_seeds"),
                 },
             ),
             (
@@ -58242,7 +58242,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.purple_banner"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.purple_banner"),
                 },
             ),
             (
@@ -58292,7 +58292,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.purple_bed"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.purple_bed"),
                 },
             ),
             (
@@ -58341,7 +58341,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.purple_bundle"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.purple_bundle"),
                 },
             ),
             (
@@ -58391,7 +58391,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.purple_candle"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.purple_candle"),
                 },
             ),
             (
@@ -58440,7 +58440,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.purple_carpet"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.purple_carpet"),
                 },
             ),
             (
@@ -58508,7 +58508,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.purple_concrete"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.purple_concrete"),
                 },
             ),
             (
@@ -58557,7 +58557,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.purple_concrete_powder"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.purple_concrete_powder"),
                 },
             ),
             (
@@ -58606,7 +58606,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.purple_dye"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.purple_dye"),
                 },
             ),
             (
@@ -58656,7 +58656,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.purple_glazed_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.purple_glazed_terracotta"),
                 },
             ),
             (
@@ -58705,7 +58705,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.purple_harness"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.purple_harness"),
                 },
             ),
             (
@@ -58770,7 +58770,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.purple_shulker_box"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.purple_shulker_box"),
                 },
             ),
             (
@@ -58820,7 +58820,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.purple_stained_glass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.purple_stained_glass"),
                 },
             ),
             (
@@ -58869,7 +58869,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.purple_stained_glass_pane"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.purple_stained_glass_pane"),
                 },
             ),
             (
@@ -58918,7 +58918,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.purple_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.purple_terracotta"),
                 },
             ),
             (
@@ -58967,7 +58967,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.purple_wool"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.purple_wool"),
                 },
             ),
             (
@@ -59016,7 +59016,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.purpur_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.purpur_block"),
                 },
             ),
             (
@@ -59065,7 +59065,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.purpur_pillar"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.purpur_pillar"),
                 },
             ),
             (
@@ -59114,7 +59114,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.purpur_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.purpur_slab"),
                 },
             ),
             (
@@ -59163,7 +59163,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.purpur_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.purpur_stairs"),
                 },
             ),
             (
@@ -59212,7 +59212,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.quartz"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.quartz"),
                 },
             ),
             (
@@ -59262,7 +59262,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.quartz_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.quartz_block"),
                 },
             ),
             (
@@ -59311,7 +59311,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.quartz_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.quartz_bricks"),
                 },
             ),
             (
@@ -59360,7 +59360,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.quartz_pillar"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.quartz_pillar"),
                 },
             ),
             (
@@ -59409,7 +59409,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.quartz_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.quartz_slab"),
                 },
             ),
             (
@@ -59458,7 +59458,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.quartz_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.quartz_stairs"),
                 },
             ),
             (
@@ -59507,7 +59507,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.rabbit"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.rabbit"),
                 },
             ),
             (
@@ -59574,7 +59574,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.rabbit_foot"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.rabbit_foot"),
                 },
             ),
             (
@@ -59623,7 +59623,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.rabbit_hide"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.rabbit_hide"),
                 },
             ),
             (
@@ -59672,7 +59672,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.rabbit_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.rabbit_spawn_egg"),
                 },
             ),
             (
@@ -59722,7 +59722,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.rabbit_stew"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.rabbit_stew"),
                 },
             ),
             (
@@ -59795,7 +59795,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.rail"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.rail"),
                 },
             ),
             (
@@ -59844,7 +59844,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.raiser_armor_trim_smithing_template"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.raiser_armor_trim_smithing_template"),
                 },
             ),
             (
@@ -59893,7 +59893,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.ravager_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.ravager_spawn_egg"),
                 },
             ),
             (
@@ -59943,7 +59943,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.raw_copper"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.raw_copper"),
                 },
             ),
             (
@@ -59992,7 +59992,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.raw_copper_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.raw_copper_block"),
                 },
             ),
             (
@@ -60041,7 +60041,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.raw_gold"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.raw_gold"),
                 },
             ),
             (
@@ -60090,7 +60090,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.raw_gold_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.raw_gold_block"),
                 },
             ),
             (
@@ -60139,7 +60139,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.raw_iron"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.raw_iron"),
                 },
             ),
             (
@@ -60188,7 +60188,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.raw_iron_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.raw_iron_block"),
                 },
             ),
             (
@@ -60237,7 +60237,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.recovery_compass"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.recovery_compass"),
                 },
             ),
             (
@@ -60286,7 +60286,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_banner"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_banner"),
                 },
             ),
             (
@@ -60336,7 +60336,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_bed"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_bed"),
                 },
             ),
             (
@@ -60385,7 +60385,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.red_bundle"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.red_bundle"),
                 },
             ),
             (
@@ -60435,7 +60435,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_candle"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_candle"),
                 },
             ),
             (
@@ -60484,7 +60484,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_carpet"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_carpet"),
                 },
             ),
             (
@@ -60552,7 +60552,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_concrete"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_concrete"),
                 },
             ),
             (
@@ -60601,7 +60601,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_concrete_powder"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_concrete_powder"),
                 },
             ),
             (
@@ -60650,7 +60650,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.red_dye"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.red_dye"),
                 },
             ),
             (
@@ -60700,7 +60700,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_glazed_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_glazed_terracotta"),
                 },
             ),
             (
@@ -60749,7 +60749,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.red_harness"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.red_harness"),
                 },
             ),
             (
@@ -60814,7 +60814,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_mushroom"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_mushroom"),
                 },
             ),
             (
@@ -60863,7 +60863,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_mushroom_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_mushroom_block"),
                 },
             ),
             (
@@ -60912,7 +60912,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_nether_brick_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_nether_brick_slab"),
                 },
             ),
             (
@@ -60961,7 +60961,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_nether_brick_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_nether_brick_stairs"),
                 },
             ),
             (
@@ -61010,7 +61010,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_nether_brick_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_nether_brick_wall"),
                 },
             ),
             (
@@ -61059,7 +61059,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_nether_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_nether_bricks"),
                 },
             ),
             (
@@ -61108,7 +61108,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_sand"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_sand"),
                 },
             ),
             (
@@ -61157,7 +61157,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_sandstone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_sandstone"),
                 },
             ),
             (
@@ -61206,7 +61206,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_sandstone_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_sandstone_slab"),
                 },
             ),
             (
@@ -61255,7 +61255,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_sandstone_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_sandstone_stairs"),
                 },
             ),
             (
@@ -61304,7 +61304,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_sandstone_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_sandstone_wall"),
                 },
             ),
             (
@@ -61353,7 +61353,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_shulker_box"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_shulker_box"),
                 },
             ),
             (
@@ -61403,7 +61403,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_stained_glass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_stained_glass"),
                 },
             ),
             (
@@ -61452,7 +61452,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_stained_glass_pane"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_stained_glass_pane"),
                 },
             ),
             (
@@ -61501,7 +61501,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_terracotta"),
                 },
             ),
             (
@@ -61550,7 +61550,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_tulip"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_tulip"),
                 },
             ),
             (
@@ -61599,7 +61599,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.red_wool"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.red_wool"),
                 },
             ),
             (
@@ -61648,7 +61648,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.redstone"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.redstone"),
                 },
             ),
             (
@@ -61698,7 +61698,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.redstone_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.redstone_block"),
                 },
             ),
             (
@@ -61747,7 +61747,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.redstone_lamp"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.redstone_lamp"),
                 },
             ),
             (
@@ -61796,7 +61796,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.redstone_ore"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.redstone_ore"),
                 },
             ),
             (
@@ -61845,7 +61845,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.redstone_torch"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.redstone_torch"),
                 },
             ),
             (
@@ -61894,7 +61894,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.reinforced_deepslate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.reinforced_deepslate"),
                 },
             ),
             (
@@ -61943,7 +61943,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.repeater"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.repeater"),
                 },
             ),
             (
@@ -61992,7 +61992,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.repeating_command_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.repeating_command_block"),
                 },
             ),
             (
@@ -62041,7 +62041,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.resin_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.resin_block"),
                 },
             ),
             (
@@ -62090,7 +62090,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.resin_brick"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.resin_brick"),
                 },
             ),
             (
@@ -62140,7 +62140,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.resin_brick_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.resin_brick_slab"),
                 },
             ),
             (
@@ -62189,7 +62189,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.resin_brick_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.resin_brick_stairs"),
                 },
             ),
             (
@@ -62238,7 +62238,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.resin_brick_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.resin_brick_wall"),
                 },
             ),
             (
@@ -62287,7 +62287,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.resin_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.resin_bricks"),
                 },
             ),
             (
@@ -62336,7 +62336,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.resin_clump"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.resin_clump"),
                 },
             ),
             (
@@ -62385,7 +62385,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.respawn_anchor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.respawn_anchor"),
                 },
             ),
             (
@@ -62434,7 +62434,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.rib_armor_trim_smithing_template"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.rib_armor_trim_smithing_template"),
                 },
             ),
             (
@@ -62483,7 +62483,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.rooted_dirt"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.rooted_dirt"),
                 },
             ),
             (
@@ -62532,7 +62532,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.rose_bush"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.rose_bush"),
                 },
             ),
             (
@@ -62581,7 +62581,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.rotten_flesh"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.rotten_flesh"),
                 },
             ),
             (
@@ -62659,7 +62659,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.saddle"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.saddle"),
                 },
             ),
             (
@@ -62724,7 +62724,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.salmon"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.salmon"),
                 },
             ),
             (
@@ -62791,7 +62791,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.salmon_bucket"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.salmon_bucket"),
                 },
             ),
             (
@@ -62849,7 +62849,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.salmon_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.salmon_spawn_egg"),
                 },
             ),
             (
@@ -62899,7 +62899,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sand"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sand"),
                 },
             ),
             (
@@ -62948,7 +62948,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sandstone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sandstone"),
                 },
             ),
             (
@@ -62997,7 +62997,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sandstone_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sandstone_slab"),
                 },
             ),
             (
@@ -63046,7 +63046,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sandstone_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sandstone_stairs"),
                 },
             ),
             (
@@ -63095,7 +63095,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sandstone_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sandstone_wall"),
                 },
             ),
             (
@@ -63144,7 +63144,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.scaffolding"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.scaffolding"),
                 },
             ),
             (
@@ -63193,7 +63193,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.scrape_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.scrape_pottery_sherd"),
                 },
             ),
             (
@@ -63242,7 +63242,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sculk"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sculk"),
                 },
             ),
             (
@@ -63291,7 +63291,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sculk_catalyst"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sculk_catalyst"),
                 },
             ),
             (
@@ -63340,7 +63340,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sculk_sensor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sculk_sensor"),
                 },
             ),
             (
@@ -63389,7 +63389,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sculk_shrieker"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sculk_shrieker"),
                 },
             ),
             (
@@ -63438,7 +63438,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sculk_vein"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sculk_vein"),
                 },
             ),
             (
@@ -63487,7 +63487,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sea_lantern"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sea_lantern"),
                 },
             ),
             (
@@ -63536,7 +63536,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sea_pickle"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sea_pickle"),
                 },
             ),
             (
@@ -63585,7 +63585,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.seagrass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.seagrass"),
                 },
             ),
             (
@@ -63634,7 +63634,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.sentry_armor_trim_smithing_template"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.sentry_armor_trim_smithing_template"),
                 },
             ),
             (
@@ -63683,7 +63683,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.shaper_armor_trim_smithing_template"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.shaper_armor_trim_smithing_template"),
                 },
             ),
             (
@@ -63732,7 +63732,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.sheaf_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.sheaf_pottery_sherd"),
                 },
             ),
             (
@@ -63781,7 +63781,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.shears"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.shears"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -63862,7 +63862,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.sheep_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.sheep_spawn_egg"),
                 },
             ),
             (
@@ -63912,7 +63912,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.shelter_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.shelter_pottery_sherd"),
                 },
             ),
             (
@@ -63961,7 +63961,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.shield"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.shield"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -64036,7 +64036,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.short_dry_grass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.short_dry_grass"),
                 },
             ),
             (
@@ -64085,7 +64085,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.short_grass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.short_grass"),
                 },
             ),
             (
@@ -64134,7 +64134,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.shroomlight"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.shroomlight"),
                 },
             ),
             (
@@ -64183,7 +64183,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.shulker_box"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.shulker_box"),
                 },
             ),
             (
@@ -64233,7 +64233,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.shulker_shell"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.shulker_shell"),
                 },
             ),
             (
@@ -64282,7 +64282,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.shulker_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.shulker_spawn_egg"),
                 },
             ),
             (
@@ -64332,7 +64332,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.silence_armor_trim_smithing_template"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.silence_armor_trim_smithing_template"),
                 },
             ),
             (
@@ -64381,7 +64381,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.silverfish_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.silverfish_spawn_egg"),
                 },
             ),
             (
@@ -64431,7 +64431,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.skeleton_horse_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.skeleton_horse_spawn_egg"),
                 },
             ),
             (
@@ -64481,7 +64481,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.skeleton_skull"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.skeleton_skull"),
                 },
             ),
             (
@@ -64553,7 +64553,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.skeleton_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.skeleton_spawn_egg"),
                 },
             ),
             (
@@ -64603,7 +64603,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.skull_banner_pattern"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.skull_banner_pattern"),
                 },
             ),
             (
@@ -64653,7 +64653,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.skull_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.skull_pottery_sherd"),
                 },
             ),
             (
@@ -64702,7 +64702,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.slime_ball"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.slime_ball"),
                 },
             ),
             (
@@ -64751,7 +64751,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.slime_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.slime_block"),
                 },
             ),
             (
@@ -64800,7 +64800,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.slime_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.slime_spawn_egg"),
                 },
             ),
             (
@@ -64850,7 +64850,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.small_amethyst_bud"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.small_amethyst_bud"),
                 },
             ),
             (
@@ -64899,7 +64899,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.small_dripleaf"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.small_dripleaf"),
                 },
             ),
             (
@@ -64948,7 +64948,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.smithing_table"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.smithing_table"),
                 },
             ),
             (
@@ -64997,7 +64997,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.smoker"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.smoker"),
                 },
             ),
             (
@@ -65047,7 +65047,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.smooth_basalt"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.smooth_basalt"),
                 },
             ),
             (
@@ -65096,7 +65096,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.smooth_quartz"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.smooth_quartz"),
                 },
             ),
             (
@@ -65145,7 +65145,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.smooth_quartz_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.smooth_quartz_slab"),
                 },
             ),
             (
@@ -65194,7 +65194,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.smooth_quartz_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.smooth_quartz_stairs"),
                 },
             ),
             (
@@ -65243,7 +65243,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.smooth_red_sandstone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.smooth_red_sandstone"),
                 },
             ),
             (
@@ -65292,7 +65292,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.smooth_red_sandstone_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.smooth_red_sandstone_slab"),
                 },
             ),
             (
@@ -65341,7 +65341,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.smooth_red_sandstone_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.smooth_red_sandstone_stairs"),
                 },
             ),
             (
@@ -65390,7 +65390,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.smooth_sandstone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.smooth_sandstone"),
                 },
             ),
             (
@@ -65439,7 +65439,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.smooth_sandstone_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.smooth_sandstone_slab"),
                 },
             ),
             (
@@ -65488,7 +65488,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.smooth_sandstone_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.smooth_sandstone_stairs"),
                 },
             ),
             (
@@ -65537,7 +65537,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.smooth_stone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.smooth_stone"),
                 },
             ),
             (
@@ -65586,7 +65586,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.smooth_stone_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.smooth_stone_slab"),
                 },
             ),
             (
@@ -65635,7 +65635,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sniffer_egg"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sniffer_egg"),
                 },
             ),
             (
@@ -65684,7 +65684,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.sniffer_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.sniffer_spawn_egg"),
                 },
             ),
             (
@@ -65734,7 +65734,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.snort_pottery_sherd"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.snort_pottery_sherd"),
                 },
             ),
             (
@@ -65783,7 +65783,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.snout_armor_trim_smithing_template"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.snout_armor_trim_smithing_template"),
                 },
             ),
             (
@@ -65832,7 +65832,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.snow"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.snow"),
                 },
             ),
             (
@@ -65881,7 +65881,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.snow_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.snow_block"),
                 },
             ),
             (
@@ -65930,7 +65930,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.snow_golem_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.snow_golem_spawn_egg"),
                 },
             ),
             (
@@ -65980,7 +65980,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.snowball"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.snowball"),
                 },
             ),
             (
@@ -66029,7 +66029,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.soul_campfire"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.soul_campfire"),
                 },
             ),
             (
@@ -66079,7 +66079,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.soul_lantern"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.soul_lantern"),
                 },
             ),
             (
@@ -66128,7 +66128,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.soul_sand"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.soul_sand"),
                 },
             ),
             (
@@ -66177,7 +66177,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.soul_soil"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.soul_soil"),
                 },
             ),
             (
@@ -66226,7 +66226,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.soul_torch"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.soul_torch"),
                 },
             ),
             (
@@ -66275,7 +66275,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.spawner"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.spawner"),
                 },
             ),
             (
@@ -66324,7 +66324,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.spectral_arrow"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.spectral_arrow"),
                 },
             ),
             (
@@ -66373,7 +66373,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.spider_eye"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.spider_eye"),
                 },
             ),
             (
@@ -66451,7 +66451,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.spider_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.spider_spawn_egg"),
                 },
             ),
             (
@@ -66501,7 +66501,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.spire_armor_trim_smithing_template"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.spire_armor_trim_smithing_template"),
                 },
             ),
             (
@@ -66550,7 +66550,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.splash_potion"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.splash_potion"),
                 },
             ),
             (
@@ -66608,7 +66608,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sponge"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sponge"),
                 },
             ),
             (
@@ -66657,7 +66657,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.spore_blossom"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.spore_blossom"),
                 },
             ),
             (
@@ -66706,7 +66706,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.spruce_boat"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.spruce_boat"),
                 },
             ),
             (
@@ -66755,7 +66755,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.spruce_button"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.spruce_button"),
                 },
             ),
             (
@@ -66804,7 +66804,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.spruce_chest_boat"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.spruce_chest_boat"),
                 },
             ),
             (
@@ -66853,7 +66853,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.spruce_door"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.spruce_door"),
                 },
             ),
             (
@@ -66902,7 +66902,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.spruce_fence"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.spruce_fence"),
                 },
             ),
             (
@@ -66951,7 +66951,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.spruce_fence_gate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.spruce_fence_gate"),
                 },
             ),
             (
@@ -67000,7 +67000,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.spruce_hanging_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.spruce_hanging_sign"),
                 },
             ),
             (
@@ -67049,7 +67049,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.spruce_leaves"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.spruce_leaves"),
                 },
             ),
             (
@@ -67098,7 +67098,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.spruce_log"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.spruce_log"),
                 },
             ),
             (
@@ -67147,7 +67147,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.spruce_planks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.spruce_planks"),
                 },
             ),
             (
@@ -67196,7 +67196,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.spruce_pressure_plate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.spruce_pressure_plate"),
                 },
             ),
             (
@@ -67245,7 +67245,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.spruce_sapling"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.spruce_sapling"),
                 },
             ),
             (
@@ -67294,7 +67294,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.spruce_shelf"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.spruce_shelf"),
                 },
             ),
             (
@@ -67344,7 +67344,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.spruce_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.spruce_sign"),
                 },
             ),
             (
@@ -67393,7 +67393,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.spruce_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.spruce_slab"),
                 },
             ),
             (
@@ -67442,7 +67442,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.spruce_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.spruce_stairs"),
                 },
             ),
             (
@@ -67491,7 +67491,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.spruce_trapdoor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.spruce_trapdoor"),
                 },
             ),
             (
@@ -67540,7 +67540,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.spruce_wood"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.spruce_wood"),
                 },
             ),
             (
@@ -67589,7 +67589,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.spyglass"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.spyglass"),
                 },
             ),
             (
@@ -67638,7 +67638,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.squid_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.squid_spawn_egg"),
                 },
             ),
             (
@@ -67688,7 +67688,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.stick"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.stick"),
                 },
             ),
             (
@@ -67737,7 +67737,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sticky_piston"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sticky_piston"),
                 },
             ),
             (
@@ -67786,7 +67786,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stone"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stone"),
                 },
             ),
             (
@@ -67835,7 +67835,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.stone_axe"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.stone_axe"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -67936,7 +67936,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stone_brick_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stone_brick_slab"),
                 },
             ),
             (
@@ -67985,7 +67985,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stone_brick_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stone_brick_stairs"),
                 },
             ),
             (
@@ -68034,7 +68034,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stone_brick_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stone_brick_wall"),
                 },
             ),
             (
@@ -68083,7 +68083,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stone_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stone_bricks"),
                 },
             ),
             (
@@ -68132,7 +68132,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stone_button"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stone_button"),
                 },
             ),
             (
@@ -68181,7 +68181,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.stone_hoe"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.stone_hoe"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -68282,7 +68282,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.stone_pickaxe"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.stone_pickaxe"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -68383,7 +68383,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stone_pressure_plate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stone_pressure_plate"),
                 },
             ),
             (
@@ -68432,7 +68432,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.stone_shovel"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.stone_shovel"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -68533,7 +68533,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stone_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stone_slab"),
                 },
             ),
             (
@@ -68582,7 +68582,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.stone_spear"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.stone_spear"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -68719,7 +68719,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stone_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stone_stairs"),
                 },
             ),
             (
@@ -68768,7 +68768,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.stone_sword"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.stone_sword"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -68874,7 +68874,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stonecutter"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stonecutter"),
                 },
             ),
             (
@@ -68923,7 +68923,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.stray_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.stray_spawn_egg"),
                 },
             ),
             (
@@ -68973,7 +68973,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.strider_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.strider_spawn_egg"),
                 },
             ),
             (
@@ -69023,7 +69023,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.string"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.string"),
                 },
             ),
             (
@@ -69072,7 +69072,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_acacia_log"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_acacia_log"),
                 },
             ),
             (
@@ -69121,7 +69121,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_acacia_wood"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_acacia_wood"),
                 },
             ),
             (
@@ -69170,7 +69170,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_bamboo_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_bamboo_block"),
                 },
             ),
             (
@@ -69219,7 +69219,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_birch_log"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_birch_log"),
                 },
             ),
             (
@@ -69268,7 +69268,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_birch_wood"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_birch_wood"),
                 },
             ),
             (
@@ -69317,7 +69317,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_cherry_log"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_cherry_log"),
                 },
             ),
             (
@@ -69366,7 +69366,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_cherry_wood"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_cherry_wood"),
                 },
             ),
             (
@@ -69415,7 +69415,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_crimson_hyphae"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_crimson_hyphae"),
                 },
             ),
             (
@@ -69464,7 +69464,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_crimson_stem"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_crimson_stem"),
                 },
             ),
             (
@@ -69513,7 +69513,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_dark_oak_log"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_dark_oak_log"),
                 },
             ),
             (
@@ -69562,7 +69562,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_dark_oak_wood"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_dark_oak_wood"),
                 },
             ),
             (
@@ -69611,7 +69611,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_jungle_log"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_jungle_log"),
                 },
             ),
             (
@@ -69660,7 +69660,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_jungle_wood"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_jungle_wood"),
                 },
             ),
             (
@@ -69709,7 +69709,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_mangrove_log"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_mangrove_log"),
                 },
             ),
             (
@@ -69758,7 +69758,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_mangrove_wood"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_mangrove_wood"),
                 },
             ),
             (
@@ -69807,7 +69807,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_oak_log"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_oak_log"),
                 },
             ),
             (
@@ -69856,7 +69856,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_oak_wood"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_oak_wood"),
                 },
             ),
             (
@@ -69905,7 +69905,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_pale_oak_log"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_pale_oak_log"),
                 },
             ),
             (
@@ -69954,7 +69954,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_pale_oak_wood"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_pale_oak_wood"),
                 },
             ),
             (
@@ -70003,7 +70003,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_spruce_log"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_spruce_log"),
                 },
             ),
             (
@@ -70052,7 +70052,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_spruce_wood"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_spruce_wood"),
                 },
             ),
             (
@@ -70101,7 +70101,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_warped_hyphae"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_warped_hyphae"),
                 },
             ),
             (
@@ -70150,7 +70150,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.stripped_warped_stem"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.stripped_warped_stem"),
                 },
             ),
             (
@@ -70199,7 +70199,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.structure_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.structure_block"),
                 },
             ),
             (
@@ -70248,7 +70248,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.structure_void"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.structure_void"),
                 },
             ),
             (
@@ -70297,7 +70297,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.sugar"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.sugar"),
                 },
             ),
             (
@@ -70346,7 +70346,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sugar_cane"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sugar_cane"),
                 },
             ),
             (
@@ -70395,7 +70395,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sulfur"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sulfur"),
                 },
             ),
             (
@@ -70444,7 +70444,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sulfur_brick_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sulfur_brick_slab"),
                 },
             ),
             (
@@ -70493,7 +70493,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sulfur_brick_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sulfur_brick_stairs"),
                 },
             ),
             (
@@ -70542,7 +70542,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sulfur_brick_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sulfur_brick_wall"),
                 },
             ),
             (
@@ -70591,7 +70591,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sulfur_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sulfur_bricks"),
                 },
             ),
             (
@@ -70640,7 +70640,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.sulfur_cube_bucket"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.sulfur_cube_bucket"),
                 },
             ),
             (
@@ -70690,7 +70690,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.sulfur_cube_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.sulfur_cube_spawn_egg"),
                 },
             ),
             (
@@ -70740,7 +70740,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sulfur_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sulfur_slab"),
                 },
             ),
             (
@@ -70789,7 +70789,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sulfur_spike"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sulfur_spike"),
                 },
             ),
             (
@@ -70838,7 +70838,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sulfur_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sulfur_stairs"),
                 },
             ),
             (
@@ -70887,7 +70887,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sulfur_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sulfur_wall"),
                 },
             ),
             (
@@ -70936,7 +70936,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.sunflower"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.sunflower"),
                 },
             ),
             (
@@ -70985,7 +70985,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.suspicious_gravel"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.suspicious_gravel"),
                 },
             ),
             (
@@ -71034,7 +71034,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.suspicious_sand"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.suspicious_sand"),
                 },
             ),
             (
@@ -71083,7 +71083,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.suspicious_stew"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.suspicious_stew"),
                 },
             ),
             (
@@ -71157,7 +71157,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.sweet_berries"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.sweet_berries"),
                 },
             ),
             (
@@ -71224,7 +71224,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.tadpole_bucket"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.tadpole_bucket"),
                 },
             ),
             (
@@ -71274,7 +71274,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.tadpole_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.tadpole_spawn_egg"),
                 },
             ),
             (
@@ -71324,7 +71324,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.tall_dry_grass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.tall_dry_grass"),
                 },
             ),
             (
@@ -71373,7 +71373,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.tall_grass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.tall_grass"),
                 },
             ),
             (
@@ -71422,7 +71422,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.target"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.target"),
                 },
             ),
             (
@@ -71471,7 +71471,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.terracotta"),
                 },
             ),
             (
@@ -71520,7 +71520,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.test_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.test_block"),
                 },
             ),
             (
@@ -71575,7 +71575,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.test_instance_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.test_instance_block"),
                 },
             ),
             (
@@ -71624,7 +71624,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.tide_armor_trim_smithing_template"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.tide_armor_trim_smithing_template"),
                 },
             ),
             (
@@ -71673,7 +71673,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.tinted_glass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.tinted_glass"),
                 },
             ),
             (
@@ -71722,7 +71722,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.tipped_arrow"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.tipped_arrow"),
                 },
             ),
             (
@@ -71784,7 +71784,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.tnt"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.tnt"),
                 },
             ),
             (
@@ -71833,7 +71833,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.tnt_minecart"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.tnt_minecart"),
                 },
             ),
             (
@@ -71882,7 +71882,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.torch"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.torch"),
                 },
             ),
             (
@@ -71931,7 +71931,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.torchflower"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.torchflower"),
                 },
             ),
             (
@@ -71980,7 +71980,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.torchflower_seeds"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.torchflower_seeds"),
                 },
             ),
             (
@@ -72029,7 +72029,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.totem_of_undying"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.totem_of_undying"),
                 },
             ),
             (
@@ -72118,7 +72118,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.trader_llama_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.trader_llama_spawn_egg"),
                 },
             ),
             (
@@ -72168,7 +72168,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.trapped_chest"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.trapped_chest"),
                 },
             ),
             (
@@ -72218,7 +72218,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.trial_key"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.trial_key"),
                 },
             ),
             (
@@ -72267,7 +72267,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.trial_spawner"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.trial_spawner"),
                 },
             ),
             (
@@ -72316,7 +72316,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.trident"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.trident"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -72400,7 +72400,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.tripwire_hook"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.tripwire_hook"),
                 },
             ),
             (
@@ -72449,7 +72449,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.tropical_fish"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.tropical_fish"),
                 },
             ),
             (
@@ -72516,7 +72516,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.tropical_fish_bucket"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.tropical_fish_bucket"),
                 },
             ),
             (
@@ -72574,7 +72574,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.tropical_fish_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.tropical_fish_spawn_egg"),
                 },
             ),
             (
@@ -72624,7 +72624,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.tube_coral"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.tube_coral"),
                 },
             ),
             (
@@ -72673,7 +72673,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.tube_coral_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.tube_coral_block"),
                 },
             ),
             (
@@ -72722,7 +72722,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.tube_coral_fan"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.tube_coral_fan"),
                 },
             ),
             (
@@ -72771,7 +72771,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.tuff"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.tuff"),
                 },
             ),
             (
@@ -72820,7 +72820,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.tuff_brick_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.tuff_brick_slab"),
                 },
             ),
             (
@@ -72869,7 +72869,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.tuff_brick_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.tuff_brick_stairs"),
                 },
             ),
             (
@@ -72918,7 +72918,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.tuff_brick_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.tuff_brick_wall"),
                 },
             ),
             (
@@ -72967,7 +72967,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.tuff_bricks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.tuff_bricks"),
                 },
             ),
             (
@@ -73016,7 +73016,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.tuff_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.tuff_slab"),
                 },
             ),
             (
@@ -73065,7 +73065,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.tuff_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.tuff_stairs"),
                 },
             ),
             (
@@ -73114,7 +73114,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.tuff_wall"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.tuff_wall"),
                 },
             ),
             (
@@ -73163,7 +73163,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.turtle_egg"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.turtle_egg"),
                 },
             ),
             (
@@ -73212,7 +73212,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.turtle_helmet"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.turtle_helmet"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -73303,7 +73303,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.turtle_scute"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.turtle_scute"),
                 },
             ),
             (
@@ -73352,7 +73352,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.turtle_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.turtle_spawn_egg"),
                 },
             ),
             (
@@ -73402,7 +73402,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.twisting_vines"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.twisting_vines"),
                 },
             ),
             (
@@ -73451,7 +73451,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.vault"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.vault"),
                 },
             ),
             (
@@ -73500,7 +73500,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.verdant_froglight"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.verdant_froglight"),
                 },
             ),
             (
@@ -73549,7 +73549,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.vex_armor_trim_smithing_template"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.vex_armor_trim_smithing_template"),
                 },
             ),
             (
@@ -73598,7 +73598,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.vex_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.vex_spawn_egg"),
                 },
             ),
             (
@@ -73648,7 +73648,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.villager_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.villager_spawn_egg"),
                 },
             ),
             (
@@ -73698,7 +73698,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.vindicator_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.vindicator_spawn_egg"),
                 },
             ),
             (
@@ -73748,7 +73748,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.vine"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.vine"),
                 },
             ),
             (
@@ -73797,7 +73797,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.wandering_trader_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.wandering_trader_spawn_egg"),
                 },
             ),
             (
@@ -73847,7 +73847,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.ward_armor_trim_smithing_template"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.ward_armor_trim_smithing_template"),
                 },
             ),
             (
@@ -73896,7 +73896,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.warden_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.warden_spawn_egg"),
                 },
             ),
             (
@@ -73946,7 +73946,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.warped_button"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.warped_button"),
                 },
             ),
             (
@@ -73995,7 +73995,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.warped_door"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.warped_door"),
                 },
             ),
             (
@@ -74044,7 +74044,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.warped_fence"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.warped_fence"),
                 },
             ),
             (
@@ -74093,7 +74093,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.warped_fence_gate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.warped_fence_gate"),
                 },
             ),
             (
@@ -74142,7 +74142,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.warped_fungus"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.warped_fungus"),
                 },
             ),
             (
@@ -74191,7 +74191,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.warped_fungus_on_a_stick"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.warped_fungus_on_a_stick"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -74242,7 +74242,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.warped_hanging_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.warped_hanging_sign"),
                 },
             ),
             (
@@ -74291,7 +74291,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.warped_hyphae"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.warped_hyphae"),
                 },
             ),
             (
@@ -74340,7 +74340,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.warped_nylium"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.warped_nylium"),
                 },
             ),
             (
@@ -74389,7 +74389,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.warped_planks"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.warped_planks"),
                 },
             ),
             (
@@ -74438,7 +74438,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.warped_pressure_plate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.warped_pressure_plate"),
                 },
             ),
             (
@@ -74487,7 +74487,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.warped_roots"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.warped_roots"),
                 },
             ),
             (
@@ -74536,7 +74536,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.warped_shelf"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.warped_shelf"),
                 },
             ),
             (
@@ -74586,7 +74586,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.warped_sign"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.warped_sign"),
                 },
             ),
             (
@@ -74635,7 +74635,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.warped_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.warped_slab"),
                 },
             ),
             (
@@ -74684,7 +74684,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.warped_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.warped_stairs"),
                 },
             ),
             (
@@ -74733,7 +74733,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.warped_stem"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.warped_stem"),
                 },
             ),
             (
@@ -74782,7 +74782,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.warped_trapdoor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.warped_trapdoor"),
                 },
             ),
             (
@@ -74831,7 +74831,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.warped_wart_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.warped_wart_block"),
                 },
             ),
             (
@@ -74880,7 +74880,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.water_bucket"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.water_bucket"),
                 },
             ),
             (
@@ -74929,7 +74929,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_chiseled_copper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_chiseled_copper"),
                 },
             ),
             (
@@ -74978,7 +74978,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_copper_bars"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_copper_bars"),
                 },
             ),
             (
@@ -75027,7 +75027,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_copper_block"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_copper_block"),
                 },
             ),
             (
@@ -75076,7 +75076,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_copper_bulb"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_copper_bulb"),
                 },
             ),
             (
@@ -75125,7 +75125,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_copper_chain"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_copper_chain"),
                 },
             ),
             (
@@ -75174,7 +75174,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_copper_chest"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_copper_chest"),
                 },
             ),
             (
@@ -75223,7 +75223,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_copper_door"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_copper_door"),
                 },
             ),
             (
@@ -75272,7 +75272,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_copper_golem_statue"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_copper_golem_statue"),
                 },
             ),
             (
@@ -75330,7 +75330,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_copper_grate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_copper_grate"),
                 },
             ),
             (
@@ -75379,7 +75379,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_copper_lantern"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_copper_lantern"),
                 },
             ),
             (
@@ -75428,7 +75428,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_copper_trapdoor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_copper_trapdoor"),
                 },
             ),
             (
@@ -75477,7 +75477,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_cut_copper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_cut_copper"),
                 },
             ),
             (
@@ -75526,7 +75526,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_cut_copper_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_cut_copper_slab"),
                 },
             ),
             (
@@ -75575,7 +75575,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_cut_copper_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_cut_copper_stairs"),
                 },
             ),
             (
@@ -75624,7 +75624,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_exposed_chiseled_copper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_exposed_chiseled_copper"),
                 },
             ),
             (
@@ -75673,7 +75673,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_exposed_copper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_exposed_copper"),
                 },
             ),
             (
@@ -75722,7 +75722,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_exposed_copper_bars"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_exposed_copper_bars"),
                 },
             ),
             (
@@ -75771,7 +75771,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_exposed_copper_bulb"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_exposed_copper_bulb"),
                 },
             ),
             (
@@ -75820,7 +75820,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_exposed_copper_chain"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_exposed_copper_chain"),
                 },
             ),
             (
@@ -75869,7 +75869,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_exposed_copper_chest"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_exposed_copper_chest"),
                 },
             ),
             (
@@ -75918,7 +75918,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_exposed_copper_door"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_exposed_copper_door"),
                 },
             ),
             (
@@ -75967,7 +75967,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_exposed_copper_golem_statue"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_exposed_copper_golem_statue"),
                 },
             ),
             (
@@ -76025,7 +76025,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_exposed_copper_grate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_exposed_copper_grate"),
                 },
             ),
             (
@@ -76074,7 +76074,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_exposed_copper_lantern"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_exposed_copper_lantern"),
                 },
             ),
             (
@@ -76123,7 +76123,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_exposed_copper_trapdoor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_exposed_copper_trapdoor"),
                 },
             ),
             (
@@ -76172,7 +76172,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_exposed_cut_copper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_exposed_cut_copper"),
                 },
             ),
             (
@@ -76221,7 +76221,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_exposed_cut_copper_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_exposed_cut_copper_slab"),
                 },
             ),
             (
@@ -76270,7 +76270,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_exposed_cut_copper_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_exposed_cut_copper_stairs"),
                 },
             ),
             (
@@ -76319,7 +76319,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_exposed_lightning_rod"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_exposed_lightning_rod"),
                 },
             ),
             (
@@ -76368,7 +76368,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_lightning_rod"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_lightning_rod"),
                 },
             ),
             (
@@ -76417,7 +76417,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_oxidized_chiseled_copper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_oxidized_chiseled_copper"),
                 },
             ),
             (
@@ -76466,7 +76466,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_oxidized_copper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_oxidized_copper"),
                 },
             ),
             (
@@ -76515,7 +76515,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_oxidized_copper_bars"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_oxidized_copper_bars"),
                 },
             ),
             (
@@ -76564,7 +76564,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_oxidized_copper_bulb"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_oxidized_copper_bulb"),
                 },
             ),
             (
@@ -76613,7 +76613,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_oxidized_copper_chain"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_oxidized_copper_chain"),
                 },
             ),
             (
@@ -76662,7 +76662,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_oxidized_copper_chest"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_oxidized_copper_chest"),
                 },
             ),
             (
@@ -76711,7 +76711,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_oxidized_copper_door"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_oxidized_copper_door"),
                 },
             ),
             (
@@ -76760,7 +76760,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_oxidized_copper_golem_statue"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_oxidized_copper_golem_statue"),
                 },
             ),
             (
@@ -76818,7 +76818,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_oxidized_copper_grate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_oxidized_copper_grate"),
                 },
             ),
             (
@@ -76867,7 +76867,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_oxidized_copper_lantern"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_oxidized_copper_lantern"),
                 },
             ),
             (
@@ -76916,7 +76916,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_oxidized_copper_trapdoor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_oxidized_copper_trapdoor"),
                 },
             ),
             (
@@ -76965,7 +76965,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_oxidized_cut_copper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_oxidized_cut_copper"),
                 },
             ),
             (
@@ -77014,7 +77014,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_oxidized_cut_copper_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_oxidized_cut_copper_slab"),
                 },
             ),
             (
@@ -77063,7 +77063,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_oxidized_cut_copper_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_oxidized_cut_copper_stairs"),
                 },
             ),
             (
@@ -77112,7 +77112,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_oxidized_lightning_rod"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_oxidized_lightning_rod"),
                 },
             ),
             (
@@ -77161,7 +77161,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_weathered_chiseled_copper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_weathered_chiseled_copper"),
                 },
             ),
             (
@@ -77210,7 +77210,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_weathered_copper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_weathered_copper"),
                 },
             ),
             (
@@ -77259,7 +77259,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_weathered_copper_bars"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_weathered_copper_bars"),
                 },
             ),
             (
@@ -77308,7 +77308,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_weathered_copper_bulb"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_weathered_copper_bulb"),
                 },
             ),
             (
@@ -77357,7 +77357,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_weathered_copper_chain"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_weathered_copper_chain"),
                 },
             ),
             (
@@ -77406,7 +77406,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_weathered_copper_chest"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_weathered_copper_chest"),
                 },
             ),
             (
@@ -77455,7 +77455,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_weathered_copper_door"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_weathered_copper_door"),
                 },
             ),
             (
@@ -77504,7 +77504,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_weathered_copper_golem_statue"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_weathered_copper_golem_statue"),
                 },
             ),
             (
@@ -77562,7 +77562,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_weathered_copper_grate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_weathered_copper_grate"),
                 },
             ),
             (
@@ -77611,7 +77611,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_weathered_copper_lantern"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_weathered_copper_lantern"),
                 },
             ),
             (
@@ -77660,7 +77660,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_weathered_copper_trapdoor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_weathered_copper_trapdoor"),
                 },
             ),
             (
@@ -77709,7 +77709,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_weathered_cut_copper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_weathered_cut_copper"),
                 },
             ),
             (
@@ -77758,7 +77758,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_weathered_cut_copper_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_weathered_cut_copper_slab"),
                 },
             ),
             (
@@ -77807,7 +77807,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_weathered_cut_copper_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_weathered_cut_copper_stairs"),
                 },
             ),
             (
@@ -77856,7 +77856,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.waxed_weathered_lightning_rod"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.waxed_weathered_lightning_rod"),
                 },
             ),
             (
@@ -77905,7 +77905,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.wayfinder_armor_trim_smithing_template"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.wayfinder_armor_trim_smithing_template"),
                 },
             ),
             (
@@ -77954,7 +77954,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.weathered_chiseled_copper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.weathered_chiseled_copper"),
                 },
             ),
             (
@@ -78003,7 +78003,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.weathered_copper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.weathered_copper"),
                 },
             ),
             (
@@ -78052,7 +78052,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.weathered_copper_bars"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.weathered_copper_bars"),
                 },
             ),
             (
@@ -78101,7 +78101,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.weathered_copper_bulb"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.weathered_copper_bulb"),
                 },
             ),
             (
@@ -78150,7 +78150,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.weathered_copper_chain"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.weathered_copper_chain"),
                 },
             ),
             (
@@ -78199,7 +78199,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.weathered_copper_chest"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.weathered_copper_chest"),
                 },
             ),
             (
@@ -78248,7 +78248,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.weathered_copper_door"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.weathered_copper_door"),
                 },
             ),
             (
@@ -78297,7 +78297,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.weathered_copper_golem_statue"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.weathered_copper_golem_statue"),
                 },
             ),
             (
@@ -78355,7 +78355,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.weathered_copper_grate"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.weathered_copper_grate"),
                 },
             ),
             (
@@ -78404,7 +78404,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.weathered_copper_lantern"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.weathered_copper_lantern"),
                 },
             ),
             (
@@ -78453,7 +78453,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.weathered_copper_trapdoor"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.weathered_copper_trapdoor"),
                 },
             ),
             (
@@ -78502,7 +78502,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.weathered_cut_copper"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.weathered_cut_copper"),
                 },
             ),
             (
@@ -78551,7 +78551,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.weathered_cut_copper_slab"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.weathered_cut_copper_slab"),
                 },
             ),
             (
@@ -78600,7 +78600,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.weathered_cut_copper_stairs"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.weathered_cut_copper_stairs"),
                 },
             ),
             (
@@ -78649,7 +78649,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.weathered_lightning_rod"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.weathered_lightning_rod"),
                 },
             ),
             (
@@ -78698,7 +78698,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.weeping_vines"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.weeping_vines"),
                 },
             ),
             (
@@ -78747,7 +78747,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.wet_sponge"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.wet_sponge"),
                 },
             ),
             (
@@ -78796,7 +78796,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.wheat"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.wheat"),
                 },
             ),
             (
@@ -78845,7 +78845,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.wheat_seeds"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.wheat_seeds"),
                 },
             ),
             (
@@ -78894,7 +78894,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.white_banner"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.white_banner"),
                 },
             ),
             (
@@ -78944,7 +78944,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.white_bed"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.white_bed"),
                 },
             ),
             (
@@ -78993,7 +78993,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.white_bundle"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.white_bundle"),
                 },
             ),
             (
@@ -79043,7 +79043,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.white_candle"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.white_candle"),
                 },
             ),
             (
@@ -79092,7 +79092,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.white_carpet"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.white_carpet"),
                 },
             ),
             (
@@ -79160,7 +79160,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.white_concrete"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.white_concrete"),
                 },
             ),
             (
@@ -79209,7 +79209,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.white_concrete_powder"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.white_concrete_powder"),
                 },
             ),
             (
@@ -79258,7 +79258,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.white_dye"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.white_dye"),
                 },
             ),
             (
@@ -79308,7 +79308,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.white_glazed_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.white_glazed_terracotta"),
                 },
             ),
             (
@@ -79357,7 +79357,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.white_harness"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.white_harness"),
                 },
             ),
             (
@@ -79422,7 +79422,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.white_shulker_box"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.white_shulker_box"),
                 },
             ),
             (
@@ -79472,7 +79472,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.white_stained_glass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.white_stained_glass"),
                 },
             ),
             (
@@ -79521,7 +79521,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.white_stained_glass_pane"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.white_stained_glass_pane"),
                 },
             ),
             (
@@ -79570,7 +79570,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.white_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.white_terracotta"),
                 },
             ),
             (
@@ -79619,7 +79619,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.white_tulip"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.white_tulip"),
                 },
             ),
             (
@@ -79668,7 +79668,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.white_wool"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.white_wool"),
                 },
             ),
             (
@@ -79717,7 +79717,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.wild_armor_trim_smithing_template"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.wild_armor_trim_smithing_template"),
                 },
             ),
             (
@@ -79766,7 +79766,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.wildflowers"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.wildflowers"),
                 },
             ),
             (
@@ -79822,7 +79822,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.wind_charge"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.wind_charge"),
                 },
             ),
             (
@@ -79871,7 +79871,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.witch_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.witch_spawn_egg"),
                 },
             ),
             (
@@ -79921,7 +79921,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.wither_rose"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.wither_rose"),
                 },
             ),
             (
@@ -79970,7 +79970,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.wither_skeleton_skull"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.wither_skeleton_skull"),
                 },
             ),
             (
@@ -80042,7 +80042,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.wither_skeleton_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.wither_skeleton_spawn_egg"),
                 },
             ),
             (
@@ -80092,7 +80092,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.wither_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.wither_spawn_egg"),
                 },
             ),
             (
@@ -80142,7 +80142,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.wolf_armor"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.wolf_armor"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -80234,7 +80234,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.wolf_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.wolf_spawn_egg"),
                 },
             ),
             (
@@ -80284,7 +80284,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.wooden_axe"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.wooden_axe"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -80385,7 +80385,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.wooden_hoe"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.wooden_hoe"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -80486,7 +80486,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.wooden_pickaxe"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.wooden_pickaxe"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -80587,7 +80587,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.wooden_shovel"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.wooden_shovel"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -80688,7 +80688,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.wooden_spear"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.wooden_spear"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -80825,7 +80825,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.wooden_sword"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.wooden_sword"),
                 },
             ),
             (Damage, &DamageImpl { damage: 0 }),
@@ -80931,7 +80931,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.writable_book"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.writable_book"),
                 },
             ),
             (
@@ -80984,7 +80984,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.written_book"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.written_book"),
                 },
             ),
             (
@@ -81034,7 +81034,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.yellow_banner"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.yellow_banner"),
                 },
             ),
             (
@@ -81084,7 +81084,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.yellow_bed"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.yellow_bed"),
                 },
             ),
             (
@@ -81133,7 +81133,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.yellow_bundle"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.yellow_bundle"),
                 },
             ),
             (
@@ -81183,7 +81183,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.yellow_candle"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.yellow_candle"),
                 },
             ),
             (
@@ -81232,7 +81232,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.yellow_carpet"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.yellow_carpet"),
                 },
             ),
             (
@@ -81300,7 +81300,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.yellow_concrete"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.yellow_concrete"),
                 },
             ),
             (
@@ -81349,7 +81349,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.yellow_concrete_powder"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.yellow_concrete_powder"),
                 },
             ),
             (
@@ -81398,7 +81398,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.yellow_dye"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.yellow_dye"),
                 },
             ),
             (
@@ -81448,7 +81448,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.yellow_glazed_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.yellow_glazed_terracotta"),
                 },
             ),
             (
@@ -81497,7 +81497,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.yellow_harness"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.yellow_harness"),
                 },
             ),
             (
@@ -81562,7 +81562,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.yellow_shulker_box"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.yellow_shulker_box"),
                 },
             ),
             (
@@ -81612,7 +81612,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.yellow_stained_glass"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.yellow_stained_glass"),
                 },
             ),
             (
@@ -81661,7 +81661,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.yellow_stained_glass_pane"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.yellow_stained_glass_pane"),
                 },
             ),
             (
@@ -81710,7 +81710,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.yellow_terracotta"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.yellow_terracotta"),
                 },
             ),
             (
@@ -81759,7 +81759,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.yellow_wool"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.yellow_wool"),
                 },
             ),
             (
@@ -81808,7 +81808,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.zoglin_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.zoglin_spawn_egg"),
                 },
             ),
             (
@@ -81858,7 +81858,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("block.minecraft.zombie_head"),
+                    name: crate::data_component_impl::ItemName::translated("block.minecraft.zombie_head"),
                 },
             ),
             (
@@ -81930,7 +81930,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.zombie_horse_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.zombie_horse_spawn_egg"),
                 },
             ),
             (
@@ -81980,7 +81980,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.zombie_nautilus_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.zombie_nautilus_spawn_egg"),
                 },
             ),
             (
@@ -82030,7 +82030,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.zombie_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.zombie_spawn_egg"),
                 },
             ),
             (
@@ -82080,7 +82080,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.zombie_villager_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.zombie_villager_spawn_egg"),
                 },
             ),
             (
@@ -82130,7 +82130,7 @@ impl Item {
             (
                 ItemName,
                 &ItemNameImpl {
-                    name: Cow::Borrowed("item.minecraft.zombified_piglin_spawn_egg"),
+                    name: crate::data_component_impl::ItemName::translated("item.minecraft.zombified_piglin_spawn_egg"),
                 },
             ),
             (
@@ -82175,20 +82175,19 @@ impl Item {
     #[must_use]
     #[allow(deprecated)]
     pub fn translated_name(&self) -> TextComponent {
-        let name = self
+        self
             .components
             .iter()
             .find_map(|(id, data)| {
                 if id == &ItemName {
                     data.as_any()
                         .downcast_ref::<ItemNameImpl>()
-                        .map(|name| name.name.as_ref())
+                        .map(|name| name.name.as_component())
                 } else {
                     None
                 }
             })
-            .unwrap_or(self.registry_key);
-        TextComponent::translate(name, &[])
+            .unwrap_or_else(|| TextComponent::translate(self.registry_key, &[]))
     }
     #[doc = "Try to parse an item from a resource location string."]
     #[must_use]

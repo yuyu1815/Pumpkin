@@ -465,19 +465,27 @@ impl DataComponentCodec<Self> for LoreImpl {
 
 impl DataComponentCodec<Self> for ItemNameImpl {
     fn serialize(&self, seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
-        let mut name = pumpkin_nbt::compound::NbtCompound::new();
-        name.put_string("translate", self.name.to_string());
+        let tag = self
+            .name
+            .as_component()
+            .to_nbt_tag_for_version(&JavaMinecraftVersion::V_26_2);
         let mut bytes = Vec::new();
-        NbtTag::Compound(name)
-            .serialize(&mut NbtWriteHelperJava::new(&mut bytes))
+        tag.serialize(&mut NbtWriteHelperJava::new(&mut bytes))
             .map_err(|error| WritingError::Message(error.to_string()))?;
         seq.write_slice(&bytes)
     }
 
     fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
-        let name = seq.get_str()?;
+        let tag = seq
+            .get_nbt_with_version(&JavaMinecraftVersion::V_26_2)?
+            .ok_or_else(|| ReadingError::Message("Missing ItemName NBT".into()))?;
+        if !matches!(tag, NbtTag::String(_) | NbtTag::Compound(_) | NbtTag::List(_)) {
+            return Err(ReadingError::Message("Invalid ItemName NBT tag type".into()));
+        }
+        let name = pumpkin_util::text::TextComponent::try_from_nbt(&tag)
+            .map_err(|error| ReadingError::Message(format!("Invalid ItemName component: {error}")))?;
         Ok(Self {
-            name: Cow::Owned(name.into()),
+            name: pumpkin_data::data_component_impl::ItemName::Component(name),
         })
     }
 }
@@ -3827,6 +3835,52 @@ mod jukebox_playable_tests {
 #[cfg(test)]
 mod persistent_codec_fallback_tests {
     use super::*;
+
+    #[test]
+    fn item_name_stream_codec_preserves_component_identity_and_style() {
+        let literal = ItemNameImpl {
+            name: pumpkin_data::data_component_impl::ItemName::Component(
+                pumpkin_util::text::TextComponent::text("item.minecraft.apple"),
+            ),
+        };
+        let translated = ItemNameImpl {
+            name: pumpkin_data::data_component_impl::ItemName::Component(
+                pumpkin_util::text::TextComponent::translate("item.minecraft.apple", vec![])
+                    .bold(),
+            ),
+        };
+        assert_ne!(literal, translated);
+
+        for original in [literal, translated] {
+            let mut wire = Vec::new();
+            original.serialize(&mut wire).expect("serialize ItemName");
+            let decoded = ItemNameImpl::deserialize(&mut wire.as_slice()).expect("decode ItemName");
+            assert_eq!(decoded, original);
+        }
+
+        let mut malformed = vec![pumpkin_nbt::INT_ID];
+        malformed.extend_from_slice(&1_i32.to_be_bytes());
+        assert!(ItemNameImpl::deserialize(&mut malformed.as_slice()).is_err());
+    }
+
+    #[test]
+    fn item_name_stream_codec_accepts_non_empty_lists_and_rejects_empty_lists() {
+        for (tag, is_valid) in [
+            (
+                NbtTag::List(vec![NbtTag::String("first".into())]),
+                true,
+            ),
+            (NbtTag::List(vec![]), false),
+        ] {
+            let mut wire = Vec::new();
+            tag.serialize(&mut NbtWriteHelperJava::new(&mut wire))
+                .expect("serialize ItemName NBT");
+            assert_eq!(
+                ItemNameImpl::deserialize(&mut wire.as_slice()).is_ok(),
+                is_valid
+            );
+        }
+    }
 
     #[test]
     fn debug_stick_state_uses_official_nbt_fallback_and_preserves_next_component() {

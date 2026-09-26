@@ -624,7 +624,12 @@ impl VillagerEntity {
         ));
         stack.patch.push((
             DataComponent::ItemName,
-            Some(ItemNameImpl { name: name.into() }.to_dyn()),
+            Some(
+                ItemNameImpl {
+                    name: pumpkin_data::data_component_impl::ItemName::translated(name),
+                }
+                .to_dyn(),
+            ),
         ));
         Some(stack)
     }

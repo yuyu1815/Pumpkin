@@ -896,7 +896,16 @@ impl TextComponentBase {
 fn nbt_compound_to_json(compound: &pumpkin_nbt::NbtCompound) -> serde_json::Value {
     let mut map = serde_json::Map::new();
     for (k, v) in &compound.child_tags {
-        map.insert(k.to_string(), nbt_tag_to_json(v));
+        let value = if matches!(k.as_ref(), "bold" | "italic" | "underlined" | "strikethrough" | "obfuscated") {
+            match v {
+                pumpkin_nbt::tag::NbtTag::Byte(0) => serde_json::Value::Bool(false),
+                pumpkin_nbt::tag::NbtTag::Byte(1) => serde_json::Value::Bool(true),
+                _ => nbt_tag_to_json(v),
+            }
+        } else {
+            nbt_tag_to_json(v)
+        };
+        map.insert(k.to_string(), value);
     }
     serde_json::Value::Object(map)
 }
@@ -1319,10 +1328,20 @@ impl TextComponent {
         Self::text("")
     }
 
-    /// Parses a text component from its NBT representation
+    /// Parses a text component from its NBT representation.
     #[must_use]
     pub fn from_nbt(tag: &pumpkin_nbt::tag::NbtTag) -> Self {
-        serde_json::from_value(nbt_tag_to_json(tag)).unwrap_or_else(|_| Self::empty())
+        Self::try_from_nbt(tag).unwrap_or_else(|_| Self::empty())
+    }
+
+    /// Parses a text component from NBT without discarding malformed input.
+    pub fn try_from_nbt(
+        tag: &pumpkin_nbt::tag::NbtTag,
+    ) -> Result<Self, serde_json::Error> {
+        if matches!(tag, pumpkin_nbt::tag::NbtTag::List(list) if list.is_empty()) {
+            return Err(serde_json::Error::custom("text component list must not be empty"));
+        }
+        serde_json::from_value(nbt_tag_to_json(tag))
     }
 
     /// Creates a new text component with plain text content.
@@ -2068,6 +2087,17 @@ mod test {
     use crate::text::{TextComponent, color::NamedColor, hover::HoverEvent};
     use crate::version::JavaMinecraftVersion;
     use std::borrow::Cow;
+
+    #[test]
+    fn nbt_component_lists_must_be_nonempty_at_the_root() {
+        use pumpkin_nbt::tag::NbtTag;
+
+        assert!(TextComponent::try_from_nbt(&NbtTag::List(vec![])).is_err());
+        assert!(TextComponent::try_from_nbt(&NbtTag::List(vec![NbtTag::String(
+            "text".into(),
+        )]))
+        .is_ok());
+    }
 
     #[test]
     fn serialize_text_component() {

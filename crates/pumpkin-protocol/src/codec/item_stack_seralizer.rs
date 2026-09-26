@@ -251,19 +251,12 @@ fn decode_item_name(component_data: &[u8]) -> Result<Box<dyn DataComponentImpl>,
         pumpkin_nbt::Error::Incomplete(err) => ReadingError::Incomplete(err.to_string()),
         err => ReadingError::Message(format!("Failed to decode ItemName NBT: {err}")),
     })?;
-    let name = match tag {
-        NbtTag::String(name) => name.to_string(),
-        NbtTag::Compound(compound) => compound
-            .get_string("translate")
-            .or_else(|| compound.get_string("text"))
-            .unwrap_or_default()
-            .to_owned(),
-        _ => String::new(),
-    };
-    Ok(ItemNameImpl {
-        name: Cow::Owned(name),
+    if !matches!(tag, NbtTag::String(_) | NbtTag::Compound(_) | NbtTag::List(_)) {
+        return Err(ReadingError::Message("Invalid ItemName NBT tag type".into()));
     }
-    .to_dyn())
+    let name = pumpkin_util::text::TextComponent::try_from_nbt(&tag)
+        .map_err(|error| ReadingError::Message(format!("Invalid ItemName component: {error}")))?;
+    Ok(ItemNameImpl { name: pumpkin_data::data_component_impl::ItemName::Component(name) }.to_dyn())
 }
 
 fn decode_custom_data(component_data: &[u8]) -> Result<Box<dyn DataComponentImpl>, ReadingError> {
@@ -1062,6 +1055,46 @@ mod duplicate_component_tests {
     use super::*;
     use pumpkin_data::data_component_impl::{DamageImpl, MaxDamageImpl};
     use std::io::Cursor;
+
+    #[test]
+    fn fast_item_name_decoder_accepts_non_empty_lists_and_rejects_empty_lists() {
+        for tag in [
+            NbtTag::List(vec![NbtTag::String("first".into())]),
+            NbtTag::List(vec![]),
+        ] {
+            let is_valid = matches!(&tag, NbtTag::List(list) if !list.is_empty());
+            let mut wire = Vec::new();
+            tag.serialize(&mut pumpkin_nbt::serializer::NbtWriteHelperJava::new(&mut wire))
+                .expect("serialize ItemName NBT");
+            assert_eq!(decode_item_name(&wire).is_ok(), is_valid);
+        }
+    }
+
+    #[test]
+    fn fast_item_name_decoder_preserves_literal_and_styled_translation() {
+        for name in [
+            pumpkin_util::text::TextComponent::text("item.minecraft.apple"),
+            pumpkin_util::text::TextComponent::translate("item.minecraft.apple", vec![]).bold(),
+        ] {
+            let component = ItemNameImpl {
+                name: pumpkin_data::data_component_impl::ItemName::Component(name.clone()),
+            };
+            let mut wire = Vec::new();
+            component
+                .write_data()
+                .serialize(&mut pumpkin_nbt::serializer::NbtWriteHelperJava::new(&mut wire))
+                .expect("serialize ItemName NBT");
+            let decoded = decode_item_name(&wire).expect("fast ItemName decode");
+            assert_eq!(
+                decoded
+                    .as_any()
+                    .downcast_ref::<ItemNameImpl>()
+                    .expect("ItemName implementation")
+                    .name,
+                pumpkin_data::data_component_impl::ItemName::Component(name)
+            );
+        }
+    }
 
     const ORDINARY_DUPLICATES: &[u8] = &[
         0x01, 0x98, 0x07, 0x03, 0x02, 0x03, 0x01, 0x03, 0x02, 0x02, 0x05, 0x03, 0x03, 0x7f,

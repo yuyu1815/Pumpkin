@@ -128,35 +128,112 @@ impl DataComponentImpl for CustomNameImpl {
     default_impl!(CustomName);
 }
 
+#[derive(Clone, Debug)]
+pub enum ItemName {
+    /// Generated vanilla item names are translation keys and must be const-constructible.
+    Translation(&'static str),
+    /// Runtime-provided names retain their complete text component structure.
+    Component(TextComponent),
+}
+
+impl PartialEq for ItemName {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_component() == other.as_component()
+    }
+}
+impl Eq for ItemName {}
+impl std::hash::Hash for ItemName {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::hash::Hash::hash(&self.as_component(), state);
+    }
+}
+
+impl ItemName {
+    #[must_use]
+    pub const fn translated(key: &'static str) -> Self {
+        Self::Translation(key)
+    }
+
+    #[must_use]
+    pub fn as_component(&self) -> TextComponent {
+        match self {
+            Self::Translation(key) => TextComponent::translate(*key, vec![]),
+            Self::Component(component) => component.clone(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct ItemNameImpl {
-    pub name: Cow<'static, str>,
+    pub name: ItemName,
 }
 impl ItemNameImpl {
     pub fn read_data(data: &NbtTag) -> Option<Self> {
-        let name = match data {
-            NbtTag::String(name) => name.to_string(),
-            NbtTag::Compound(component) => component
-                .get_string("translate")
-                .or_else(|| component.get_string("text"))?
-                .to_owned(),
-            _ => return None,
-        };
+        if !matches!(data, NbtTag::String(_) | NbtTag::Compound(_) | NbtTag::List(_)) {
+            return None;
+        }
         Some(Self {
-            name: Cow::Owned(name),
+            name: ItemName::Component(TextComponent::try_from_nbt(data).ok()?),
         })
     }
 }
 impl DataComponentImpl for ItemNameImpl {
     fn write_data(&self) -> NbtTag {
-        let mut component = NbtCompound::new();
-        component.put_string("translate", self.name.to_string());
-        NbtTag::Compound(component)
+        self.name
+            .as_component()
+            .to_nbt_tag_for_version(&pumpkin_util::version::JavaMinecraftVersion::V_26_2)
     }
     fn get_hash(&self) -> i32 {
-        get_str_hash(&self.name) as i32
+        // Official HashOps parity is unresolved. This fallback satisfies Eq => hash: equal
+        // components have the same translation key or visible text; style-only differences may
+        // collide, which is permitted.
+        match &self.name {
+            ItemName::Translation(key) => get_str_hash(key.as_ref()) as i32,
+            ItemName::Component(component) => match &*component.0.content {
+                pumpkin_util::text::TextContent::Translate { translate, .. } => {
+                    get_str_hash(translate.as_ref()) as i32
+                }
+                _ => get_str_hash(component.clone().get_text().as_str()) as i32,
+            },
+        }
     }
     default_impl!(ItemName);
+}
+
+#[cfg(test)]
+mod item_name_tests {
+    use super::*;
+
+    #[test]
+    fn item_name_nbt_roundtrip_preserves_components_and_parses_lists() {
+        let literal = ItemNameImpl {
+            name: ItemName::Component(TextComponent::text("item.minecraft.apple")),
+        };
+        let translated = ItemNameImpl {
+            name: ItemName::Component(
+                TextComponent::translate("item.minecraft.apple", vec![]).bold(),
+            ),
+        };
+        assert_ne!(literal.name.as_component(), translated.name.as_component());
+        // Dynamic fallback is not official parity; the literal/translation collision is valid.
+        assert_eq!(literal.get_hash(), translated.get_hash());
+        let generated = ItemNameImpl {
+            name: ItemName::translated("item.minecraft.apple"),
+        };
+        assert_eq!(generated.get_hash(), get_str_hash("item.minecraft.apple") as i32);
+
+        for original in [literal, translated] {
+            let decoded = ItemNameImpl::read_data(&original.write_data()).expect("valid component");
+            assert_eq!(decoded, original);
+        }
+        assert!(ItemNameImpl::read_data(&NbtTag::Int(1)).is_none());
+        let list = NbtTag::List(vec![
+            NbtTag::String("first".into()),
+            NbtTag::String("second".into()),
+        ]);
+        assert!(ItemNameImpl::read_data(&list).is_some());
+        assert!(ItemNameImpl::read_data(&NbtTag::List(vec![])).is_none());
+    }
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]

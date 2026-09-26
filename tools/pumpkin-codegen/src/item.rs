@@ -320,7 +320,7 @@ impl ToTokens for ItemComponents {
         let item_name = LitStr::new(&text, Span::call_site());
         tokens.extend(quote! {
             (ItemName, &ItemNameImpl {
-                name: Cow::Borrowed(#item_name),
+                name: crate::data_component_impl::ItemName::translated(#item_name),
             }),
         });
 
@@ -1919,20 +1919,19 @@ pub fn build() -> TokenStream {
             #[must_use]
             #[allow(deprecated)]
             pub fn translated_name(&self) -> TextComponent {
-                let name = self
+                self
                     .components
                     .iter()
                     .find_map(|(id, data)| {
                         if id == &ItemName {
                             data.as_any()
                                 .downcast_ref::<ItemNameImpl>()
-                                .map(|name| name.name.as_ref())
+                                .map(|name| name.name.as_component())
                         } else {
                             None
                         }
                     })
-                    .unwrap_or(self.registry_key);
-                TextComponent::translate(name, &[])
+                    .unwrap_or_else(|| TextComponent::translate(self.registry_key, &[]))
             }
 
             #[doc = "Try to parse an item from a resource location string."]
