@@ -540,7 +540,10 @@ mod tests {
     fn sleep_weather_reset_uses_vanilla_rain_threshold_and_capability() {
         assert!(is_raining_for_sleep_reset(&Dimension::OVERWORLD, 0.2));
         assert!(!is_raining_for_sleep_reset(&Dimension::OVERWORLD, 0.1999));
-        assert!(!is_raining_for_sleep_reset(&Dimension::OVERWORLD_CAVES, 1.0));
+        assert!(!is_raining_for_sleep_reset(
+            &Dimension::OVERWORLD_CAVES,
+            1.0
+        ));
         assert!(!is_raining_for_sleep_reset(&Dimension::THE_END, 1.0));
         assert!(!is_raining_for_sleep_reset(&Dimension::THE_NETHER, 1.0));
     }
