@@ -605,6 +605,8 @@ pub struct Player {
     pub chat_session: Arc<Mutex<ChatSession>>,
     /// Serializes chat session installation, secure-message verification, and disconnect retirement.
     pub(crate) chat_lifecycle: Mutex<()>,
+    /// UUID-scoped admission state shared with the server until disconnect cleanup.
+    pub(crate) admission: Arc<crate::server::PlayerAdmission>,
     /// Per-connection capability retired on disconnect or duplicate-login supersession.
     pub(crate) chat_owner: Arc<crate::net::chat::state::ChatOwnerToken>,
     pub signature_cache: Mutex<MessageCache>,
@@ -766,6 +768,7 @@ impl Player {
         config: PlayerConfig,
         world: &Arc<World>,
         gamemode: GameMode,
+        admission: Arc<crate::server::PlayerAdmission>,
     ) -> Self {
         let inventory_changed = Arc::new(AtomicBool::new(true));
 
@@ -939,6 +942,7 @@ impl Player {
             root_vehicle_uuid: AtomicCell::new(None),
             chat_session: Arc::new(Mutex::new(ChatSession::default())), // Placeholder value until the player actually sets their session id
             chat_lifecycle: Mutex::new(()),
+            admission,
             chat_owner: crate::net::chat::state::ChatOwnerToken::new(),
             signature_cache: Mutex::new(MessageCache::default()),
             player_screen_handler: player_screen_handler.clone(),
@@ -4303,6 +4307,10 @@ impl Player {
     }
 
     pub fn kick(&self, reason: DisconnectReason, message: &TextComponent) {
+        self.try_kick(reason, message);
+    }
+
+    pub(crate) fn try_kick(&self, reason: DisconnectReason, message: &TextComponent) -> bool {
         if let Some(server) = self.world().server.upgrade()
             && let Some(player_arc) = self.world().get_player_by_uuid(self.gameprofile.id)
         {
@@ -4312,10 +4320,11 @@ impl Player {
             );
             server.plugin_manager.fire_blocking(&server, &mut event);
             if event.cancelled {
-                return;
+                return false;
             }
         }
         self.client.try_kick(reason, message);
+        true
     }
 
     /// Updates the last action time to now. Call this on player actions like movement, chat, etc.

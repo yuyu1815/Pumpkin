@@ -528,6 +528,10 @@ impl World {
             );
 
             if matches!(reason, PlayerRemovalReason::Disconnect) {
+                // Core membership, chat, tracker, and player-list cleanup is complete;
+                // wake admission before invoking plugins, which may reenter admission.
+                player.admission.disconnect(player);
+
                 let msg_comp = TextComponent::translate_cross(
                     translation::java::MULTIPLAYER_PLAYER_LEFT,
                     translation::bedrock::MULTIPLAYER_PLAYER_LEFT,

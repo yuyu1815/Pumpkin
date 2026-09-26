@@ -107,34 +107,6 @@ impl PendingConnection {
             return Some(PacketHandlerResult::Stop);
         };
 
-        if let Some(online_player) = &server.get_player_by_uuid(profile.id) {
-            debug!(
-                "Player (IP '{}', username '{}') tried to log in with the same UUID ('{}') as an online player (username '{}')",
-                &self.address, &profile.name, &profile.id, &online_player.gameprofile.name
-            );
-            self.kick(TextComponent::translate_cross(
-                translation::java::MULTIPLAYER_DISCONNECT_DUPLICATE_LOGIN,
-                translation::bedrock::DISCONNECTIONSCREEN_LOGGEDINOTHERLOCATION,
-                [],
-            ))
-            .await;
-            return Some(PacketHandlerResult::Stop);
-        }
-
-        if let Some(online_player) = &server.get_player_by_name(&profile.name) {
-            debug!(
-                "A player (IP '{}', attempted username '{}') tried to log in with the same username as an online player (UUID '{}', username '{}')",
-                &self.address, &profile.name, &profile.id, &online_player.gameprofile.name
-            );
-            self.kick(TextComponent::translate_cross(
-                translation::java::MULTIPLAYER_DISCONNECT_DUPLICATE_LOGIN,
-                translation::bedrock::DISCONNECTIONSCREEN_LOGGEDINOTHERLOCATION,
-                [],
-            ))
-            .await;
-            return Some(PacketHandlerResult::Stop);
-        }
-
         self.finish_login(server, &profile).await
     }
 

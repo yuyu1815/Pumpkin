@@ -21,7 +21,7 @@ use arc_swap::ArcSwap;
 use connection_cache::{CachedBranding, CachedStatus};
 use key_store::KeyStore;
 use pumpkin_config::{AdvancedConfiguration, BasicConfiguration, TelemetryConfig};
-use pumpkin_data::dimension::Dimension;
+use pumpkin_data::{dimension::Dimension, translation};
 use pumpkin_util::permission::PermissionManager;
 use pumpkin_util::text::color::NamedColor;
 use pumpkin_world::dimension::into_level;
@@ -43,10 +43,12 @@ use rayon::prelude::*;
 use rsa::RsaPublicKey;
 use std::fs;
 use std::net::IpAddr;
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Weak};
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, AtomicU32};
 use std::{future::Future, sync::atomic::Ordering, time::Duration};
-use tokio::sync::OnceCell;
+use tokio::sync::{Mutex as AsyncMutex, Notify, OnceCell, OwnedMutexGuard};
+use uuid::Uuid;
 use tokio::task::JoinHandle;
 use tokio_util::task::TaskTracker;
 
@@ -61,10 +63,81 @@ pub mod server_test_manager;
 pub mod tick_rate_manager;
 pub mod ticker;
 
+#[cfg(test)]
+mod chat_lifecycle_tests;
+#[cfg(test)]
+mod player_admission_tests;
+
 pub use recipe::RecipeManager;
 
 use crate::data::advancement_data::AdvancementManager;
 use crate::server::scheduler::TaskScheduler;
+
+/// Coordinates simultaneous logins and tracks the sessions admitted for one UUID.
+pub(crate) struct PlayerAdmission {
+    gate: Arc<AsyncMutex<()>>,
+    players: std::sync::Mutex<Vec<Weak<Player>>>,
+    removed: Notify,
+}
+
+impl PlayerAdmission {
+    fn new() -> Self {
+        Self {
+            gate: Arc::new(AsyncMutex::new(())),
+            players: std::sync::Mutex::new(Vec::new()),
+            removed: Notify::new(),
+        }
+    }
+
+    fn players(&self) -> Vec<Arc<Player>> {
+        let mut players = self
+            .players
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut active = Vec::with_capacity(players.len());
+        players.retain(|player| {
+            if let Some(player) = player.upgrade() {
+                active.push(player);
+                true
+            } else {
+                false
+            }
+        });
+        active
+    }
+
+    fn publish(&self, player: &Arc<Player>) {
+        self.players
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(Arc::downgrade(player));
+    }
+
+    pub(crate) fn disconnect(&self, player: &Arc<Player>) {
+        let removed = {
+            let mut players = self
+                .players
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut removed = false;
+            players.retain(|candidate| {
+                let Some(candidate) = candidate.upgrade() else {
+                    return false;
+                };
+                if Arc::ptr_eq(&candidate, player) {
+                    removed = true;
+                    false
+                } else {
+                    true
+                }
+            });
+            removed
+        };
+        if removed {
+            self.removed.notify_one();
+        }
+    }
+}
 
 /// Represents a Minecraft server instance.
 pub struct Server {
@@ -87,6 +160,10 @@ pub struct Server {
     /// Cached Bedrock server private key (process-lifetime). Generated on first Bedrock login and reused.
     /// Manages server status information.
     listing: std::sync::Mutex<CachedStatus>,
+    /// Weak UUID-keyed admission entries; live Players keep their entry alive.
+    player_admissions: std::sync::Mutex<HashMap<Uuid, Weak<PlayerAdmission>>>,
+    /// Case-insensitive name gates serialize admission through player publication.
+    player_name_admissions: std::sync::Mutex<HashMap<String, Weak<AsyncMutex<()>>>>,
     /// Saves server branding information.
     branding: CachedBranding,
     /// Saves and dispatches commands to appropriate handlers.
@@ -296,6 +373,8 @@ impl Server {
             key_store: OnceCell::new(),
             bedrock_oidc_keys: Arc::new(OnceCell::new()),
             listing,
+            player_admissions: std::sync::Mutex::new(HashMap::new()),
+            player_name_admissions: std::sync::Mutex::new(HashMap::new()),
             branding: CachedBranding::new(),
             bossbars: std::sync::Mutex::new(CustomBossbars::new()),
             map_manager: MapManager::new(),
@@ -655,6 +734,123 @@ impl Server {
         Ok(())
     }
 
+    fn player_admission(&self, uuid: Uuid) -> Arc<PlayerAdmission> {
+        let mut admissions = self
+            .player_admissions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        admissions.retain(|_, admission| admission.strong_count() > 0);
+        if let Some(admission) = admissions.get(&uuid).and_then(Weak::upgrade) {
+            return admission;
+        }
+        let admission = Arc::new(PlayerAdmission::new());
+        admissions.insert(uuid, Arc::downgrade(&admission));
+        admission
+    }
+
+    fn player_name_admission(&self, name: &str) -> Arc<AsyncMutex<()>> {
+        let key = name.to_lowercase();
+        let mut admissions = self
+            .player_name_admissions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        admissions.retain(|_, admission| admission.strong_count() > 0);
+        if let Some(admission) = admissions.get(&key).and_then(Weak::upgrade) {
+            return admission;
+        }
+        let admission = Arc::new(AsyncMutex::new(()));
+        admissions.insert(key, Arc::downgrade(&admission));
+        admission
+    }
+
+    /// Admits a player only after every currently admitted session for its UUID
+    /// has accepted a kick and completed Disconnect membership removal.
+    pub async fn admit_player(
+        self: &Arc<Self>,
+        client: Arc<ClientPlatform>,
+        profile: GameProfile,
+        config: Option<PlayerConfig>,
+    ) -> Option<(Arc<Player>, Arc<World>)> {
+        const DUPLICATE_DISCONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+
+        // Always acquire name before UUID: different UUIDs cannot publish the
+        // same case-insensitive username, while duplicate UUIDs remain serialized.
+        let name_admission = self.player_name_admission(&profile.name);
+        let _name_gate: OwnedMutexGuard<()> = name_admission.lock_owned().await;
+        let admission = self.player_admission(profile.id);
+        let _gate: OwnedMutexGuard<()> = admission.gate.clone().lock_owned().await;
+        if self
+            .get_player_by_name(&profile.name)
+            .is_some_and(|player| player.gameprofile.id != profile.id)
+        {
+            self.reject_duplicate_login(&client).await;
+            return None;
+        }
+
+        let deadline = tokio::time::Instant::now() + DUPLICATE_DISCONNECT_TIMEOUT;
+        let mut kicked = Vec::<Arc<Player>>::new();
+
+        loop {
+            let active = admission.players();
+            if active.is_empty() {
+                break;
+            }
+
+            for player in active {
+                if kicked.iter().any(|previous| Arc::ptr_eq(previous, &player)) {
+                    continue;
+                }
+                if !player.try_kick(
+                    DisconnectReason::Kicked,
+                    &TextComponent::translate_cross(
+                        translation::java::MULTIPLAYER_DISCONNECT_DUPLICATE_LOGIN,
+                        translation::bedrock::DISCONNECTIONSCREEN_LOGGEDINOTHERLOCATION,
+                        [],
+                    ),
+                ) {
+                    self.reject_duplicate_login(&client).await;
+                    return None;
+                }
+                kicked.push(player);
+            }
+
+            // Register before rechecking the active set. `notify_one` also
+            // stores a permit if removal wins the race before this future polls.
+            let notified = admission.removed.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if admission.players().is_empty() {
+                break;
+            }
+            if tokio::time::timeout_at(deadline, notified.as_mut())
+                .await
+                .is_err()
+            {
+                self.reject_duplicate_login(&client).await;
+                return None;
+            }
+        }
+
+        self.add_player(client, profile, config)
+    }
+
+    async fn reject_duplicate_login(&self, client: &ClientPlatform) {
+        client
+            .kick(
+                DisconnectReason::Kicked,
+                TextComponent::translate_cross(
+                    translation::java::MULTIPLAYER_DISCONNECT_DUPLICATE_LOGIN,
+                    translation::bedrock::DISCONNECTIONSCREEN_LOGGEDINOTHERLOCATION,
+                    [],
+                ),
+            )
+            .await;
+        match client {
+            ClientPlatform::Java(client) => client.await_tasks().await,
+            ClientPlatform::Bedrock(client) => client.await_tasks().await,
+        }
+    }
+
     /// Adds a new player to the server.
     ///
     /// This function takes an `Arc<Client>` representing the connected client and performs the following actions:
@@ -712,12 +908,14 @@ impl Server {
             (first_world, None)
         };
 
+        let admission = self.player_admission(profile.id);
         let mut player = Player::new(
             client,
             profile,
             config.clone().unwrap_or_default(),
             &world,
             gamemode,
+            admission.clone(),
         );
 
         if let Some(mut nbt_data) = nbt {
@@ -746,6 +944,7 @@ impl Server {
             'after: {
                 player.screen_handler_sync_handler.store_player(player.clone());
                 world.add_player(&player).is_ok().then(|| {
+                    admission.publish(&player);
                     // Publish the new owner before any delayed session task can
                     // install state for it. Old duplicate-UUID tasks retain
                     // their Player but their capability is now inactive.
