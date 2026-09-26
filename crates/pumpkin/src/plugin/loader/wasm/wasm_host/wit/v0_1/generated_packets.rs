@@ -517,6 +517,7 @@ pub fn serialize_java_packet(
             let p = pumpkin_protocol::java::client::play::CPlaceGhostRecipe {
                 window_id: data.window_id.try_into().unwrap(),
                 recipe_id: &data.recipe_id,
+                display: None,
             };
             let mut buf = Vec::new();
             crate::net::java::JavaClient::write_packet_for_version(&p, version, &mut buf).unwrap();
@@ -995,8 +996,14 @@ pub fn serialize_java_packet(
     }
 }
 
-pub fn unsupported_legacy_java_packet(packet: &ClientboundPacket) -> Option<&'static str> {
+pub fn unsupported_legacy_java_packet(
+    packet: &ClientboundPacket,
+    version: JavaMinecraftVersion,
+) -> Option<&'static str> {
     match packet {
+        ClientboundPacket::CPlaceGhostRecipe(_) if version >= JavaMinecraftVersion::V_26_2 => Some(
+            "CPlaceGhostRecipe is unsupported by the v0.1 WIT adapter for 26.2: it provides a recipe ID, but 26.2 requires a typed RecipeDisplay",
+        ),
         ClientboundPacket::CGameTestHighlightPos(_) => Some(
             "CGameTestHighlightPos is unsupported by the v0.1 WIT adapter: 26.2 requires both absolute_pos and relative_pos, but v0.1 provides only pos",
         ),

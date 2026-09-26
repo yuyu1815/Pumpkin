@@ -14,6 +14,7 @@ impl JavaClient {
         };
         use crate::server::recipe::DynamicRecipe;
         use pumpkin_data::recipes::{CraftingRecipeTypes, RECIPES_COOKING, RECIPES_CRAFTING};
+        use pumpkin_protocol::java::client::play::dynamic_recipe_for_display_id;
         use pumpkin_data::screen::WindowType;
         use pumpkin_inventory::crafting::recipe_provider::RecipeProvider;
 
@@ -118,7 +119,9 @@ impl JavaClient {
             return;
         } else {
             let dynamic_id = target_id - crafting_display_count - cooking_display_count;
-            let Some(DynamicRecipe::Crafting(crafting)) = dynamic_recipes.get(dynamic_id) else {
+            let Some(DynamicRecipe::Crafting(crafting)) =
+                dynamic_recipe_for_display_id(&dynamic_recipes, dynamic_id)
+            else {
                 return;
             };
 

@@ -3754,7 +3754,7 @@ impl pumpkin::plugin::player::HostJavaPlayer for PluginHostState {
             .java()
             .ok_or_else(|| wasmtime::Error::msg("Not a java player"))?;
         if let Some(message) =
-            crate::plugin::loader::wasm::wasm_host::wit::v0_1::generated_packets::unsupported_legacy_java_packet(&packet)
+            crate::plugin::loader::wasm::wasm_host::wit::v0_1::generated_packets::unsupported_legacy_java_packet(&packet, client.version.load())
         {
             return Err(wasmtime::Error::msg(message));
         }
