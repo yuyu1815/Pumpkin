@@ -21,7 +21,7 @@ pub struct CInitializeWorldBorder {
     pub old_diameter: f64,
     /// The diameter the border is moving toward.
     pub new_diameter: f64,
-    /// The time (in milliseconds) it will take to reach `new_diameter`.
+    /// The remaining interpolation time in game ticks until `new_diameter`.
     pub speed: VarLong,
     /// The maximum distance a player can be teleported by a portal
     /// before the border prevents the teleport.

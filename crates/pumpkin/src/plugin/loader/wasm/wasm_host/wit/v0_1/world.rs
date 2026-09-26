@@ -1748,7 +1748,7 @@ impl pumpkin::plugin::world::HostWorldBorder for PluginHostState {
             .worldborder
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .new_diameter)
+            .diameter())
     }
 
     async fn get_size(&mut self, border: Resource<WitWorldBorder>) -> wasmtime::Result<f64> {
@@ -1785,8 +1785,8 @@ impl pumpkin::plugin::world::HostWorldBorder for PluginHostState {
         new_size: f64,
         time_seconds: u64,
     ) -> wasmtime::Result<()> {
-        let speed_millis = time_seconds.saturating_mul(1000);
-        self.set_diameter(border, new_size, Some(speed_millis))
+        let speed_ticks = time_seconds.saturating_mul(20);
+        self.set_diameter(border, new_size, Some(speed_ticks))
             .await
     }
 

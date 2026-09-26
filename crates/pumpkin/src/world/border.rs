@@ -12,7 +12,9 @@ pub struct Worldborder {
     pub center_z: f64,
     pub old_diameter: f64,
     pub new_diameter: f64,
+    /// Total interpolation duration in game ticks.
     pub speed: i64,
+    lerp_elapsed: i64,
     pub portal_teleport_boundary: i32,
     pub warning_blocks: i32,
     pub warning_time: i32,
@@ -36,6 +38,7 @@ impl Worldborder {
             old_diameter: diameter,
             new_diameter: diameter,
             speed,
+            lerp_elapsed: 0,
             portal_teleport_boundary: 29_999_984,
             warning_blocks,
             warning_time,
@@ -48,9 +51,9 @@ impl Worldborder {
         if let Ok(data) = client.serialize_packet(&CInitializeWorldBorder::new(
             self.center_x,
             self.center_z,
-            self.old_diameter,
+            self.diameter(),
             self.new_diameter,
-            self.speed.into(),
+            (self.speed - self.lerp_elapsed).max(0).into(),
             self.portal_teleport_boundary.into(),
             self.warning_blocks.into(),
             self.warning_time.into(),
@@ -67,25 +70,47 @@ impl Worldborder {
     }
 
     pub fn set_diameter(&mut self, world: &World, diameter: f64, speed: Option<i64>) {
-        self.old_diameter = self.new_diameter;
+        self.old_diameter = self.diameter();
         self.new_diameter = diameter;
+        self.speed = speed.unwrap_or(0).max(0);
+        self.lerp_elapsed = 0;
 
-        match speed {
-            Some(speed) => {
-                world.broadcast_packet_all(&CSetBorderLerpSize::new(
-                    self.old_diameter,
-                    self.new_diameter,
-                    speed.into(),
-                ));
-            }
-            None => {
-                world.broadcast_packet_all(&CSetBorderSize::new(self.new_diameter));
-            }
+        if self.speed > 0 {
+            world.broadcast_packet_all(&CSetBorderLerpSize::new(
+                self.old_diameter,
+                self.new_diameter,
+                self.speed.into(),
+            ));
+        } else {
+            self.old_diameter = diameter;
+            world.broadcast_packet_all(&CSetBorderSize::new(self.new_diameter));
         }
     }
 
     pub fn add_diameter(&mut self, world: &World, offset: f64, speed: Option<i64>) {
-        self.set_diameter(world, self.new_diameter + offset, speed);
+        self.set_diameter(world, self.diameter() + offset, speed);
+    }
+
+    #[must_use]
+    pub fn diameter(&self) -> f64 {
+        if self.speed <= 0 {
+            return self.new_diameter;
+        }
+
+        let progress = (self.lerp_elapsed as f64 / self.speed as f64).min(1.0);
+        self.old_diameter + (self.new_diameter - self.old_diameter) * progress
+    }
+
+    pub fn tick(&mut self) {
+        if self.speed <= 0 {
+            return;
+        }
+        self.lerp_elapsed += 1;
+        if self.lerp_elapsed >= self.speed {
+            self.old_diameter = self.new_diameter;
+            self.speed = 0;
+            self.lerp_elapsed = 0;
+        }
     }
 
     pub fn set_warning_delay(&mut self, world: &World, delay: i32) {
@@ -114,6 +139,7 @@ impl Worldborder {
         self.old_diameter = 29_999_984.0;
         self.new_diameter = 29_999_984.0;
         self.speed = 0;
+        self.lerp_elapsed = 0;
         self.portal_teleport_boundary = 29_999_984;
         self.warning_blocks = 5;
         self.warning_time = 15;
@@ -134,7 +160,7 @@ impl Worldborder {
 
     #[must_use]
     pub fn contains(&self, x: f64, z: f64) -> bool {
-        let half = self.new_diameter / 2.0;
+        let half = self.diameter() / 2.0;
         let min_x = self.center_x - half;
         let max_x = self.center_x + half;
         let min_z = self.center_z - half;
@@ -150,7 +176,7 @@ impl Worldborder {
 
     #[must_use]
     pub fn clamp_block(&self, x: i32, z: i32) -> (i32, i32) {
-        let half = self.new_diameter / 2.0;
+        let half = self.diameter() / 2.0;
         // A border narrower than one block spans no block boundary, leaving `max`
         // below `min`. `Ord::clamp` panics on an inverted range, so collapse the
         // range onto the single block that holds the centre instead.
@@ -201,6 +227,27 @@ mod tests {
         let border = Worldborder::new(0.5, 0.5, 0.5, 0, 5, 300);
 
         assert_eq!(border.clamp_block(100, -100), (0, 0));
+    }
+
+    #[test]
+    fn diameter_interpolates_over_game_ticks() {
+        let mut border = centered_border(10.0);
+        border.old_diameter = 10.0;
+        border.new_diameter = 20.0;
+        border.speed = 200;
+
+        assert_eq!(border.diameter(), 10.0);
+        assert!(!border.contains(7.0, 0.0));
+        for _ in 0..100 {
+            border.tick();
+        }
+        assert_eq!(border.diameter(), 15.0);
+        assert!(border.contains(7.0, 0.0));
+        for _ in 0..100 {
+            border.tick();
+        }
+        assert_eq!(border.diameter(), 20.0);
+        assert_eq!(border.speed, 0);
     }
 
     #[test]

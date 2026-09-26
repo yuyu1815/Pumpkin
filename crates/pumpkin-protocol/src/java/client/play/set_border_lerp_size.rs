@@ -10,6 +10,7 @@ use pumpkin_util::version::JavaMinecraftVersion;
 pub struct CSetBorderLerpSize {
     pub old_diameter: f64,
     pub new_diameter: f64,
+    /// The interpolation duration in game ticks.
     pub speed: VarLong,
 }
 

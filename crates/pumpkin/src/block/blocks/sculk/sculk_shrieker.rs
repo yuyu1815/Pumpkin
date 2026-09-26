@@ -316,7 +316,7 @@ impl SculkShriekerBlock {
                     bounding_box,
                     border.center_x,
                     border.center_z,
-                    border.new_diameter,
+                    border.diameter(),
                 ) || !world.is_space_empty(bounding_box)
                     || world.get_all_at_box(&bounding_box).iter().any(|entity| {
                         // This newly-created Warden is not riding, so no candidate can share its vehicle.

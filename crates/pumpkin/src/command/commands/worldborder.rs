@@ -68,7 +68,7 @@ fn set_size(
             .worldborder
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let current = border.new_diameter;
+        let current = border.diameter();
 
         if (current - distance).abs() < f64::EPSILON {
             return Err(ERROR_SAME_SIZE.create_without_context());
@@ -80,7 +80,7 @@ fn set_size(
             return Err(ERROR_TOO_BIG.create_without_context());
         }
 
-        let speed = (time_in_ticks > 0).then(|| time_in_ticks * 50); // ticks to milliseconds
+        let speed = (time_in_ticks > 0).then_some(time_in_ticks);
 
         border.set_diameter(&world, distance, speed);
         (current, (distance - current) as i32)
@@ -169,7 +169,7 @@ fn get_size(source: &CommandSource) -> Result<i32, CommandSyntaxError> {
         .worldborder
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .new_diameter;
+        .diameter();
 
     source.send_feedback(
         TextComponent::translate_cross(
@@ -307,7 +307,7 @@ impl CommandExecutor for SetSizeExecutor {
                 .worldborder
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .new_diameter;
+                .diameter();
             current + distance
         } else {
             distance

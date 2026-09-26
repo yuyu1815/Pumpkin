@@ -212,6 +212,11 @@ impl World {
     }
 
     fn tick_environment(self: &Arc<Self>) {
+        self.worldborder
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .tick();
+
         let (world_age, is_night, time_of_day) = {
             let mut level_time = self
                 .level_time
