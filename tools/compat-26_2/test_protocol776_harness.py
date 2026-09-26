@@ -175,7 +175,8 @@ class StructureTests(unittest.TestCase):
         locale, offset = h.get_string(payload, 0, 64)
         self.assertEqual(locale, "en_us")
         self.assertEqual(payload[offset], 2)
-        self.assertEqual(len(payload), offset + 1 + 1 + 1 + 1 + 1 + 1 + 1)
+        self.assertEqual(payload[-1], 0)  # particle_status=ALL
+        self.assertEqual(len(payload), offset + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1)
 
     def test_mapping_is_read_from_existing_26_2_asset(self):
         mapping = h._asset_packet_ids()

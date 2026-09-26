@@ -544,7 +544,7 @@ def make_handshake(next_state: int) -> bytes:
 
 def make_client_information() -> bytes:
     # locale, view distance, chat mode, colors, skin parts, main hand,
-    # text filtering, server listing. These fields are parsed by Pumpkin.
+    # text filtering, server listing, particle status. These fields are parsed by Pumpkin.
     # Keep the synthetic loopback probe bounded while still requesting chunks.
     return (
         put_string("en_us", 64)
@@ -554,6 +554,7 @@ def make_client_information() -> bytes:
         + b"\x7f"
         + encode_varint(1)
         + b"\x00\x01"
+        + b"\x00"  # particle_status=ALL (0)
     )
 
 
