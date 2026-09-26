@@ -205,7 +205,7 @@ impl<'a> crate::ServerPacket<'a> for CMerchantOffers {
                 base_cost_a,
                 output,
                 cost_b,
-                reward_exp: !has_stock_flag || stock_or_reward_exp,
+                reward_exp: has_stock_flag || stock_or_reward_exp,
                 uses,
                 max_uses,
                 xp,
