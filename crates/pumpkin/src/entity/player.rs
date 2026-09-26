@@ -7527,13 +7527,16 @@ impl AsRef<[Box<[u8]>]> for LastSeen {
 impl LastSeen {
     /// The sender's `last_seen` signatures are sent as ID's if the recipient has them in their cache.
     /// Otherwise, the full signature is sent. (ID:0 indicates full signature is being sent)
-    pub fn indexed_for(&self, recipient: &Arc<Player>) -> Box<[PreviousMessage]> {
+    pub fn indexed_for(
+        signatures: &[Box<[u8]>],
+        recipient: &Arc<Player>,
+    ) -> Box<[PreviousMessage]> {
         let mut indexed = Vec::new();
         let cache = recipient
             .signature_cache
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        for signature in &self.0 {
+        for signature in signatures {
             let index = cache.full_cache.iter().position(|s| s == signature);
             if let Some(index) = index {
                 indexed.push(PreviousMessage {

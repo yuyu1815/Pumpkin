@@ -15,21 +15,26 @@ impl JavaClient {
 
         let gameprofile = &player.gameprofile;
 
-        if let Err(err) = self.validate_chat_message(server, player, &chat_message) {
-            log_at_level!(
-                err.severity(),
-                "{} (uuid {}) {}",
-                gameprofile.name,
-                gameprofile.id,
-                err
-            );
-            if err.is_kick()
-                && let Some(reason) = err.client_kick_reason()
-            {
-                self.kick(TextComponent::text(reason)).await;
+        let (chain_index, session_id, last_seen) = match self
+            .validate_chat_message_with_ack(server, player, &chat_message)
+        {
+            Ok(accepted) => accepted,
+            Err(err) => {
+                log_at_level!(
+                    err.severity(),
+                    "{} (uuid {}) {}",
+                    gameprofile.name,
+                    gameprofile.id,
+                    err
+                );
+                if err.is_kick()
+                    && let Some(reason) = err.client_kick_reason()
+                {
+                    self.kick(TextComponent::text(reason)).await;
+                }
+                return;
             }
-            return;
-        }
+        };
 
         if player.check_chat_spam(server, crate::entity::player::SpamType::Chat) {
             return;
@@ -63,7 +68,14 @@ impl JavaClient {
                 let entity = &player.get_entity();
                 let world = entity.world.load_full();
                 if server.basic_config.allow_chat_reports {
-                    world.broadcast_secure_player_chat(player, &chat_message, &decorated_message);
+                    world.broadcast_secure_player_chat(
+                        player,
+                        &chat_message,
+                        &decorated_message,
+                        chain_index,
+                        session_id,
+                        last_seen,
+                    );
                 } else {
                     let outgoing = crate::net::chat::PlayerChatMessage::system(message).with_unsigned_content(decorated_message);
                     world.broadcast_chat_message(
@@ -79,13 +91,37 @@ impl JavaClient {
         }}
     }
 
-    /// Runs all vanilla checks for a valid chat message
+    /// Runs all vanilla checks for a chat message, applying its ACK first.
     pub fn validate_chat_message(
         &self,
         server: &Server,
         player: &Arc<Player>,
         chat_message: &SChatMessage<'_>,
     ) -> Result<(), ChatError> {
+        self.validate_chat_message_with_ack(server, player, chat_message)
+            .map(|_| ())
+    }
+
+    fn validate_chat_message_with_ack(
+        &self,
+        server: &Server,
+        player: &Arc<Player>,
+        chat_message: &SChatMessage<'_>,
+    ) -> Result<(i32, uuid::Uuid, Vec<Box<[u8]>>), ChatError> {
+        let _chat_lifecycle = player
+            .chat_lifecycle
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let last_seen = crate::net::chat::state::apply_last_seen_update(
+            player,
+            chat_message.message_count.0,
+            chat_message.acknowledged,
+            chat_message.checksum,
+        )
+        .map_err(|error| match error {
+            ChatStateError::TooManyPendingChats => ChatError::TooManyPendingChats,
+            _ => ChatError::ChatValidationFailed,
+        })?;
         // Check for oversized messages
         // If we're able to find the 257th UTF-16 character, the message is too big.
         if chat_message.message.encode_utf16().nth(256).is_some() {
@@ -128,10 +164,6 @@ impl JavaClient {
 
             // Serialize this packet with session replacement and disconnect
             // retirement. The state store also checks the explicit owner token.
-            let _chat_lifecycle = player
-                .chat_lifecycle
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let chat_session = player
                 .chat_session
                 .lock()
@@ -154,22 +186,28 @@ impl JavaClient {
                 return Err(ChatError::ExpiredPublicKey);
             }
 
-            verify_and_commit(player, session_id, &public_key, chat_message).map_err(|err| {
-                match err {
-                    ChatStateError::Replay { .. }
-                    | ChatStateError::OutOfOrderTimestamp
-                    | ChatStateError::ChainBroken => ChatError::OutOfOrderChat,
-                    ChatStateError::TooManyPendingChats => ChatError::TooManyPendingChats,
-                    ChatStateError::SessionMismatch
-                    | ChatStateError::LifecycleMismatch
-                    | ChatStateError::AckValidation
-                    | ChatStateError::ChecksumMismatch { .. }
-                    | ChatStateError::IndexOverflow
-                    | ChatStateError::Signature(_) => ChatError::ChatValidationFailed,
-                }
+            let index = crate::net::chat::state::verify_chat_message_with_last_seen(
+                player,
+                session_id,
+                &public_key,
+                chat_message,
+                &last_seen,
+            )
+            .map_err(|err| match err {
+                ChatStateError::Replay { .. }
+                | ChatStateError::OutOfOrderTimestamp
+                | ChatStateError::ChainBroken => ChatError::OutOfOrderChat,
+                ChatStateError::TooManyPendingChats => ChatError::TooManyPendingChats,
+                ChatStateError::SessionMismatch
+                | ChatStateError::LifecycleMismatch
+                | ChatStateError::AckValidation
+                | ChatStateError::ChecksumMismatch { .. }
+                | ChatStateError::IndexOverflow
+                | ChatStateError::Signature(_) => ChatError::ChatValidationFailed,
             })?;
+            return Ok((index, session_id, last_seen));
         }
-        Ok(())
+        Ok((0, uuid::Uuid::nil(), last_seen))
     }
 
     pub async fn handle_chat_session_update(

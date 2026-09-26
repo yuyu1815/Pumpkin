@@ -402,30 +402,20 @@ impl World {
         sender: &Arc<Player>,
         chat_message: &SChatMessage<'_>,
         decorated_message: &TextComponent,
+        chain_index: i32,
+        session_id: Uuid,
+        last_seen: Vec<Box<[u8]>>,
     ) {
-        let messages_sent: i32 = sender
-            .chat_session
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .messages_sent;
-        let sender_last_seen = {
-            let cache = sender
-                .signature_cache
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            cache.last_seen.as_ref().to_vec()
-        };
-
         let link = crate::net::chat::SignedMessageLink::new(
-            messages_sent,
+            chain_index,
             sender.gameprofile.id,
-            Uuid::nil(),
+            session_id,
         );
         let signed_body = crate::net::chat::SignedMessageBody::new(
             chat_message.message.to_string(),
             chat_message.timestamp,
             chat_message.salt,
-            sender_last_seen,
+            last_seen,
         );
         let player_chat_msg = crate::net::chat::PlayerChatMessage::new(
             link,
@@ -444,11 +434,6 @@ impl World {
             None,
         );
 
-        sender
-            .chat_session
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .messages_sent += 1;
     }
 
     pub fn broadcast_packet_except_editioned<J: ClientPacket, B: BClientPacket>(

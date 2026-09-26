@@ -2,8 +2,9 @@
 //!
 //! `ChatSession` currently does not own the inbound chain cursor, so this module
 //! keeps the small inbound cursor in a UUID-keyed sidecar. Ownership is supplied
-//! by a per-Player capability rather than a historical UUID tombstone. Ack state
-//! is never mutated until canonical signature verification succeeds.
+//! by a per-Player capability rather than a historical UUID tombstone. Packet
+//! acknowledgement state is applied before signature verification, matching the
+//! vanilla listener's `unpackAndApplyLastSeen` ordering.
 
 use std::collections::{HashMap, hash_map::Entry};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -260,38 +261,52 @@ pub(crate) fn clear_inbound_state(
     }
 }
 
-/// Verifies and commits one secure chat message as one transaction.
-///
-/// The sidecar lock is held across the ack preview and RSA verification so two
-/// concurrent packets cannot both accept the same inbound index. The player's
-/// original ack validator and this sidecar are written only after every check
-/// succeeds.
+/// Verifies and commits one secure chat message after applying its ACK update.
 pub fn verify_and_commit(
     player: &Player,
     session_id: Uuid,
     public_key: &[u8],
     chat_message: &SChatMessage<'_>,
 ) -> Result<(), ChatStateError> {
+    let last_seen = apply_last_seen_update(
+        player,
+        chat_message.message_count.0,
+        chat_message.acknowledged,
+        chat_message.checksum,
+    )?;
+    verify_chat_message_with_last_seen(player, session_id, public_key, chat_message, &last_seen)
+        .map(|_| ())
+}
+
+/// Verifies one message using the packet ACK result, returning its signed chain index.
+pub fn verify_chat_message_with_last_seen(
+    player: &Player,
+    session_id: Uuid,
+    public_key: &[u8],
+    chat_message: &SChatMessage<'_>,
+    last_seen: &[Box<[u8]>],
+) -> Result<i32, ChatStateError> {
     let signature = chat_message
         .signature
         .ok_or(ChatSignatureError::InvalidSignatureLength {
             length: 0,
             expected: super::signature::CHAT_SIGNATURE_LEN,
         })?;
-    let contents = [chat_message.message];
-    let signatures = [signature];
-    verify_and_commit_entries(
+    verify_signed_command_entries(
         player,
         session_id,
         public_key,
         chat_message.timestamp,
         chat_message.salt,
-        chat_message.message_count.0,
-        chat_message.acknowledged,
-        (chat_message.checksum != 0).then_some(chat_message.checksum),
-        &contents,
-        &signatures,
-    )
+        last_seen,
+        &[chat_message.message],
+        &[signature],
+    )?;
+    Ok(inbound_state()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .states[&player.gameprofile.id]
+        .next_index - 1)
 }
 
 /// Applies the packet's last-seen update before command parsing/authentication.
@@ -487,7 +502,7 @@ mod tests {
     use super::{
         ChatOwnerToken, ChatStateError, InboundChatState, clear_inbound_state, inbound_state,
         last_seen_checksum, preview_last_seen, reset_inbound_state, verify_and_commit,
-        verify_signed_command_and_commit,
+        verify_signed_command_and_commit, verify_signed_command_entries,
     };
     use crate::entity::player::{ChatSession, LastSeenMessagesValidator, LastSeenTrackedEntry};
     use crate::net::chat::signature::canonical_bytes;
@@ -500,6 +515,10 @@ mod tests {
     use pumpkin_data::dimension::Dimension;
     use pumpkin_protocol::codec::var_int::VarInt;
     use pumpkin_protocol::java::server::play::SChatMessage;
+    use rand::SeedableRng;
+    use rsa::pkcs8::EncodePublicKey;
+    use rsa::signature::{SignatureEncoding, Signer};
+    use rsa::RsaPrivateKey;
     use serde_json::Value;
     use sha2::{Digest, Sha256};
     use std::net::SocketAddr;
@@ -1270,6 +1289,19 @@ mod tests {
         assert_eq!(state.next_index, 42);
         assert_eq!(state.last_timestamp_epoch_second, Some(timestamp / 1_000));
         assert!(state.broken);
+        assert_eq!(
+            verify_signed_command_entries(
+                &player,
+                session_id,
+                &public_key,
+                timestamp + 1_000,
+                salt,
+                &[],
+                &[content_refs[0]],
+                &[signature_refs[0]],
+            ),
+            Err(ChatStateError::ChainBroken)
+        );
 
         {
             let mut store = inbound_state()
@@ -1303,6 +1335,189 @@ mod tests {
                 .expect("ack-only state")
                 .next_index,
             41
+        );
+
+        world
+            .remove_player(&player, crate::world::PlayerRemovalReason::Disconnect)
+            .await;
+        server.remove_player(&player);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn chat_signed_command_chat_share_one_verified_chain_and_ack_window() {
+        let mut rng = rand::rngs::StdRng::seed_from_u64(0x26_02_cafe);
+        let private_key = RsaPrivateKey::new(&mut rng, 2048).expect("test RSA key");
+        let public_key = private_key
+            .to_public_key()
+            .to_public_key_der()
+            .expect("test public key DER")
+            .as_bytes()
+            .to_vec();
+        let signing_key = rsa::pkcs1v15::SigningKey::<Sha256>::new(private_key);
+        let session_id = Uuid::from_u128(0x26_2_5001);
+        let player_id = Uuid::from_u128(0x26_2_5002);
+
+        let temp_world = TempDir::new().expect("temporary runtime world");
+        let mut basic = BasicConfiguration::default();
+        basic.default_level_name = temp_world.path().to_string_lossy().into_owned();
+        basic.allow_nether = true;
+        basic.allow_end = false;
+        basic.allow_chat_reports = false;
+        basic.use_favicon = false;
+        let mut advanced = AdvancedConfiguration::default();
+        advanced.logging.enabled = false;
+        advanced.plugins.enabled = false;
+        advanced.commands.use_console = false;
+        advanced.commands.use_tty = false;
+        advanced.networking.java.enabled = false;
+        advanced.networking.bedrock.enabled = false;
+        advanced.networking.query.enabled = false;
+        advanced.networking.lan_broadcast.enabled = false;
+        let server = crate::server::Server::new(
+            basic,
+            advanced,
+            TelemetryConfig {
+                enabled: false,
+                ..TelemetryConfig::default()
+            },
+            test_vanilla_data(),
+        )
+        .await;
+        let profile = GameProfile {
+            id: player_id,
+            name: "interleaved_signature_test".to_owned(),
+            properties: ArcSwap::from_pointee(Vec::new()),
+            profile_actions: None,
+        };
+        let (player, world) = server
+            .add_player(
+                runtime_java_client(&profile).await,
+                profile,
+                Some(PlayerConfig::default()),
+            )
+            .expect("test player published");
+        *player
+            .chat_session
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = ChatSession::new(
+            session_id,
+            i64::MAX,
+            public_key.clone().into_boxed_slice(),
+            vec![1].into_boxed_slice(),
+        );
+        assert!(reset_inbound_state(player_id, session_id, &player.chat_owner));
+
+        let ack_signatures = [0x31_u8, 0x32, 0x33].map(|byte| vec![byte; 256]);
+        {
+            let mut cache = player
+                .signature_cache
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            cache.last_seen_validator = LastSeenMessagesValidator::new(3);
+            cache.last_seen_validator.tracked_messages = ack_signatures
+                .iter()
+                .map(|signature| {
+                    Some(LastSeenTrackedEntry {
+                        signature: signature.clone().into_boxed_slice(),
+                        pending: true,
+                    })
+                })
+                .collect();
+        }
+
+        let sign = |index, content: &str, timestamp, salt, last_seen: Vec<Box<[u8]>>| {
+            let link = SignedMessageLink::new(index, player_id, session_id);
+            let body = SignedMessageBody::new(content.to_owned(), timestamp, salt, last_seen);
+            signing_key
+                .sign(&canonical_bytes(&link, &body).expect("canonical test payload"))
+                .to_vec()
+        };
+        let timestamp = 1_700_000_000_000;
+        let acknowledged_signatures = ack_signatures
+            .iter()
+            .cloned()
+            .map(Vec::into_boxed_slice)
+            .collect::<Vec<_>>();
+        let first_signature = sign(0, "before", timestamp, 11, acknowledged_signatures.clone());
+        assert_eq!(
+            verify_and_commit(
+                &player,
+                session_id,
+                &public_key,
+                &SChatMessage {
+                    message: "before",
+                    timestamp,
+                    salt: 11,
+                    signature: Some(&first_signature),
+                    message_count: VarInt(0),
+                    acknowledged: &[0x07, 0, 0],
+                    checksum: 0,
+                },
+            ),
+            Ok(())
+        );
+        assert_eq!(inbound_state().lock().unwrap().states[&player_id].next_index, 1);
+
+        let command_signature = sign(
+            1,
+            "player",
+            timestamp + 1_000,
+            12,
+            acknowledged_signatures.clone(),
+        );
+        assert_eq!(
+            verify_signed_command_and_commit(
+                &player,
+                session_id,
+                &public_key,
+                timestamp + 1_000,
+                12,
+                0,
+                &[0x07, 0, 0],
+                0,
+                &["player"],
+                &[command_signature.as_slice()],
+            ),
+            Ok(())
+        );
+        assert_eq!(inbound_state().lock().unwrap().states[&player_id].next_index, 2);
+
+        let final_signature = sign(
+            2,
+            "after",
+            timestamp + 2_000,
+            13,
+            acknowledged_signatures,
+        );
+        assert_eq!(
+            verify_and_commit(
+                &player,
+                session_id,
+                &public_key,
+                &SChatMessage {
+                    message: "after",
+                    timestamp: timestamp + 2_000,
+                    salt: 13,
+                    signature: Some(&final_signature),
+                    message_count: VarInt(0),
+                    acknowledged: &[0x07, 0, 0],
+                    checksum: 0,
+                },
+            ),
+            Ok(())
+        );
+        assert_eq!(inbound_state().lock().unwrap().states[&player_id].next_index, 3);
+        assert_eq!(
+            player
+                .signature_cache
+                .lock()
+                .unwrap()
+                .last_seen_validator
+                .tracked_messages
+                .iter()
+                .map(|entry| entry.as_ref().map(|entry| entry.pending))
+                .collect::<Vec<_>>(),
+            vec![Some(false), Some(false), Some(false)]
         );
 
         world

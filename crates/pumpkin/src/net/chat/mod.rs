@@ -369,7 +369,10 @@ impl OutgoingChatMessage {
                             .signature_cache
                             .lock()
                             .unwrap_or_else(std::sync::PoisonError::into_inner);
-                        cache.last_seen.indexed_for(player)
+                        crate::entity::player::LastSeen::indexed_for(
+                            &filtered_message.signed_body.last_seen,
+                            player,
+                        )
                     };
 
                     let je_packet = CPlayerChatMessage::new(
