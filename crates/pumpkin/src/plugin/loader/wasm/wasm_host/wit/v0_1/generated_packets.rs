@@ -30,9 +30,7 @@ pub fn serialize_java_packet(
         }
         ClientboundPacket::ConfigCConfigDisconnect(data) => {
             let reason = pumpkin_util::text::TextComponent::text(data.reason.clone());
-            let p = pumpkin_protocol::java::client::config::CConfigDisconnect {
-                reason: &reason,
-            };
+            let p = pumpkin_protocol::java::client::config::CConfigDisconnect { reason: &reason };
             let mut buf = Vec::new();
             crate::net::java::JavaClient::write_packet_for_version(&p, version, &mut buf).unwrap();
             Some(buf.into())

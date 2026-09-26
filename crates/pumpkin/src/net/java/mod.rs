@@ -4,7 +4,6 @@ use pumpkin_protocol::java::client::{
     play::{CChunkBatchEnd, CChunkBatchStart, CLightUpdate, CPlayDisconnect, CStartConfiguration},
 };
 use pumpkin_world::level::SyncChunk;
-use std::{net::SocketAddr, num::NonZero};
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, AtomicUsize, Ordering};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use std::{
@@ -12,6 +11,7 @@ use std::{
     io::Write,
     sync::{Arc, Mutex},
 };
+use std::{net::SocketAddr, num::NonZero};
 
 use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
@@ -164,7 +164,10 @@ fn claim_finish(phase: &AtomicCell<ConfigurationPhase>) -> bool {
         .is_ok()
 }
 
-pub(crate) fn clamp_view_distance(view_distance: i8, max_view_distance: NonZero<u8>) -> NonZero<u8> {
+pub(crate) fn clamp_view_distance(
+    view_distance: i8,
+    max_view_distance: NonZero<u8>,
+) -> NonZero<u8> {
     let max = max_view_distance.get().max(2);
     NonZero::new(i32::from(view_distance).clamp(2, i32::from(max)) as u8)
         .expect("clamped view distance is nonzero")
