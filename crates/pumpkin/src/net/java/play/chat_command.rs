@@ -425,10 +425,23 @@ mod tests {
         SignedCommandArgument, SignedCommandArgumentError, signed_command_event_matches,
         validate_signed_command_arguments,
     };
+    use arc_swap::ArcSwap;
     use pumpkin_command::context::string_range::StringRange;
     use pumpkin_command::node::attached::NodeId;
     use pumpkin_command::node::dispatcher::SignableArgument;
+    use pumpkin_config::{AdvancedConfiguration, BasicConfiguration, TelemetryConfig};
+    use pumpkin_protocol::codec::var_int::VarInt;
+    use rand::SeedableRng;
+    use rsa::RsaPrivateKey;
+    use rsa::pkcs8::EncodePublicKey;
+    use rsa::signature::{SignatureEncoding, Signer};
+    use sha2::Sha256;
+    use std::net::SocketAddr;
     use std::num::NonZeroUsize;
+    use std::sync::Arc;
+    use tempfile::TempDir;
+    use tokio::net::{TcpListener, TcpStream};
+    use uuid::Uuid;
 
     fn parsed(name: &str) -> SignableArgument {
         SignableArgument {
@@ -477,5 +490,207 @@ mod tests {
     #[test]
     fn empty_signable_set_is_a_valid_unsigned_seam() {
         assert_eq!(validate_signed_command_arguments(Some(&[]), &[]), Ok(()));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn signed_command_handler_applies_ack_verifies_argument_and_advances_chat_chain() {
+        use crate::entity::player::{ChatSession, LastSeenMessagesValidator, LastSeenTrackedEntry};
+        use crate::net::chat::signature::canonical_bytes;
+        use crate::net::chat::state::{reset_inbound_state, verify_and_commit};
+        use crate::net::chat::{SignedMessageBody, SignedMessageLink};
+        use crate::net::java::JavaClient;
+        use crate::net::{ClientPlatform, GameProfile, PacketRateLimiter, PlayerConfig};
+
+        async fn runtime_client(profile: &GameProfile) -> Arc<ClientPlatform> {
+            let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
+                .await
+                .expect("fixture listener");
+            let address = listener.local_addr().expect("listener address");
+            let connector = tokio::spawn(TcpStream::connect(address));
+            let (stream, peer) = listener.accept().await.expect("fixture accept");
+            connector.await.expect("connector task").expect("connect");
+            let pending = crate::net::java::pending::PendingConnection::new(
+                stream,
+                peer,
+                1,
+                PacketRateLimiter::new(false, 0.0, 0.0),
+            );
+            Arc::new(ClientPlatform::Java(JavaClient::from_pending(
+                pending,
+                profile.clone(),
+                PlayerConfig::default(),
+            )))
+        }
+
+        let mut rng = rand::rngs::StdRng::seed_from_u64(0x12_26_02);
+        let private_key = RsaPrivateKey::new(&mut rng, 2048).expect("test RSA key");
+        let public_key = private_key
+            .to_public_key()
+            .to_public_key_der()
+            .expect("test public key DER")
+            .as_bytes()
+            .to_vec();
+        let signing_key = rsa::pkcs1v15::SigningKey::<Sha256>::new(private_key);
+        let player_id = Uuid::from_u128(0x12_2602_01);
+        let session_id = Uuid::from_u128(0x12_2602_02);
+
+        let temp_world = TempDir::new().expect("temporary world");
+        let mut basic = BasicConfiguration::default();
+        basic.default_level_name = temp_world.path().to_string_lossy().into_owned();
+        basic.allow_chat_reports = true;
+        basic.allow_nether = true;
+        basic.allow_end = false;
+        basic.use_favicon = false;
+        let mut advanced = AdvancedConfiguration::default();
+        advanced.logging.enabled = false;
+        advanced.plugins.enabled = false;
+        advanced.commands.use_console = false;
+        advanced.commands.use_tty = false;
+        advanced.networking.java.enabled = false;
+        advanced.networking.bedrock.enabled = false;
+        advanced.networking.query.enabled = false;
+        advanced.networking.lan_broadcast.enabled = false;
+        let vanilla = crate::data::VanillaData {
+            banned_ip_list: std::sync::RwLock::new(Default::default()),
+            banned_player_list: std::sync::RwLock::new(Default::default()),
+            operator_config: std::sync::RwLock::new(Default::default()),
+            user_cache: std::sync::RwLock::new(Default::default()),
+            whitelist_config: std::sync::RwLock::new(Default::default()),
+        };
+        let server = crate::server::Server::new(
+            basic,
+            advanced,
+            TelemetryConfig {
+                enabled: false,
+                ..TelemetryConfig::default()
+            },
+            vanilla,
+        )
+        .await;
+        let profile = GameProfile {
+            id: player_id,
+            name: "signed_command_handler_test".to_owned(),
+            properties: ArcSwap::from_pointee(Vec::new()),
+            profile_actions: None,
+        };
+        let (player, world) = server
+            .add_player(
+                runtime_client(&profile).await,
+                profile,
+                Some(PlayerConfig::default()),
+            )
+            .expect("test player published");
+        *player
+            .chat_session
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = ChatSession::new(
+            session_id,
+            i64::MAX,
+            public_key.clone().into_boxed_slice(),
+            vec![1].into_boxed_slice(),
+        );
+        assert!(reset_inbound_state(
+            player_id,
+            session_id,
+            &player.chat_owner
+        ));
+
+        let ack_signatures = [0x41_u8, 0x42, 0x43].map(|byte| vec![byte; 256]);
+        {
+            let mut cache = player
+                .signature_cache
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            cache.last_seen_validator = LastSeenMessagesValidator::new(3);
+            cache.last_seen_validator.tracked_messages = ack_signatures
+                .iter()
+                .map(|signature| {
+                    Some(LastSeenTrackedEntry {
+                        signature: signature.clone().into_boxed_slice(),
+                        pending: true,
+                    })
+                })
+                .collect();
+        }
+
+        player
+            .permission_lvl
+            .store(pumpkin_util::PermissionLvl::Four);
+        let acknowledged_signatures = ack_signatures
+            .iter()
+            .cloned()
+            .map(Vec::into_boxed_slice)
+            .collect::<Vec<_>>();
+        let timestamp = 1_700_000_000_000;
+        let salt = 0x12_34;
+        let sign = |index, content: &str, timestamp, salt| {
+            let link = SignedMessageLink::new(index, player_id, session_id);
+            let body = SignedMessageBody::new(
+                content.to_owned(),
+                timestamp,
+                salt,
+                acknowledged_signatures.clone(),
+            );
+            signing_key
+                .sign(&canonical_bytes(&link, &body).expect("canonical test payload"))
+                .to_vec()
+        };
+        let command_signature = sign(0, "hello", timestamp, salt);
+        let client = match player.client.as_ref() {
+            ClientPlatform::Java(client) => client,
+            ClientPlatform::Bedrock(_) => unreachable!("test uses a Java client"),
+        };
+        client.handle_signed_chat_command(
+            &player,
+            &server,
+            super::SignedCommandPacket {
+                command: "say hello".to_owned(),
+                timestamp,
+                salt,
+                argument_signatures: vec![SignedCommandArgument {
+                    name: "message".to_owned(),
+                    signature: command_signature,
+                }],
+                message_count: 0,
+                acknowledged: [0x07, 0, 0],
+                checksum: 0,
+            },
+        );
+
+        assert_eq!(
+            player
+                .signature_cache
+                .lock()
+                .unwrap()
+                .last_seen_validator
+                .tracked_messages
+                .iter()
+                .map(|entry| entry.as_ref().map(|entry| entry.pending))
+                .collect::<Vec<_>>(),
+            vec![Some(false), Some(false), Some(false)]
+        );
+        let next_signature = sign(1, "after", timestamp + 1_000, salt + 1);
+        assert_eq!(
+            verify_and_commit(
+                &player,
+                session_id,
+                &public_key,
+                &pumpkin_protocol::java::server::play::SChatMessage {
+                    message: "after",
+                    timestamp: timestamp + 1_000,
+                    salt: salt + 1,
+                    signature: Some(&next_signature),
+                    message_count: VarInt(0),
+                    acknowledged: &[0x07, 0, 0],
+                    checksum: 0,
+                },
+            ),
+            Ok(())
+        );
+
+        world
+            .remove_player(&player, crate::world::PlayerRemovalReason::Disconnect)
+            .await;
+        server.remove_player(&player);
     }
 }
