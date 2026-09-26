@@ -193,7 +193,7 @@ impl UserCache {
                 continue;
             };
 
-            let Ok(expiration_date) = OffsetDateTime::parse(expires_on, &Rfc3339) else {
+            let Ok(expiration_date) = parse_cache_date(expires_on) else {
                 continue;
             };
 
@@ -213,10 +213,44 @@ fn format_cache_date(date: OffsetDateTime) -> String {
     date.format(&Rfc3339).unwrap_or_default()
 }
 
+fn parse_cache_date(value: &str) -> Result<OffsetDateTime, time::error::Parse> {
+    OffsetDateTime::parse(value, &Rfc3339).or_else(|_| {
+        OffsetDateTime::parse(
+            value,
+            time::macros::format_description!(
+                "[year]-[month]-[day] [hour]:[minute]:[second] [offset_hour sign:mandatory][offset_minute]"
+            ),
+        )
+    })
+}
+
 fn is_expired(expiration_date: OffsetDateTime) -> bool {
     OffsetDateTime::now_utc() >= expiration_date
 }
 
 fn one_month_from_now() -> OffsetDateTime {
     OffsetDateTime::now_utc() + Duration::days(30)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{UserCacheEntryDisk, format_cache_date, parse_cache_date};
+
+    #[test]
+    fn reads_vanilla_usercache_entry_schema() {
+        let entry: UserCacheEntryDisk = serde_json::from_str(
+            r#"{"uuid":"00000000-0000-0000-0000-000000000004","name":"Cached","expiresOn":"2026-01-02 03:04:05 +0000"}"#,
+        )
+        .unwrap();
+        assert_eq!(entry.name, "Cached");
+        let parsed = parse_cache_date(&entry.expires_on).unwrap();
+        let vanilla_date = parse_cache_date("2026-01-02 03:04:05 +0000").unwrap();
+        assert_eq!(parsed.unix_timestamp(), vanilla_date.unix_timestamp());
+
+        let written = format_cache_date(vanilla_date);
+        assert_eq!(
+            parse_cache_date(&written).unwrap().unix_timestamp(),
+            vanilla_date.unix_timestamp()
+        );
+    }
 }

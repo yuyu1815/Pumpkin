@@ -10,6 +10,7 @@ use super::{LoadJSONConfiguration, SaveJSONConfiguration, banlist_serializer::Ba
 #[derive(Deserialize, Serialize, Default)]
 #[serde(transparent)]
 pub struct BannedPlayerList {
+    #[serde(deserialize_with = "super::deserialize_strict_entries")]
     pub banned_players: Vec<BannedPlayerEntry>,
 }
 

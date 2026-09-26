@@ -71,6 +71,14 @@ mod format {
     const DATE_FORMAT: &[time::format_description::FormatItem<'static>] = time::macros::format_description!(
         "[year]-[month]-[day] [hour]:[minute]:[second][offset_hour sign:mandatory]:[offset_minute]"
     );
+    const VANILLA_DATE_FORMAT: &[time::format_description::FormatItem<'static>] = time::macros::format_description!(
+        "[year]-[month]-[day] [hour]:[minute]:[second] [offset_hour sign:mandatory][offset_minute]"
+    );
+
+    fn parse_date(value: &str) -> Result<time::OffsetDateTime, time::error::Parse> {
+        time::OffsetDateTime::parse(value, DATE_FORMAT)
+            .or_else(|_| time::OffsetDateTime::parse(value, VANILLA_DATE_FORMAT))
+    }
 
     pub mod date {
         use serde::{self, Deserialize, Deserializer, Serializer};
@@ -92,7 +100,7 @@ mod format {
             deserializer: D,
         ) -> Result<OffsetDateTime, D::Error> {
             let s = String::deserialize(deserializer)?;
-            OffsetDateTime::parse(&s, DATE_FORMAT).map_err(serde::de::Error::custom)
+            super::parse_date(&s).map_err(serde::de::Error::custom)
         }
     }
 
@@ -124,7 +132,7 @@ mod format {
             if s == "forever" {
                 Ok(None)
             } else {
-                OffsetDateTime::parse(&s, DATE_FORMAT)
+                super::parse_date(&s)
                     .map(Some)
                     .map_err(serde::de::Error::custom)
             }

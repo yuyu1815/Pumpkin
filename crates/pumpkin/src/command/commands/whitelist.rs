@@ -153,7 +153,18 @@ struct ReloadExecutor;
 impl CommandExecutor for ReloadExecutor {
     fn execute(&self, context: &CommandContext) -> CommandExecutorResult {
         let server = context.source.server();
-        *server.data.whitelist_config.write().unwrap() = WhitelistConfig::load();
+        let whitelist = match WhitelistConfig::load_strict() {
+            Ok(whitelist) => whitelist,
+            Err(err) => {
+                tracing::warn!("Failed to reload whitelist: {err}");
+                context.source.send_feedback(
+                    TextComponent::text(format!("Failed to reload whitelist: {err}")),
+                    false,
+                );
+                return Ok(0);
+            }
+        };
+        *server.data.whitelist_config.write().unwrap() = whitelist;
         context.source.send_feedback(
             pumpkin_macros::translate_cross!(
                 translation::java::COMMANDS_WHITELIST_RELOADED,

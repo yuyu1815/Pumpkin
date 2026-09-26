@@ -69,7 +69,13 @@ async fn main() {
 
     let config = PumpkinConfig::load(&exec_dir);
 
-    let vanilla_data = VanillaData::load();
+    let vanilla_data = match VanillaData::load() {
+        Ok(data) => data,
+        Err(err) => {
+            eprintln!("Failed to load security lists: {err}");
+            exit(1);
+        }
+    };
 
     pumpkin::init_logger(&config.advanced);
 

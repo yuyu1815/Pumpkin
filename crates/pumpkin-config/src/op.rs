@@ -14,6 +14,11 @@ pub struct Op {
     /// The permission level assigned to this operator.
     pub level: PermissionLvl,
     /// Whether this operator bypasses the server's player limit.
+    #[serde(
+        default,
+        rename = "bypassesPlayerLimit",
+        alias = "bypasses_player_limit"
+    )]
     pub bypasses_player_limit: bool,
 }
 

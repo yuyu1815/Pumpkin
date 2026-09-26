@@ -9,6 +9,7 @@ use super::{LoadJSONConfiguration, SaveJSONConfiguration};
 #[derive(Deserialize, Serialize, Default)]
 #[serde(transparent)]
 pub struct OperatorConfig {
+    #[serde(deserialize_with = "super::deserialize_tolerant_entries")]
     pub ops: Vec<op::Op>,
 }
 
