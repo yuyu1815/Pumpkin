@@ -248,6 +248,7 @@ mod tests {
     use pumpkin_util::version::JavaMinecraftVersion;
 
     use crate::ser::NetworkReadExt;
+    use crate::ServerPacket;
 
     use super::*;
 
