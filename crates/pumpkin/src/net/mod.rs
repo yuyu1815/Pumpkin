@@ -432,10 +432,7 @@ pub enum EncryptionError {
 }
 
 fn is_valid_player_name(name: &str) -> bool {
-    if name.len() > 16 {
-        return false;
-    }
-    !name.chars().any(|c| c.is_control() || c == ' ')
+    name.len() <= 16 && name.bytes().all(|c| (33..=126).contains(&c))
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -624,24 +621,20 @@ mod tests {
         );
     }
 
-    /// Test case for allowed high-codepoint Unicode characters (like Chinese/CJK).
+    /// Minecraft accepts only printable ASCII player-name characters.
     #[test]
-    fn valid_unicode_chinese() {
-        let name = "玩家一号"; // 4 characters, 12 bytes
-        assert!(
-            is_valid_player_name(name),
-            "Chinese characters should be valid"
-        );
+    fn invalid_non_ascii() {
+        assert!(!is_valid_player_name("ééééé"));
+        assert!(!is_valid_player_name("玩家"));
+        assert!(!is_valid_player_name("Player_玩家"));
     }
 
-    /// Test case for a mix of valid ASCII and Unicode characters.
     #[test]
-    fn valid_mixed_chars() {
-        let name = "Player_玩家"; // 9 characters
-        assert!(
-            is_valid_player_name(name),
-            "Mixed ASCII and Unicode should be valid"
-        );
+    fn ascii_character_boundaries() {
+        assert!(!is_valid_player_name(" "));
+        assert!(is_valid_player_name("!"));
+        assert!(is_valid_player_name("~"));
+        assert!(!is_valid_player_name("\x7f"));
     }
 
     /// Test case for a name that exceeds the 16-byte limit (ASCII).
@@ -654,14 +647,10 @@ mod tests {
         );
     }
 
-    /// Test case for a name that exceeds the 16-byte limit (Unicode).
+    /// Test case for a name that exceeds the 16-character limit.
     #[test]
-    fn invalid_length_unicode_over() {
-        let name = "超长玩家名称哈哈"; // 8 Chinese characters * 3 bytes/char = 24 bytes
-        assert!(
-            !is_valid_player_name(name),
-            "Name over 16 bytes (Unicode) should be invalid by byte count"
-        );
+    fn invalid_length_over() {
+        assert!(!is_valid_player_name("12345678901234567"));
     }
 
     /// Test case for a name containing a standard space (codepoint 32).
