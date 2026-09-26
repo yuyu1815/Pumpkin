@@ -142,7 +142,7 @@ impl ClientPacket for CWaypoint<'_> {
         write.write_string(self.waypoint.icon.style)?;
         if let Some(color) = self.waypoint.icon.color {
             write.write_bool(true)?;
-            write.write_i32_be(color as i32)?;
+            write.write_all(&color.to_be_bytes()[1..])?;
         } else {
             write.write_bool(false)?;
         }
@@ -223,6 +223,32 @@ mod tests {
                 b'a', b'u', b'l', b't', 0x01, 0x00, 0x12, 0x34,
                 0x56, // required Icon, present RGB
                 0x00, // Empty target
+            ]
+        );
+    }
+
+    #[test]
+    fn colored_icon_full_packet_uses_rgb_bytes() {
+        let packet = CWaypoint::add_position(
+            Uuid::nil(),
+            icon(Some(0x12_3456)),
+            BlockPos::new(1, -1, 2),
+        );
+        assert_eq!(
+            crate::java::packet_encoder::serialize_packet(
+                &packet,
+                &JavaMinecraftVersion::V_26_2,
+            )
+            .unwrap()
+            .as_ref(),
+            [
+                0x8a, 0x01, // 26.2 Waypoint packet ID
+                0x00, 0x01, // Track, UUID identifier
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, // UUID
+                0x11, b'm', b'i', b'n', b'e', b'c', b'r', b'a', b'f', b't', b':', b'd', b'e', b'f',
+                b'a', b'u', b'l', b't', 0x01, 0x12, 0x34, 0x56, // Present RGB in R,G,B order
+                0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0x0f, 0x02, // Vec3i target
             ]
         );
     }
