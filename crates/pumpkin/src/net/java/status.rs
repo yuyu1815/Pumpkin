@@ -14,6 +14,10 @@ use tracing::debug;
 
 impl PendingConnection {
     pub async fn handle_status_request(&mut self, server: &Arc<Server>) {
+        if !accept_status_request(&mut self.has_requested_status) {
+            self.close();
+            return;
+        }
         debug!("Handling status request");
         let mut status_response = {
             let status = server.get_status();
@@ -61,5 +65,28 @@ impl PendingConnection {
         self.send_packet_now(&CPingResponse::new(ping_request.payload))
             .await;
         self.close();
+    }
+}
+
+fn accept_status_request(has_requested_status: &mut bool) -> bool {
+    if *has_requested_status {
+        false
+    } else {
+        *has_requested_status = true;
+        true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::accept_status_request;
+
+    #[test]
+    fn status_request_is_accepted_only_once() {
+        let mut has_requested_status = false;
+
+        assert!(accept_status_request(&mut has_requested_status));
+        assert!(!accept_status_request(&mut has_requested_status));
+        assert!(has_requested_status);
     }
 }
