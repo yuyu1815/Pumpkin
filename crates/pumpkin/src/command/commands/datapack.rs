@@ -19,6 +19,7 @@ use crate::server::Server;
 
 const DESCRIPTION: &str = "Controls loaded data packs.";
 const PERMISSION: &str = "minecraft:command.datapack";
+const CREATE_PERMISSION: &str = "minecraft:command.datapack.create";
 
 static ERROR_UNKNOWN_DATAPACK: CommandErrorType<1> = CommandErrorType::new(
     translation::java::COMMANDS_DATAPACK_UNKNOWN,
@@ -484,6 +485,11 @@ pub fn register(dispatcher: &mut CommandDispatcher, registry: &PermissionRegistr
         DESCRIPTION,
         PermissionDefault::Op(PermissionLvl::Two),
     ));
+    registry.register_permission_or_panic(Permission::new(
+        CREATE_PERMISSION,
+        "Creates a data pack.",
+        PermissionDefault::Op(PermissionLvl::Four),
+    ));
 
     let list_builder = literal("list")
         .then(literal("available").executes(DatapackListExecutor(ListFilter::Available)))
@@ -518,7 +524,7 @@ pub fn register(dispatcher: &mut CommandDispatcher, registry: &PermissionRegistr
             .executes(DatapackDisableExecutor),
     );
 
-    let create_builder = literal("create").then(
+    let create_builder = literal("create").requires(CREATE_PERMISSION).then(
         argument("name", StringArgumentType::SingleWord)
             .then(
                 argument("description", StringArgumentType::GreedyPhrase)
@@ -540,6 +546,25 @@ pub fn register(dispatcher: &mut CommandDispatcher, registry: &PermissionRegistr
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn create_permission_requires_owner_level() {
+        let permission_manager = pumpkin_util::permission::PermissionManager::new();
+        let mut dispatcher = CommandDispatcher::new();
+        register(&mut dispatcher, &permission_manager.registry);
+        let player_id = uuid::Uuid::nil();
+
+        assert!(!permission_manager.has_permission(
+            &player_id,
+            CREATE_PERMISSION,
+            PermissionLvl::Three,
+        ));
+        assert!(permission_manager.has_permission(
+            &player_id,
+            CREATE_PERMISSION,
+            PermissionLvl::Four,
+        ));
+    }
 
     #[test]
     fn valid_pack_name_check() {
