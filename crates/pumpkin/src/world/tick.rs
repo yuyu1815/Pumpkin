@@ -7,6 +7,7 @@ use crate::block::{OnScheduledTickArgs, RandomTickArgs};
 use crate::entity::{Entity, EntityBase};
 use crate::server::Server;
 use pumpkin_data::Block;
+use pumpkin_data::dimension::Dimension;
 use pumpkin_data::entity::{EntityType, MobCategory};
 use pumpkin_util::Difficulty;
 use pumpkin_util::math::{get_section_cord, vector2::Vector2, vector3::Vector3};
@@ -19,6 +20,14 @@ use std::sync::atomic::Ordering::Relaxed;
 use tracing::{debug, error};
 
 const SCHEDULED_TICK_BATCH_SIZE: usize = 32;
+
+// Vanilla 26.2 Level.isRaining(): canHaveWeather() && rainLevel(1.0f) > 0.2.
+fn is_raining_for_sleep_reset(dimension: &Dimension, rain_level: f32) -> bool {
+    dimension.has_skylight
+        && !dimension.has_ceiling
+        && dimension.minecraft_name != Dimension::THE_END.minecraft_name
+        && rain_level > 0.2
+}
 
 fn dispatch_scheduled_ticks<T, F>(ticks: &[T], callback: F)
 where
@@ -264,7 +273,7 @@ impl World {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             weather.tick_weather(self, advance_weather);
-            weather.raining
+            is_raining_for_sleep_reset(&self.dimension, weather.rain_level)
         };
 
         if self.should_skip_night() && is_night {
@@ -522,9 +531,19 @@ impl World {
 
 #[cfg(test)]
 mod tests {
-    use super::dispatch_scheduled_ticks;
+    use super::{dispatch_scheduled_ticks, is_raining_for_sleep_reset};
+    use pumpkin_data::dimension::Dimension;
     use std::sync::{Arc, Condvar, Mutex};
     use std::time::Duration;
+
+    #[test]
+    fn sleep_weather_reset_uses_vanilla_rain_threshold_and_capability() {
+        assert!(!is_raining_for_sleep_reset(&Dimension::OVERWORLD, 0.2));
+        assert!(is_raining_for_sleep_reset(&Dimension::OVERWORLD, 0.2001));
+        assert!(!is_raining_for_sleep_reset(&Dimension::OVERWORLD_CAVES, 1.0));
+        assert!(!is_raining_for_sleep_reset(&Dimension::THE_END, 1.0));
+        assert!(!is_raining_for_sleep_reset(&Dimension::THE_NETHER, 1.0));
+    }
 
     #[test]
     fn scheduled_tick_dispatch_preserves_global_order_across_33_callbacks() {
