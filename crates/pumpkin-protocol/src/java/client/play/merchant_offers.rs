@@ -61,7 +61,11 @@ impl MerchantOffer {
                 write.write_bool(false)?;
             }
         }
-        write.write_bool(self.reward_exp)?;
+        write.write_bool(if *version >= JavaMinecraftVersion::V_26_1 {
+            self.is_out_of_stock()
+        } else {
+            self.reward_exp
+        })?;
         write.write_i32_be(self.uses)?;
         write.write_i32_be(self.max_uses)?;
         write.write_i32_be(self.xp)?;
@@ -183,19 +187,25 @@ impl<'a> crate::ServerPacket<'a> for CMerchantOffers {
                 (base_cost_a, output, cost_b)
             };
 
-            let reward_exp = bytebuf.get_bool()?;
+            let stock_or_reward_exp = bytebuf.get_bool()?;
             let uses = bytebuf.get_i32_be()?;
             let max_uses = bytebuf.get_i32_be()?;
             let xp = bytebuf.get_i32_be()?;
             let special_price = bytebuf.get_i32_be()?;
             let price_multiplier = bytebuf.get_f32_be()?;
             let demand = bytebuf.get_i32_be()?;
+            let has_stock_flag = *version >= JavaMinecraftVersion::V_26_1;
+            let uses = if has_stock_flag && stock_or_reward_exp {
+                max_uses
+            } else {
+                uses
+            };
 
             offers.push(MerchantOffer {
                 base_cost_a,
                 output,
                 cost_b,
-                reward_exp,
+                reward_exp: !has_stock_flag || stock_or_reward_exp,
                 uses,
                 max_uses,
                 xp,
@@ -273,6 +283,127 @@ mod tests {
         );
         assert_eq!(cursor.get_var_int().unwrap(), VarInt(12));
         assert_eq!(cursor.get_var_int().unwrap(), VarInt(0));
+    }
+
+    fn offer_cost_prefix_len(offer: &MerchantOffer, version: &JavaMinecraftVersion) -> usize {
+        let mut prefix = Vec::new();
+        offer
+            .base_cost_a
+            .write_item_cost_with_version(&mut prefix, version)
+            .unwrap();
+        offer
+            .output
+            .write_with_version(&mut prefix, version)
+            .unwrap();
+        crate::ser::NetworkWriteExt::write_option(&mut prefix, &offer.cost_b, |w, cost| {
+            cost.write_item_cost_with_version(w, version)
+        })
+        .unwrap();
+        prefix.len()
+    }
+
+    #[test]
+    fn merchant_offers_encode_stock_state_not_reward_exp_since_26_1() {
+        let version = JavaMinecraftVersion::V_26_2;
+        let mut stocked = offer();
+        stocked.reward_exp = false;
+        let mut out_of_stock = offer();
+        out_of_stock.uses = out_of_stock.max_uses;
+        out_of_stock.reward_exp = true;
+        for (offer, expected_tail) in [
+            (
+                &stocked,
+                &[
+                    0x00, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 1, 0, 0, 0, 0, 0x3d, 0x4c, 0xcc, 0xcd,
+                    0, 0, 0, 0,
+                ][..],
+            ),
+            (
+                &out_of_stock,
+                &[
+                    0x01, 0, 0, 0, 12, 0, 0, 0, 12, 0, 0, 0, 1, 0, 0, 0, 0, 0x3d, 0x4c, 0xcc, 0xcd,
+                    0, 0, 0, 0,
+                ][..],
+            ),
+        ] {
+            let mut encoded = Vec::new();
+            offer.write(&mut encoded, &version).unwrap();
+            let offset = offer_cost_prefix_len(offer, &version);
+            assert_eq!(&encoded[offset..], expected_tail);
+        }
+
+        let packet = CMerchantOffers::new(
+            VarInt(1),
+            vec![stocked, out_of_stock],
+            VarInt(1),
+            VarInt(0),
+            true,
+            true,
+        );
+        let mut bytes = Vec::new();
+        packet.write_packet_data(&mut bytes, &version).unwrap();
+
+        let mut input = bytes.as_slice();
+        let decoded = CMerchantOffers::read(&mut input, &version).unwrap();
+        assert!(input.is_empty());
+        assert_eq!(decoded.offers.len(), 2);
+        assert!(!decoded.offers[0].is_out_of_stock());
+        assert_eq!(decoded.offers[0].uses, 0);
+        assert!(decoded.offers[0].reward_exp);
+        assert!(decoded.offers[1].is_out_of_stock());
+        assert_eq!(decoded.offers[1].uses, decoded.offers[1].max_uses);
+        assert!(decoded.offers[1].reward_exp);
+    }
+
+    #[test]
+    fn merchant_offers_use_stock_flag_at_26_1_boundary() {
+        let version = JavaMinecraftVersion::V_26_1;
+        let stocked = offer();
+        let mut out_of_stock = offer();
+        out_of_stock.uses = out_of_stock.max_uses;
+        let packet = CMerchantOffers::new(
+            VarInt(1),
+            vec![stocked, out_of_stock],
+            VarInt(1),
+            VarInt(0),
+            true,
+            true,
+        );
+        let mut bytes = Vec::new();
+        packet.write_packet_data(&mut bytes, &version).unwrap();
+
+        let mut input = bytes.as_slice();
+        let decoded = CMerchantOffers::read(&mut input, &version).unwrap();
+        assert!(input.is_empty());
+        assert_eq!(decoded.offers.len(), 2);
+        assert_eq!(decoded.offers[0].uses, 0);
+        assert!(!decoded.offers[0].is_out_of_stock());
+        assert_eq!(decoded.offers[1].uses, decoded.offers[1].max_uses);
+        assert!(decoded.offers[1].is_out_of_stock());
+        assert!(decoded.offers.iter().all(|offer| offer.reward_exp));
+    }
+
+    #[test]
+    fn merchant_offers_preserve_reward_exp_before_26_1() {
+        let version = JavaMinecraftVersion::V_1_21_11;
+        let offer = offer();
+        let mut encoded = Vec::new();
+        offer.write(&mut encoded, &version).unwrap();
+        let offset = offer_cost_prefix_len(&offer, &version);
+        assert_eq!(
+            &encoded[offset..offset + 5],
+            &[1, 0, 0, 0, 0], // rewardExp, then stocked uses
+        );
+
+        let packet = CMerchantOffers::new(VarInt(1), vec![offer], VarInt(1), VarInt(0), true, true);
+        let mut bytes = Vec::new();
+        packet.write_packet_data(&mut bytes, &version).unwrap();
+        let mut input = bytes.as_slice();
+        let decoded = CMerchantOffers::read(&mut input, &version).unwrap();
+        assert!(input.is_empty());
+        assert!(decoded.offers[0].reward_exp);
+        assert_eq!(decoded.offers[0].uses, 0);
+        assert!(!decoded.offers[0].is_out_of_stock());
     }
 
     #[test]
