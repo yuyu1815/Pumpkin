@@ -385,6 +385,40 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn full_status_includes_all_players_and_game_port() -> Result<(), Box<dyn std::error::Error>> {
+        let players = ["one", "two", "three", "four", "five"]
+            .into_iter()
+            .map(CString::new)
+            .collect::<Result<Vec<_>, _>>()?;
+        let pkt = CFullStatus {
+            session_id: 1,
+            hostname: CString::new("server")?,
+            version: CString::new("26.2")?,
+            plugins: CString::new("")?,
+            map: CString::new("world")?,
+            num_players: 5,
+            max_players: 20,
+            host_port: 25565,
+            host_ip: CString::new("127.0.0.1")?,
+            players,
+        };
+
+        let encoded = pkt.encode().ok_or("Encoding failed")?;
+        assert!(encoded.windows(6).any(|bytes| bytes == b"25565\0"));
+        for name in [
+            b"one\0".as_slice(),
+            b"two\0",
+            b"three\0",
+            b"four\0",
+            b"five\0",
+        ] {
+            assert!(encoded.windows(name.len()).any(|bytes| bytes == name));
+        }
+
+        Ok(())
+    }
+
     #[tokio::test]
     async fn bad_magic_rejected() {
         let bytes = vec![0xDE, 0xAD, 0x09, 0x00, 0x00, 0x00, 0x01];

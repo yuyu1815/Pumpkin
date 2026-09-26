@@ -17,7 +17,7 @@ use tracing::{error, info};
 
 use crate::{SHOULD_STOP, STOP_INTERRUPT, server::Server};
 
-pub async fn start_query_handler(server: Arc<Server>, query_addr: SocketAddr) {
+pub async fn start_query_handler(server: Arc<Server>, query_addr: SocketAddr, game_port: u16) {
     let Ok(socket) = UdpSocket::bind(query_addr).await else {
         error!("Unable to bind query UDP socket");
         return;
@@ -71,6 +71,7 @@ pub async fn start_query_handler(server: Arc<Server>, query_addr: SocketAddr) {
                 socket,
                 addr,
                 query_addr,
+                game_port,
             )
             .await
             {
@@ -92,6 +93,7 @@ async fn handle_packet(
     socket: Arc<UdpSocket>,
     addr: SocketAddr,
     bound_addr: SocketAddr,
+    game_port: u16,
 ) -> Result<(), NulError> {
     if let Ok(mut raw_packet) = RawQueryPacket::decode(buf).await {
         match raw_packet.packet_type {
@@ -121,25 +123,11 @@ async fn handle_packet(
                         .is_some_and(|token_bound_ip: &SocketAddr| token_bound_ip == &addr)
                 {
                     if packet.is_full_request {
-                        // Get 4 players
-                        let mut players: Vec<CString> = Vec::new();
+                        let mut players = Vec::new();
                         for world in server.worlds.load().iter() {
-                            let mut world_players = world
-                                .players
-                                .load()
-                                // Although there is no documented limit, we will limit to 4 players
-                                .iter()
-                                .take(4 - players.len())
-                                .filter_map(|player| {
-                                    CString::new(player.gameprofile.name.as_str()).ok()
-                                })
-                                .collect::<Vec<_>>();
-
-                            players.append(&mut world_players); // Append players from this world
-
-                            if players.len() >= 4 {
-                                break; // Stop if we've collected 4 players
-                            }
+                            players.extend(world.players.load().iter().filter_map(|player| {
+                                CString::new(player.gameprofile.name.as_str()).ok()
+                            }));
                         }
 
                         let plugins = server
@@ -167,7 +155,7 @@ async fn handle_packet(
                             num_players: server.get_player_count(),
                             max_players: server.advanced_config.networking.java.max_players
                                 as usize,
-                            host_port: bound_addr.port(),
+                            host_port: game_port,
                             host_ip: CString::new(bound_addr.ip().to_string())?,
                             players,
                         };
@@ -191,7 +179,7 @@ async fn handle_packet(
                             num_players: server.get_player_count(),
                             max_players: server.advanced_config.networking.java.max_players
                                 as usize,
-                            host_port: bound_addr.port(),
+                            host_port: game_port,
                             host_ip: CString::new(bound_addr.ip().to_string())?,
                         };
 

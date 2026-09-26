@@ -311,6 +311,7 @@ impl PumpkinServer {
                 server.spawn_task(query::start_query_handler(
                     server.clone(),
                     server.advanced_config.networking.query.address,
+                    addr.port(),
                 ));
             }
 
