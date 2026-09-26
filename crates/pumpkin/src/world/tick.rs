@@ -264,7 +264,7 @@ impl World {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             weather.tick_weather(self, advance_weather);
-            weather.raining || weather.thundering
+            weather.raining
         };
 
         if self.should_skip_night() && is_night {
