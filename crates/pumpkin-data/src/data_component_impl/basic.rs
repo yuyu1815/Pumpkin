@@ -1,14 +1,78 @@
 use crate::data_component::DataComponent;
 use crate::data_component_impl::{DataComponentImpl, get_i32_hash, get_str_hash};
+use crc_fast::CrcAlgorithm::Crc32Iscsi;
+use crc_fast::Digest;
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_nbt::tag::NbtTag;
 use pumpkin_util::text::TextComponent;
 use std::borrow::Cow;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct CustomDataImpl {
     pub data: NbtCompound,
 }
+
+impl PartialEq for CustomDataImpl {
+    fn eq(&self, other: &Self) -> bool {
+        custom_data_compounds_equal(&self.data, &other.data)
+    }
+}
+
+fn custom_data_compounds_equal(left: &NbtCompound, right: &NbtCompound) -> bool {
+    left.child_tags.len() == right.child_tags.len()
+        && left.child_tags.iter().all(|(key, value)| {
+            right
+                .child_tags
+                .get(key)
+                .is_some_and(|other| custom_data_tags_equal(value, other))
+        })
+}
+
+fn custom_data_tags_equal(left: &NbtTag, right: &NbtTag) -> bool {
+    match (left, right) {
+        (NbtTag::End, NbtTag::End) => true,
+        (NbtTag::Byte(left), NbtTag::Byte(right)) => left == right,
+        (NbtTag::Short(left), NbtTag::Short(right)) => left == right,
+        (NbtTag::Int(left), NbtTag::Int(right)) => left == right,
+        (NbtTag::Long(left), NbtTag::Long(right)) => left == right,
+        (NbtTag::Float(left), NbtTag::Float(right)) => float_bits(*left) == float_bits(*right),
+        (NbtTag::Double(left), NbtTag::Double(right)) => {
+            double_bits(*left) == double_bits(*right)
+        }
+        (NbtTag::ByteArray(left), NbtTag::ByteArray(right)) => left == right,
+        (NbtTag::String(left), NbtTag::String(right)) => left == right,
+        (NbtTag::List(left), NbtTag::List(right)) => {
+            left.len() == right.len()
+                && left
+                    .iter()
+                    .zip(right)
+                    .all(|(left, right)| custom_data_tags_equal(left, right))
+        }
+        (NbtTag::Compound(left), NbtTag::Compound(right)) => {
+            custom_data_compounds_equal(left, right)
+        }
+        (NbtTag::IntArray(left), NbtTag::IntArray(right)) => left == right,
+        (NbtTag::LongArray(left), NbtTag::LongArray(right)) => left == right,
+        _ => false,
+    }
+}
+
+fn float_bits(value: f32) -> u32 {
+    if value.is_nan() {
+        f32::NAN.to_bits()
+    } else {
+        value.to_bits()
+    }
+}
+
+fn double_bits(value: f64) -> u64 {
+    if value.is_nan() {
+        f64::NAN.to_bits()
+    } else {
+        value.to_bits()
+    }
+}
+
 impl CustomDataImpl {
     #[must_use]
     pub const fn new(data: NbtCompound) -> Self {
@@ -23,14 +87,207 @@ impl CustomDataImpl {
         }
     }
 }
+// Mirrors HashOps.CRC32C_INSTANCE over the values produced by CompoundTag.CODEC/NbtOps.
+fn custom_data_hash(tag: &NbtTag) -> u32 {
+    if let NbtTag::Compound(compound) = tag {
+        return custom_data_hash_compound(compound);
+    }
+    if let NbtTag::String(value) = tag {
+        return custom_data_hash_string(value);
+    }
+    let mut digest = Digest::new(Crc32Iscsi);
+    match tag {
+        NbtTag::End => digest.update(&[1]),
+        NbtTag::Byte(value) => digest.update(&[6, *value as u8]),
+        NbtTag::Short(value) => {
+            digest.update(&[7]);
+            digest.update(&value.to_le_bytes());
+        }
+        NbtTag::Int(value) => {
+            digest.update(&[8]);
+            digest.update(&value.to_le_bytes());
+        }
+        NbtTag::Long(value) => {
+            digest.update(&[9]);
+            digest.update(&value.to_le_bytes());
+        }
+        NbtTag::Float(value) => {
+            digest.update(&[10]);
+            digest.update(&float_bits(*value).to_le_bytes());
+        }
+        NbtTag::Double(value) => {
+            digest.update(&[11]);
+            digest.update(&double_bits(*value).to_le_bytes());
+        }
+        NbtTag::String(_) => unreachable!("strings are handled above"),
+        NbtTag::List(values) => {
+            digest.update(&[4]);
+            for value in values {
+                digest.update(&custom_data_hash(value).to_le_bytes());
+            }
+            digest.update(&[5]);
+        }
+        NbtTag::Compound(_) => unreachable!("compounds are handled above"),
+        NbtTag::ByteArray(values) => {
+            digest.update(&[14]);
+            for value in values.iter() {
+                digest.update(&[*value as u8]);
+            }
+            digest.update(&[15]);
+        }
+        NbtTag::IntArray(values) => {
+            digest.update(&[16]);
+            for value in values {
+                digest.update(&value.to_le_bytes());
+            }
+            digest.update(&[17]);
+        }
+        NbtTag::LongArray(values) => {
+            digest.update(&[18]);
+            for value in values {
+                digest.update(&value.to_le_bytes());
+            }
+            digest.update(&[19]);
+        }
+    }
+    digest.finalize() as u32
+}
+
+fn custom_data_hash_string(value: &str) -> u32 {
+    let mut digest = Digest::new(Crc32Iscsi);
+    digest.update(&[12]);
+    let utf16 = value.encode_utf16().collect::<Vec<_>>();
+    digest.update(&(utf16.len() as i32).to_le_bytes());
+    for unit in utf16 {
+        digest.update(&unit.to_le_bytes());
+    }
+    digest.finalize() as u32
+}
+
+fn custom_data_hash_compound(compound: &NbtCompound) -> u32 {
+    let mut digest = Digest::new(Crc32Iscsi);
+    digest.update(&[2]);
+    let mut entries = compound
+        .child_tags
+        .iter()
+        .map(|(key, value)| (custom_data_hash_string(key), custom_data_hash(value)))
+        .collect::<Vec<_>>();
+    entries.sort_unstable();
+    for (key_hash, value_hash) in entries {
+        digest.update(&key_hash.to_le_bytes());
+        digest.update(&value_hash.to_le_bytes());
+    }
+    digest.update(&[3]);
+    digest.finalize() as u32
+}
+
 impl DataComponentImpl for CustomDataImpl {
     fn write_data(&self) -> NbtTag {
         NbtTag::Compound(self.data.clone())
     }
     fn get_hash(&self) -> i32 {
-        0
+        custom_data_hash_compound(&self.data) as i32
     }
     default_impl!(CustomData);
+}
+
+#[cfg(test)]
+mod custom_data_hash_tests {
+    use super::CustomDataImpl;
+    use crate::data_component_impl::DataComponentImpl;
+    use pumpkin_nbt::{compound::NbtCompound, tag::NbtTag};
+
+    fn hash(data: NbtCompound) -> i32 {
+        CustomDataImpl::new(data).get_hash()
+    }
+
+    #[test]
+    fn matches_hashops_crc32c_for_compounds_and_nested_values() {
+        assert_eq!(hash(NbtCompound::new()), -982_207_288); // CRC32C([2, 3])
+
+        let mut first = NbtCompound::new();
+        first.put(
+            "z",
+            NbtTag::List(vec![NbtTag::Int(-5), NbtTag::String("🌱".into())]),
+        );
+        first.put("a", NbtTag::ByteArray(vec![-1, 0, 1].into()));
+        let mut reverse = NbtCompound::new();
+        reverse.put("a", NbtTag::ByteArray(vec![-1, 0, 1].into()));
+        reverse.put(
+            "z",
+            NbtTag::List(vec![NbtTag::Int(-5), NbtTag::String("🌱".into())]),
+        );
+        let first = CustomDataImpl::new(first);
+        let reverse = CustomDataImpl::new(reverse);
+        assert_eq!(first, reverse);
+        assert_eq!(first.get_hash(), reverse.get_hash());
+
+        let mut arrays = NbtCompound::new();
+        arrays.put("ints", NbtTag::IntArray(vec![-1, 0, 1]));
+        arrays.put("longs", NbtTag::LongArray(vec![i64::MIN, 1]));
+        assert_ne!(hash(arrays), hash(NbtCompound::new()));
+    }
+
+    #[test]
+    fn equality_and_hash_distinguish_signed_zero() {
+        let mut positive = NbtCompound::new();
+        positive.put("f", NbtTag::Double(0.0));
+        let mut negative = NbtCompound::new();
+        negative.put("f", NbtTag::Double(-0.0));
+        let positive = CustomDataImpl::new(positive);
+        let negative = CustomDataImpl::new(negative);
+        assert_ne!(positive, negative);
+        assert_ne!(positive.get_hash(), negative.get_hash());
+        assert!(!positive.equal(&negative));
+    }
+
+    #[test]
+    fn equality_matches_protocol_semantics_for_every_tag_variant() {
+        let tags = [
+            NbtTag::End,
+            NbtTag::Byte(-1),
+            NbtTag::Short(-2),
+            NbtTag::Int(-3),
+            NbtTag::Long(-4),
+            NbtTag::Float(-0.0),
+            NbtTag::Double(-0.0),
+            NbtTag::ByteArray(vec![-1, 0, 1].into()),
+            NbtTag::String("value".into()),
+            NbtTag::List(vec![NbtTag::Int(1), NbtTag::String("nested".into())]),
+            NbtTag::Compound({
+                let mut compound = NbtCompound::new();
+                compound.put("nested", NbtTag::Byte(1));
+                compound
+            }),
+            NbtTag::IntArray(vec![-1, 0, 1]),
+            NbtTag::LongArray(vec![-1, 0, 1]),
+        ];
+        for (index, tag) in tags.iter().enumerate() {
+            let mut left = NbtCompound::new();
+            left.put("tag", tag.clone());
+            let mut right = NbtCompound::new();
+            right.put("tag", tag.clone());
+            assert_eq!(
+                CustomDataImpl::new(left),
+                CustomDataImpl::new(right),
+                "tag {index}"
+            );
+        }
+    }
+
+    #[test]
+    fn nan_payloads_compare_equal_and_hash_canonically() {
+        let mut left = NbtCompound::new();
+        left.put("float", NbtTag::Float(f32::from_bits(0x7fc0_0001)));
+        left.put("double", NbtTag::Double(f64::from_bits(0x7ff8_0000_0000_0001)));
+        let mut right = NbtCompound::new();
+        right.put("float", NbtTag::Float(f32::from_bits(0xffc0_1234)));
+        right.put("double", NbtTag::Double(f64::from_bits(0xfff8_0000_0000_1234)));
+        let left = CustomDataImpl::new(left);
+        let right = CustomDataImpl::new(right);
+        assert_eq!(left, right);
+        assert_eq!(left.get_hash(), right.get_hash());
+    }
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
