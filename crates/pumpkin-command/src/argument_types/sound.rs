@@ -2,8 +2,9 @@ use pumpkin_data::sound::Sound;
 use pumpkin_protocol::java::client::play::SuggestionProviders;
 use pumpkin_util::identifier::Identifier;
 
+use crate::argument_types::argument_type::ArgumentType;
 use crate::{
-    argument_types::{ArgumentType, FromStringReader, argument_type::JavaClientArgumentType},
+    argument_types::{FromStringReader, argument_type::JavaClientArgumentType},
     context::command_context::CommandContext,
     errors::command_syntax_error::CommandSyntaxError,
     source::CommandSource,
