@@ -50,7 +50,8 @@ use pumpkin_protocol::{
     java::client::play::{
         CGameEvent, CLogin, CPlayerInfoUpdate, CPlayerSpawnPosition, CRecipeBookAdd,
         CRecipeBookSettings, CSetEntityMetadata, CSetEquipment, CSetSelectedSlot, CSpawnEntity,
-        GameEvent, InitChat, Metadata, PlayerAction, PlayerInfoFlags, PlayerSpawnData,
+        CUpdateRecipes, GameEvent, InitChat, Metadata, PlayerAction, PlayerInfoFlags,
+        PlayerSpawnData,
     },
 };
 use pumpkin_util::{
@@ -1512,18 +1513,25 @@ impl World {
             .living_entity
             .send_current_equipment_attribute_modifiers();
 
-        if let crate::net::ClientPlatform::Java(java_client) = player.client.as_ref()
-            && server.advanced_config.recipe.send_recipes
-            && java_client.version.load() >= JavaMinecraftVersion::V_1_21_2
-        {
-            let settings_packet = CRecipeBookSettings::default_closed();
-            if let Ok(data) = java_client.serialize_packet(&settings_packet) {
-                java_client.send_packet_now(data).await;
+        if let crate::net::ClientPlatform::Java(java_client) = player.client.as_ref() {
+            if java_client.version.load() == JavaMinecraftVersion::V_26_2 {
+                let update_recipes = CUpdateRecipes::generated_vanilla();
+                if let Ok(data) = java_client.serialize_packet(&update_recipes) {
+                    java_client.send_packet_now(data).await;
+                }
             }
-            let dynamic_recipes = server.recipe_manager.get_dynamic_recipes();
-            let add_packet = CRecipeBookAdd::new(true, &dynamic_recipes);
-            if let Ok(data) = java_client.serialize_packet(&add_packet) {
-                java_client.send_packet_now(data).await;
+            if server.advanced_config.recipe.send_recipes
+                && java_client.version.load() >= JavaMinecraftVersion::V_1_21_2
+            {
+                let settings_packet = CRecipeBookSettings::default_closed();
+                if let Ok(data) = java_client.serialize_packet(&settings_packet) {
+                    java_client.send_packet_now(data).await;
+                }
+                let dynamic_recipes = server.recipe_manager.get_dynamic_recipes();
+                let add_packet = CRecipeBookAdd::new(true, &dynamic_recipes);
+                if let Ok(data) = java_client.serialize_packet(&add_packet) {
+                    java_client.send_packet_now(data).await;
+                }
             }
         }
         let msg_comp = TextComponent::translate_cross(

@@ -942,9 +942,7 @@ pub fn serialize_java_packet(
             Some(buf.into())
         }
         ClientboundPacket::CUpdateRecipes(data) => {
-            let p = pumpkin_protocol::java::client::play::CUpdateRecipes {
-                raw_data: &data.raw_data,
-            };
+            let p = pumpkin_protocol::java::client::play::CUpdateRecipes::new(&data.raw_data);
             let mut buf = Vec::new();
             crate::net::java::JavaClient::write_packet_for_version(&p, version, &mut buf).unwrap();
             Some(buf.into())
