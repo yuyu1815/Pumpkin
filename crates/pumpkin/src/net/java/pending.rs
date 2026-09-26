@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, num::NonZero, sync::Arc};
+use std::{net::SocketAddr, sync::Arc};
 
 use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
@@ -44,7 +44,9 @@ use crate::{
     server::Server,
 };
 
-use super::{ConfigurationPhase, JavaClient, LoginProtocolPhase, require_empty_body};
+use super::{
+    ConfigurationPhase, JavaClient, LoginProtocolPhase, clamp_view_distance, require_empty_body,
+};
 
 const BRAND_CHANNEL_PREFIX: &str = "minecraft:brand";
 
@@ -438,10 +440,10 @@ impl PendingConnection {
 
         match packet.id {
             id if id == SClientInformationConfig::to_id(version) => {
-                self.handle_client_information_config(SClientInformationConfig::read(
-                    &mut payload,
-                    &version,
-                )?)
+                self.handle_client_information_config(
+                    server,
+                    SClientInformationConfig::read(&mut payload, &version)?,
+                )
                 .await;
                 Ok(None)
             }
@@ -531,16 +533,10 @@ impl PendingConnection {
 
     pub async fn handle_client_information_config(
         &mut self,
+        server: &Server,
         client_information: SClientInformationConfig<'_>,
     ) {
         debug!("Handling client settings");
-        if client_information.view_distance <= 0 {
-            self.kick(TextComponent::text(
-                "Cannot have zero or negative view distance!",
-            ))
-            .await;
-            return;
-        }
 
         if let (Ok(main_hand), Ok(chat_mode)) = (
             Hand::try_from(client_information.main_hand.0),
@@ -548,8 +544,10 @@ impl PendingConnection {
         ) {
             self.config = Some(PlayerConfig {
                 locale: client_information.locale.to_string(),
-                view_distance: NonZero::new(client_information.view_distance as u8)
-                    .unwrap_or(NonZero::<u8>::MIN),
+                view_distance: clamp_view_distance(
+                    client_information.view_distance,
+                    server.advanced_config.networking.java.view_distance,
+                ),
                 chat_mode,
                 chat_colors: client_information.chat_colors,
                 skin_parts: client_information.skin_parts,

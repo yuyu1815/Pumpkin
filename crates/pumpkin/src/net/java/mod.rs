@@ -4,7 +4,7 @@ use pumpkin_protocol::java::client::{
     play::{CChunkBatchEnd, CChunkBatchStart, CLightUpdate, CPlayDisconnect, CStartConfiguration},
 };
 use pumpkin_world::level::SyncChunk;
-use std::net::SocketAddr;
+use std::{net::SocketAddr, num::NonZero};
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, AtomicUsize, Ordering};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use std::{
@@ -162,6 +162,29 @@ fn claim_finish(phase: &AtomicCell<ConfigurationPhase>) -> bool {
             ConfigurationPhase::Play,
         )
         .is_ok()
+}
+
+pub(crate) fn clamp_view_distance(view_distance: i8, max_view_distance: NonZero<u8>) -> NonZero<u8> {
+    let max = max_view_distance.get().max(2);
+    NonZero::new(i32::from(view_distance).clamp(2, i32::from(max)) as u8)
+        .expect("clamped view distance is nonzero")
+}
+
+#[cfg(test)]
+mod view_distance_tests {
+    use super::clamp_view_distance;
+    use std::num::NonZero;
+
+    #[test]
+    fn client_view_distance_is_clamped_to_server_bounds() {
+        let max = NonZero::new(16).unwrap();
+        for requested in [i8::MIN, -5, 0, 1] {
+            assert_eq!(clamp_view_distance(requested, max).get(), 2);
+        }
+        assert_eq!(clamp_view_distance(2, max).get(), 2);
+        assert_eq!(clamp_view_distance(16, max).get(), 16);
+        assert_eq!(clamp_view_distance(i8::MAX, max).get(), 16);
+    }
 }
 
 fn require_empty_body(payload: &[u8], packet_name: &str) -> Result<(), ReadingError> {
@@ -814,7 +837,7 @@ impl JavaClient {
                         "Trailing data in client information packet".into(),
                     ));
                 }
-                self.handle_client_information_config(client_information)
+                self.handle_client_information_config(server, client_information)
                     .await;
             }
             id if id == SConfigPluginMessage::to_id(version) => {

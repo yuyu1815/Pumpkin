@@ -19,7 +19,7 @@ use crate::entity::player::{ChatMode, ChatSession, MINE_BLOCK_EXHAUSTION, Player
 use crate::error::PumpkinError;
 use crate::log_at_level;
 use crate::net::PlayerConfig;
-use crate::net::java::JavaClient;
+use crate::net::java::{JavaClient, clamp_view_distance};
 use crate::plugin::player::changed_main_hand::PlayerChangedMainHandEvent;
 use crate::plugin::player::fish::{PlayerFishEvent, PlayerFishState};
 use crate::plugin::player::item_held::PlayerItemHeldEvent;

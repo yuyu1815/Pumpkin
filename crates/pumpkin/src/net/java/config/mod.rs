@@ -1,4 +1,4 @@
-use std::{num::NonZero, sync::Arc, sync::atomic::Ordering};
+use std::{sync::Arc, sync::atomic::Ordering};
 
 use crate::{
     entity::player::ChatMode,

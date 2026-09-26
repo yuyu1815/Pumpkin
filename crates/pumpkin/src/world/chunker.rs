@@ -21,11 +21,25 @@ pub fn get_view_distance(player: &Player) -> NonZero<u8> {
         ClientPlatform::Java(_) => server.advanced_config.networking.java.view_distance,
         ClientPlatform::Bedrock(_) => server.advanced_config.networking.bedrock.view_distance,
     };
-    player
-        .config
-        .load()
-        .view_distance
-        .clamp(fallback, max_view_distance)
+    clamp_view_distance(player.config.load().view_distance, max_view_distance)
+}
+
+fn clamp_view_distance(requested: NonZero<u8>, max: NonZero<u8>) -> NonZero<u8> {
+    let min = NonZero::new(2).unwrap_or(NonZero::<u8>::MIN);
+    requested.clamp(min, max.max(min))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clamp_view_distance;
+    use std::num::NonZero;
+
+    #[test]
+    fn configured_max_below_two_does_not_panic() {
+        let requested = NonZero::new(1).unwrap();
+        let configured_max = NonZero::new(1).unwrap();
+        assert_eq!(clamp_view_distance(requested, configured_max).get(), 2);
+    }
 }
 
 // Checks if the target chunk is within Chebyshev distance (L_infinity) of the center chunk.

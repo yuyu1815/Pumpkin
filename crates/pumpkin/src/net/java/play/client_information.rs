@@ -12,13 +12,6 @@ impl JavaClient {
             Hand::try_from(client_information.main_hand.0),
             ChatMode::try_from(client_information.chat_mode.0),
         ) {
-            if client_information.view_distance <= 0 {
-                self.try_kick(&TextComponent::text(
-                    "Cannot have zero or negative view distance!",
-                ));
-                return;
-            }
-
             let (update_settings, update_watched, main_hand_changed, locale_changed) = {
                 // 1. Load current snapshot
                 let current_config = player.config.load();
@@ -30,7 +23,11 @@ impl JavaClient {
                     main_hand_changed || current_config.skin_parts != client_information.skin_parts;
 
                 let old_view_distance = current_config.view_distance;
-                let new_view_distance_raw = client_information.view_distance as u8;
+                let new_view_distance = clamp_view_distance(
+                    client_information.view_distance,
+                    server.advanced_config.networking.java.view_distance,
+                );
+                let new_view_distance_raw = new_view_distance.get();
 
                 let update_watched = if old_view_distance.get() == new_view_distance_raw {
                     false
@@ -43,11 +40,6 @@ impl JavaClient {
                 };
 
                 // 3. Construct the new config
-                // If view_distance is 0, we exit early (safe guard)
-                let Some(new_view_distance) = NonZero::new(new_view_distance_raw) else {
-                    return;
-                };
-
                 let new_config = PlayerConfig {
                     locale: client_information.locale.to_string(),
                     view_distance: new_view_distance,
