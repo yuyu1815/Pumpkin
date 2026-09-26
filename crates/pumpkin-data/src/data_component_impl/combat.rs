@@ -254,9 +254,15 @@ impl DataComponentImpl for EnchantmentsImpl {
     fn get_hash(&self) -> i32 {
         let mut digest = Digest::new(Crc32Iscsi);
         digest.update(&[2u8]);
-        for (enc, level) in self.enchantment.iter() {
-            digest.update(&get_str_hash(enc.name).to_le_bytes());
-            digest.update(&get_i32_hash(*level).to_le_bytes());
+        let mut entries = self
+            .enchantment
+            .iter()
+            .map(|(enc, level)| (get_str_hash(enc.name), get_i32_hash(*level)))
+            .collect::<Vec<_>>();
+        entries.sort_unstable();
+        for (key_hash, value_hash) in entries {
+            digest.update(&key_hash.to_le_bytes());
+            digest.update(&value_hash.to_le_bytes());
         }
         digest.update(&[3u8]);
         digest.finalize() as i32

@@ -732,6 +732,25 @@ mod tests {
     }
 
     #[test]
+    fn enchantments_hash_ignores_entry_order() {
+        let forward = EnchantmentsImpl {
+            enchantment: Cow::Borrowed(&[
+                (&crate::Enchantment::SHARPNESS, 1),
+                (&crate::Enchantment::POWER, 1),
+            ]),
+        };
+        let reverse = EnchantmentsImpl {
+            enchantment: Cow::Borrowed(&[
+                (&crate::Enchantment::POWER, 1),
+                (&crate::Enchantment::SHARPNESS, 1),
+            ]),
+        };
+
+        assert_eq!(forward.get_hash(), 81085966);
+        assert_eq!(reverse.get_hash(), 81085966);
+    }
+
+    #[test]
     fn map_decorations_equality_and_hash_ignore_key_order_but_track_values() {
         let entry = |x| MapDecorationEntry {
             decoration_type: pumpkin_util::identifier::Identifier::parse("player").unwrap(),
