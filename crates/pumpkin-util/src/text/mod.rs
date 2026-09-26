@@ -150,20 +150,14 @@ impl TextComponentBase {
                     compound.put_list("with", list);
                 }
             }
-            TextContent::PlayerSprite {
-                type_name,
-                profile,
-                hat,
-            } => {
+            TextContent::PlayerSprite { profile, hat, .. } => {
                 if *version >= JavaMinecraftVersion::V_26_1 {
-                    let full_type = if type_name.contains(':') {
-                        type_name.to_string()
-                    } else {
-                        format!("minecraft:{type_name}")
-                    };
-                    compound.put_string("type", full_type);
+                    compound.put_string("type", "object".to_string());
+                    compound.put_string("object", "player".to_string());
                     compound.put_compound("player", profile.0.clone());
-                    compound.put_byte("hat", i8::from(*hat));
+                    if !hat {
+                        compound.put_byte("hat", 0);
+                    }
                 } else {
                     let name = profile.0.get_string("name").unwrap_or("player_sprite");
                     compound.put_string("text", name.to_string());
@@ -499,20 +493,20 @@ impl TextComponentBase {
                     map.insert("with".to_string(), serde_json::Value::Array(list));
                 }
             }
-            TextContent::PlayerSprite {
-                type_name,
-                profile,
-                hat,
-            } => {
+            TextContent::PlayerSprite { profile, hat, .. } => {
                 if *version >= JavaMinecraftVersion::V_26_1 {
-                    let full_type = if type_name.contains(':') {
-                        type_name.to_string()
-                    } else {
-                        format!("minecraft:{type_name}")
-                    };
-                    map.insert("type".to_string(), serde_json::Value::String(full_type));
+                    map.insert(
+                        "type".to_string(),
+                        serde_json::Value::String("object".to_string()),
+                    );
+                    map.insert(
+                        "object".to_string(),
+                        serde_json::Value::String("player".to_string()),
+                    );
                     map.insert("player".to_string(), nbt_compound_to_json(&profile.0));
-                    map.insert("hat".to_string(), serde_json::Value::Bool(*hat));
+                    if !hat {
+                        map.insert("hat".to_string(), serde_json::Value::Bool(false));
+                    }
                 } else {
                     let name = profile.0.get_string("name").unwrap_or("player_sprite");
                     map.insert(
@@ -2168,6 +2162,55 @@ mod test {
         let click = suggest.get_compound("clickEvent").unwrap();
         assert_eq!(click.get_string("command"), None);
         assert_eq!(click.get_string("value"), Some("/tell name"));
+    }
+
+    #[test]
+    fn player_sprite_serializes_outbound_by_version() {
+        let mut profile = pumpkin_nbt::NbtCompound::new();
+        profile.put_string("name", "OpBot".to_string());
+        profile.put("id", pumpkin_nbt::tag::NbtTag::IntArray(vec![1, 2, 3, 4]));
+
+        let with_hat = TextComponent::player_sprite(profile.clone(), true);
+        let expected_json = serde_json::json!({
+            "type": "object",
+            "object": "player",
+            "player": { "name": "OpBot", "id": [1, 2, 3, 4] }
+        });
+        assert_eq!(
+            with_hat.to_json_value_for_version(&JavaMinecraftVersion::V_26_2),
+            expected_json
+        );
+        let nbt = with_hat.to_nbt_compound_for_version(&JavaMinecraftVersion::V_26_2);
+        assert_eq!(nbt.get_string("type"), Some("object"));
+        assert_eq!(nbt.get_string("object"), Some("player"));
+        assert_eq!(nbt.get_compound("player"), Some(&profile));
+        assert_eq!(nbt.get_byte("hat"), None);
+
+        let without_hat = TextComponent::player_sprite(profile, false);
+        assert_eq!(
+            without_hat.to_json_value_for_version(&JavaMinecraftVersion::V_26_2),
+            serde_json::json!({
+                "type": "object",
+                "object": "player",
+                "player": { "name": "OpBot", "id": [1, 2, 3, 4] },
+                "hat": false
+            })
+        );
+        assert_eq!(
+            without_hat
+                .to_nbt_compound_for_version(&JavaMinecraftVersion::V_26_2)
+                .get_byte("hat"),
+            Some(0)
+        );
+
+        assert_eq!(
+            with_hat.to_json_value_for_version(&JavaMinecraftVersion::V_1_21_11),
+            serde_json::json!({ "text": "OpBot" })
+        );
+        let legacy_nbt = with_hat.to_nbt_compound_for_version(&JavaMinecraftVersion::V_1_21_11);
+        assert_eq!(legacy_nbt.get_string("text"), Some("OpBot"));
+        assert_eq!(legacy_nbt.get_string("type"), None);
+        assert_eq!(legacy_nbt.get_string("object"), None);
     }
 
     #[test]
