@@ -10,6 +10,10 @@ impl JavaClient {
         Self::is_finite_position(position) && yaw.is_finite() && pitch.is_finite()
     }
 
+    fn is_jump(on_ground: bool, packet_on_ground: bool, dy: f64) -> bool {
+        on_ground && !packet_on_ground && dy > 0.0
+    }
+
     fn invalid_player_movement(&self) {
         self.try_kick(&TextComponent::translate_cross(
             translation::java::MULTIPLAYER_DISCONNECT_INVALID_PLAYER_MOVEMENT,
@@ -122,7 +126,11 @@ impl JavaClient {
                 }
 
                 let height_difference = pos.y - last_pos.y;
-                if entity.on_ground.load(Ordering::Relaxed) && packet.collision & FLAG_ON_GROUND == 0 && height_difference > 0.0 {
+                if Self::is_jump(
+                    entity.on_ground.load(Ordering::Relaxed),
+                    packet.collision & FLAG_ON_GROUND != 0,
+                    height_difference,
+                ) {
                     player.jump();
                 }
 
@@ -261,10 +269,11 @@ impl JavaClient {
                 }
 
                 let height_difference = pos.y - last_pos.y;
-                if entity.on_ground.load(Ordering::Relaxed)
-                    && (packet.collision & FLAG_ON_GROUND) != 0
-                    && height_difference > 0.0
-                {
+                if Self::is_jump(
+                    entity.on_ground.load(Ordering::Relaxed),
+                    packet.collision & FLAG_ON_GROUND != 0,
+                    height_difference,
+                ) {
                     player.jump();
                 }
                 entity
@@ -425,5 +434,14 @@ mod tests {
             0.0,
             f32::NEG_INFINITY
         ));
+    }
+
+    #[test]
+    fn jump_requires_ground_to_air_and_upward_motion() {
+        assert!(JavaClient::is_jump(true, false, 0.1));
+        assert!(!JavaClient::is_jump(true, true, 0.1));
+        assert!(!JavaClient::is_jump(false, false, 0.1));
+        assert!(!JavaClient::is_jump(true, false, 0.0));
+        assert!(!JavaClient::is_jump(true, false, -0.1));
     }
 }
