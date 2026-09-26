@@ -1283,8 +1283,7 @@ impl JavaClient {
                 self.serialize_packet(&packet).ok()
             }
             ConnectionState::Config => {
-                let reason_text = reason.clone().get_text();
-                let packet = CConfigDisconnect::new(&reason_text);
+                let packet = CConfigDisconnect::new(reason);
                 self.serialize_packet(&packet).ok()
             }
             ConnectionState::Play => {
@@ -1337,8 +1336,7 @@ impl JavaClient {
                     .await;
                 }
                 ConnectionState::Config => {
-                    self.send_packet(&CConfigDisconnect::new(&reason.clone().get_text()))
-                        .await;
+                    self.send_packet(&CConfigDisconnect::new(reason)).await;
                 }
                 ConnectionState::Play => self.send_packet(&CPlayDisconnect::new(reason)).await,
                 _ => {}
