@@ -1786,8 +1786,7 @@ impl pumpkin::plugin::world::HostWorldBorder for PluginHostState {
         time_seconds: u64,
     ) -> wasmtime::Result<()> {
         let speed_ticks = time_seconds.saturating_mul(20);
-        self.set_diameter(border, new_size, Some(speed_ticks))
-            .await
+        self.set_diameter(border, new_size, Some(speed_ticks)).await
     }
 
     async fn get_target_diameter(
