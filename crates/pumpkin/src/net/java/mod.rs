@@ -16,6 +16,7 @@ use std::{net::SocketAddr, num::NonZero};
 use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
 use pumpkin_data::translation;
+use pumpkin_util::math::vector3::Vector3;
 use pumpkin_protocol::java::server::config::{
     SAcceptCodeOfConduct, SAcknowledgeFinishConfig, SClientInformationConfig,
     SConfigCookieResponse, SConfigPong, SConfigResourcePack, SKeepAlive as SConfigKeepAlive,
@@ -74,7 +75,7 @@ pub use chunk_data::{CChunkData, ChunkLightExt};
 use arc_swap::ArcSwap;
 use pending::PendingConnection;
 
-use crate::entity::player::Player;
+use crate::entity::{EntityBase, player::Player};
 use crate::net::java::play::chat_command::SignedCommandPacket;
 use crate::net::{
     ClientPlatform, GameProfile, MAX_PENDING_BYTES, PacketHandlerResult, PacketRateLimiter,
@@ -306,6 +307,114 @@ pub(crate) fn registry_entries_for_known_packs(
     &registry.registry_entries
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct MovementState {
+    pub(crate) first_good_xyz: Vector3<f64>,
+    pub(crate) last_good_xyz: Vector3<f64>,
+    received_move_packet_count: u64,
+    known_move_packet_count: u64,
+}
+
+impl MovementState {
+    fn new(position: Vector3<f64>) -> Self {
+        Self {
+            first_good_xyz: position,
+            last_good_xyz: position,
+            received_move_packet_count: 0,
+            known_move_packet_count: 0,
+        }
+    }
+
+    fn reset_position(&mut self, position: Vector3<f64>) {
+        self.first_good_xyz = position;
+        self.last_good_xyz = position;
+        self.known_move_packet_count = self.received_move_packet_count;
+    }
+
+    fn record_packet(&mut self) {
+        self.received_move_packet_count = self.received_move_packet_count.saturating_add(1);
+    }
+
+    fn accept_position(&mut self, position: Vector3<f64>) {
+        self.last_good_xyz = position;
+    }
+
+    fn tick_snapshot(&mut self, position: Vector3<f64>) {
+        self.first_good_xyz = position;
+        self.last_good_xyz = position;
+        self.known_move_packet_count = self.received_move_packet_count;
+    }
+
+    fn packet_delta(&self) -> u64 {
+        let delta = self.received_move_packet_count - self.known_move_packet_count;
+        if delta > 5 { 1 } else { delta }
+    }
+}
+
+#[cfg(test)]
+mod movement_state_tests {
+    use super::MovementState;
+    use pumpkin_util::math::vector3::Vector3;
+
+    #[test]
+    fn first_movement_packet_is_counted_and_tick_snapshots_counters_and_position() {
+        let initial = Vector3::new(1.0, 2.0, 3.0);
+        let mut state = MovementState::new(initial);
+        assert_eq!(state.packet_delta(), 0);
+
+        state.record_packet();
+        assert_eq!(state.packet_delta(), 1);
+        let next = Vector3::new(4.0, 5.0, 6.0);
+        state.tick_snapshot(next);
+        assert_eq!(state.first_good_xyz, next);
+        assert_eq!(state.last_good_xyz, next);
+        assert_eq!(state.packet_delta(), 0);
+
+        state.record_packet();
+        state.record_packet();
+        assert_eq!(state.packet_delta(), 2);
+    }
+
+    #[test]
+    fn accepted_positions_advance_last_good_without_changing_tick_origin() {
+        let tick_origin = Vector3::new(1.0, 2.0, 3.0);
+        let mut state = MovementState::new(tick_origin);
+        let accepted_one = Vector3::new(2.0, 2.0, 3.0);
+        let accepted_two = Vector3::new(4.0, 2.0, 3.0);
+
+        state.accept_position(accepted_one);
+        state.accept_position(accepted_two);
+
+        assert_eq!(state.first_good_xyz, tick_origin);
+        assert_eq!(state.last_good_xyz, accepted_two);
+        let next_tick_origin = Vector3::new(5.0, 2.0, 3.0);
+        state.tick_snapshot(next_tick_origin);
+        assert_eq!(state.first_good_xyz, next_tick_origin);
+        assert_eq!(state.last_good_xyz, next_tick_origin);
+    }
+
+    #[test]
+    fn more_than_five_packets_collapse_to_one() {
+        let mut state = MovementState::new(Vector3::new(0.0, 0.0, 0.0));
+        for _ in 0..6 {
+            state.record_packet();
+        }
+        assert_eq!(state.packet_delta(), 1);
+    }
+
+    #[test]
+    fn teleport_reset_rebases_position_and_discards_old_tick_delta() {
+        let mut state = MovementState::new(Vector3::new(0.0, 0.0, 0.0));
+        state.record_packet();
+        state.record_packet();
+        let destination = Vector3::new(12.0, 64.0, -3.0);
+        state.reset_position(destination);
+        assert_eq!(state.first_good_xyz, destination);
+        assert_eq!(state.last_good_xyz, destination);
+        assert_eq!(state.packet_delta(), 0);
+    }
+}
+
 pub struct JavaClient {
     pub id: u64,
     pub version: AtomicCell<JavaMinecraftVersion>,
@@ -356,6 +465,8 @@ pub struct JavaClient {
     /// On `SClientTickEnd` (≥1.21.4), if still `false`, the player's known
     /// movement is zeroed (they stood still). Matches vanilla's `receivedMovementThisTick`.
     pub received_movement_this_tick: AtomicBool,
+    /// Stage A movement-validator baseline and per-server-tick packet counters.
+    pub(crate) movement_state: Mutex<MovementState>,
     /// The keep alive packet payload we send. The client should respond with the same id.
     pub keep_alive_id: AtomicCell<i64>,
     /// The last time we sent a keep alive packet.
@@ -977,6 +1088,7 @@ impl JavaClient {
             player: ArcSwap::from_pointee(None),
             wait_for_keep_alive: AtomicBool::new(false),
             received_movement_this_tick: AtomicBool::new(false),
+            movement_state: Mutex::new(MovementState::new(Vector3::new(0.0, 0.0, 0.0))),
             keep_alive_id: AtomicCell::new(0),
             last_keep_alive_time: AtomicCell::new(Instant::now()),
             last_packet_time: AtomicCell::new(Instant::now()),
@@ -987,7 +1099,36 @@ impl JavaClient {
     }
 
     pub fn set_player(&self, player: Arc<Player>) {
+        self.reset_movement_position(player.get_entity().pos.load());
         self.player.store(Arc::new(Some(player)));
+    }
+
+    pub(crate) fn reset_movement_position(&self, position: Vector3<f64>) {
+        self.movement_state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .reset_position(position);
+    }
+
+    pub(crate) fn record_movement_packet(&self) {
+        self.movement_state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .record_packet();
+    }
+
+    pub(crate) fn accept_movement_position(&self, position: Vector3<f64>) {
+        self.movement_state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .accept_position(position);
+    }
+
+    pub(crate) fn tick_movement_state(&self, position: Vector3<f64>) {
+        self.movement_state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .tick_snapshot(position);
     }
 
     pub async fn progress_player_packets(&self, player: &Arc<Player>, server: &Arc<Server>) {

@@ -18,6 +18,15 @@ impl JavaClient {
             return;
         }
         let entity = &player.get_entity();
+        if !entity.has_vehicle()
+            && player
+                .awaiting_teleport
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .is_none()
+        {
+            self.record_movement_packet();
+        }
         entity.on_ground.store(rotation.ground, Ordering::Relaxed);
         entity.set_rotation(
             wrap_degrees(rotation.yaw) % 360.0,

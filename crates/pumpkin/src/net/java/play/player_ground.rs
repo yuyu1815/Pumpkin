@@ -6,6 +6,16 @@ impl JavaClient {
         // A movement packet was received this tick — tracked for SClientTickEnd zeroing.
         self.received_movement_this_tick
             .store(true, Ordering::Relaxed);
+        let entity = &player.living_entity.entity;
+        if !entity.has_vehicle()
+            && player
+                .awaiting_teleport
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .is_none()
+        {
+            self.record_movement_packet();
+        }
         player
             .living_entity
             .entity

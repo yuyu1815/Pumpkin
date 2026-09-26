@@ -76,9 +76,6 @@ impl JavaClient {
             self.invalid_player_movement();
             return;
         }
-        // A movement packet was received this tick — tracked for SClientTickEnd zeroing.
-        self.received_movement_this_tick
-            .store(true, Ordering::Relaxed);
         if player.get_entity().has_vehicle() {
             return;
         }
@@ -91,6 +88,11 @@ impl JavaClient {
         {
             return;
         }
+        // Vanilla counts eligible player movement packets, not packets ignored while
+        // riding or awaiting a teleport.
+        self.received_movement_this_tick
+            .store(true, Ordering::Relaxed);
+        self.record_movement_packet();
         if player.is_movement_locked.load(Ordering::Relaxed) {
             self.force_tp(player, player.get_entity().pos.load());
             return;
@@ -134,6 +136,7 @@ impl JavaClient {
                     player.jump();
                 }
 
+                self.accept_movement_position(pos);
                 let new_on_ground = packet.collision & FLAG_ON_GROUND != 0;
                 entity.on_ground.store(new_on_ground, Ordering::Relaxed);
                 if new_on_ground && entity.is_fall_flying() {
@@ -217,9 +220,6 @@ impl JavaClient {
             self.invalid_player_movement();
             return;
         }
-        // A movement packet was received this tick — tracked for SClientTickEnd zeroing.
-        self.received_movement_this_tick
-            .store(true, Ordering::Relaxed);
         if player.get_entity().has_vehicle() {
             return;
         }
@@ -232,6 +232,11 @@ impl JavaClient {
         {
             return;
         }
+        // Vanilla counts eligible player movement packets, not packets ignored while
+        // riding or awaiting a teleport.
+        self.received_movement_this_tick
+            .store(true, Ordering::Relaxed);
+        self.record_movement_packet();
         if player.is_movement_locked.load(Ordering::Relaxed) {
             let entity = player.get_entity();
             entity.set_rotation(packet.yaw, packet.pitch);
@@ -276,6 +281,7 @@ impl JavaClient {
                 ) {
                     player.jump();
                 }
+                self.accept_movement_position(pos);
                 entity
                     .on_ground
                     .store((packet.collision & FLAG_ON_GROUND) != 0, Ordering::Relaxed);
@@ -362,6 +368,7 @@ impl JavaClient {
     }
 
     pub fn force_tp(&self, player: &Arc<Player>, position: Vector3<f64>) {
+        self.reset_movement_position(position);
         let teleport_id = {
             let mut awaiting_teleport = player
                 .awaiting_teleport
@@ -379,7 +386,7 @@ impl JavaClient {
         };
         player.try_send_client_packet(&CPlayerPosition::new(
             teleport_id.into(),
-            player.get_entity().pos.load(),
+            position,
             Vector3::new(0.0, 0.0, 0.0),
             player.get_entity().yaw.load(),
             player.get_entity().pitch.load(),

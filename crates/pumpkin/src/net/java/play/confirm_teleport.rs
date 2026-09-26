@@ -52,7 +52,10 @@ impl JavaClient {
         };
 
         match confirmation {
-            TeleportConfirmation::Confirmed(position) => player.get_entity().set_pos(position),
+            TeleportConfirmation::Confirmed(position) => {
+                player.get_entity().set_pos(position);
+                self.reset_movement_position(position);
+            }
             TeleportConfirmation::Ignore => {}
             TeleportConfirmation::Duplicate => self.try_kick(&TextComponent::translate_cross(
                 translation::java::MULTIPLAYER_DISCONNECT_INVALID_PLAYER_MOVEMENT,

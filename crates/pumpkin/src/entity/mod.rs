@@ -4089,6 +4089,9 @@ impl Entity {
             if let Some(player) = passenger.get_player() {
                 if let Some(id) = teleport_id {
                     player.get_entity().set_pos(dismount_pos);
+                    if let Some(client) = player.client.java() {
+                        client.reset_movement_position(dismount_pos);
+                    }
                     // Update awaiting_teleport with the real dismount position
                     *player
                         .awaiting_teleport

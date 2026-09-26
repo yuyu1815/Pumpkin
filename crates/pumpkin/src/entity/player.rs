@@ -2710,6 +2710,9 @@ impl Player {
 
     #[expect(clippy::too_many_lines)]
     pub fn tick<'a>(&'a self, server: &'a Server) {
+        if let Some(client) = self.client.java() {
+            client.tick_movement_state(self.get_entity().pos.load());
+        }
         self.process_inbound_packets();
         crate::block::blocks::sculk::sculk_shrieker::tick_warden_spawn_tracker(self);
 
@@ -4235,6 +4238,9 @@ impl Player {
 
         self.chunk_send_epoch.fetch_add(1, Ordering::Relaxed);
         self.living_entity.entity.set_pos(position);
+        if let Some(client) = self.client.java() {
+            client.reset_movement_position(position);
+        }
         let entity = &self.living_entity.entity;
         entity.set_rotation(yaw, pitch);
         match self.client.as_ref() {
