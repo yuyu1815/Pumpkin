@@ -101,10 +101,9 @@ macro_rules! default_impl {
 pub fn get_str_hash(val: &str) -> u32 {
     let mut digest = Digest::new(Crc32Iscsi);
     digest.update(&[12u8]);
-    digest.update(&(val.len() as u32).to_le_bytes());
-    let byte = val.as_bytes();
-    for i in byte {
-        digest.update(&[*i, 0u8]);
+    digest.update(&(val.encode_utf16().count() as u32).to_le_bytes());
+    for unit in val.encode_utf16() {
+        digest.update(&unit.to_le_bytes());
     }
     digest.finalize() as u32
 }
@@ -118,7 +117,7 @@ pub fn get_i32_hash(val: i32) -> u32 {
 
 pub fn get_f32_hash(val: f32) -> u32 {
     let mut digest = Digest::new(Crc32Iscsi);
-    digest.update(&[7u8]);
+    digest.update(&[10u8]);
     digest.update(&val.to_bits().to_le_bytes());
     digest.finalize() as u32
 }
@@ -707,6 +706,15 @@ pub fn read_data(id: DataComponent, data: &NbtTag) -> Option<Box<dyn DataCompone
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hash_ops_primitive_golden_vectors() {
+        assert_eq!(get_str_hash("minecraft:sharpness"), 2734053906);
+        assert_eq!(get_str_hash("剣"), 3148226125);
+        assert_eq!(get_str_hash("😀"), 1515787531);
+        assert_eq!(get_f32_hash(0.0), 4030178044);
+        assert_eq!(get_f32_hash(1.5), 2584996756);
+    }
 
     #[test]
     fn hash() {
