@@ -254,6 +254,7 @@ pub mod range;
 pub mod resource;
 pub mod resource_or_tag;
 pub mod slot;
+pub mod sound;
 pub mod sound_category;
 pub mod structure;
 pub mod team_color;

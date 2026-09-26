@@ -6,6 +6,7 @@ use pumpkin_util::text::TextComponent;
 use crate::command::argument_builder::{ArgumentBuilder, argument, command, literal};
 use crate::command::argument_types::entity::EntityArgumentType;
 use crate::command::argument_types::identifier::IdentifierArgumentType;
+use crate::command::argument_types::sound::SoundArgumentType;
 use crate::command::argument_types::sound_category::SoundCategoryArgumentType;
 use crate::command::context::command_context::CommandContext;
 use crate::command::node::dispatcher::CommandDispatcher;
@@ -92,7 +93,7 @@ pub fn register(dispatcher: &mut CommandDispatcher, registry: &PermissionRegistr
                 .executes(StopSoundExecutor(StopSoundMode::All))
                 .then(
                     literal("*").then(
-                        argument("sound", IdentifierArgumentType)
+                        argument("sound", SoundArgumentType)
                             .executes(StopSoundExecutor(StopSoundMode::Sound)),
                     ),
                 )
@@ -100,10 +101,44 @@ pub fn register(dispatcher: &mut CommandDispatcher, registry: &PermissionRegistr
                     argument("source", SoundCategoryArgumentType)
                         .executes(StopSoundExecutor(StopSoundMode::Category))
                         .then(
-                            argument("sound", IdentifierArgumentType)
+                            argument("sound", SoundArgumentType)
                                 .executes(StopSoundExecutor(StopSoundMode::CategoryAndSound)),
                         ),
                 ),
         ),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::command::commands::playsound;
+    use crate::command::context::command_source::CommandSource;
+    use crate::command::node::dispatcher::CommandDispatcher;
+    use std::sync::Arc;
+
+    #[test]
+    fn sound_arguments_suggest_supported_sounds() {
+        let mut dispatcher = CommandDispatcher::new();
+        let registry = PermissionRegistry::default();
+        playsound::register(&mut dispatcher, &registry);
+        register(&mut dispatcher, &registry);
+        let source = Arc::new(CommandSource::dummy());
+
+        for input in [
+            "playsound minecraft:entity.player.",
+            "stopsound @a * minecraft:entity.player.",
+            "stopsound @a master minecraft:entity.player.",
+        ] {
+            let suggestions = dispatcher.suggest_with_range(input, &source);
+            assert!(
+                suggestions
+                    .suggestions
+                    .iter()
+                    .any(|suggestion| suggestion.text_as_string()
+                        == "minecraft:entity.player.levelup"),
+                "missing sound completion for {input}"
+            );
+        }
+    }
 }

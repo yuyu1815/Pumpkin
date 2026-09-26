@@ -17,6 +17,7 @@ use crate::command::argument_types::coordinates::vec3::Vec3ArgumentType;
 use crate::command::argument_types::core::float::FloatArgumentType;
 use crate::command::argument_types::entity::EntityArgumentType;
 use crate::command::argument_types::identifier::IdentifierArgumentType;
+use crate::command::argument_types::sound::SoundArgumentType;
 use crate::command::context::command_context::CommandContext;
 use crate::command::context::command_source::CommandSource;
 use crate::command::errors::command_syntax_error::CommandSyntaxError;
@@ -321,7 +322,7 @@ pub fn register(dispatcher: &mut CommandDispatcher, registry: &PermissionRegistr
         PermissionDefault::Op(PermissionLvl::Two),
     ));
 
-    let mut sound_arg = argument("sound", IdentifierArgumentType).executes(PlaySoundExecutor {
+    let mut sound_arg = argument("sound", SoundArgumentType).executes(PlaySoundExecutor {
         step: PlaySoundStep::SoundOnly,
     });
 
